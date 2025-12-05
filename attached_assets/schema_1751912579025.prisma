@@ -1,0 +1,651 @@
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+    provider = "sqlite"
+    url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum UserRole {
+  ADMIN
+  OWNER
+  SALES_DIRECTOR
+  GENERAL_MANAGER
+  SUPERVISOR
+  FIELD_WORKER
+  OFFICE_STAFF
+  HR_DIRECTOR
+  HR_RECRUITER
+  CUSTOM
+}
+
+enum EmploymentType {
+  W2
+  CONTRACTOR_1099
+}
+
+enum OnboardingStatus {
+  PENDING
+  PERSONAL_INFO
+  DOCUMENTS
+  REVIEW
+  COMPLETED
+}
+
+enum PTOStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+}
+
+enum DocumentType {
+  DRIVERS_LICENSE
+  WORKERS_COMP
+  W4_FORM
+  W9_FORM
+  I9_FORM
+  SAFETY_CERTIFICATION
+  OSHA_TRAINING
+  CONTRACT
+  CUSTOM
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum CandidateStage {
+  APPLIED
+  INTERVIEW_SCHEDULED
+  INTERVIEWED
+  ACCEPTED
+  DIDNT_ACCEPT
+  REJECTED
+  NA
+}
+
+enum InterviewType {
+  PHONE
+  VIDEO
+  IN_PERSON
+  PANEL
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+  NO_SHOW
+}
+
+enum CandidateDocumentType {
+  RESUME
+  COVER_LETTER
+  PORTFOLIO
+  REFERENCES
+  BACKGROUND_CHECK
+  DRUG_TEST
+  CUSTOM
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  name          String?
+  image         String?
+  
+  // Role and employment info
+  role          UserRole           @default(FIELD_WORKER)
+  customRole    String?
+  employmentType EmploymentType    @default(W2)
+  isActive      Boolean           @default(true)
+  
+  // Personal information
+  firstName     String?
+  lastName      String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  dateOfBirth   DateTime?
+  
+  // Emergency contact
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRelation String?
+  
+  // Employment details
+  hireDate      DateTime?
+  department    String?
+  position      String?
+  employeeId    String?           @unique
+  hourlyRate    Decimal?
+  
+  // PTO information
+  ptoBalance    Int               @default(13) // 13 days per year
+  ptoUsed       Int               @default(0)
+  ptoCarryover  Int               @default(0)
+  
+  // Onboarding
+  onboardingStatus OnboardingStatus @default(PENDING)
+  onboardingCompletedAt DateTime?
+  welcomeEmailSent Boolean         @default(false)
+  
+  // System timestamps
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  accounts              Account[]
+  sessions              Session[]
+  documents             Document[]
+  ptoRequests           PTORequest[]
+  scheduledMeetings     Meeting[]     @relation("MeetingAttendee")
+  organizedMeetings     Meeting[]     @relation("MeetingOrganizer")
+  safetyIncidents       SafetyIncident[]
+  safetyTrainings       SafetyTraining[]
+  performanceReviews    PerformanceReview[]
+  recognitions          Recognition[]
+  managerOfReviews      PerformanceReview[] @relation("ManagerReviews")
+  checkIns              GPSCheckIn[]
+  
+  // Recruiting relations
+  hiringManagerPositions    JobPosition[]           @relation("HiringManagerPositions")
+  assignedCandidates        Candidate[]             @relation("RecruiterCandidates")
+  scheduledInterviews       CandidateInterview[]    @relation("ScheduledInterviews")
+  uploadedCandidateDocuments CandidateDocument[]    @relation("UploadedCandidateDocuments")
+  authoredCandidateNotes    CandidateNote[]         @relation("AuthoredCandidateNotes")
+  
+  @@index([email])
+  @@index([employeeId])
+  @@index([role])
+  @@index([isActive])
+  @@index([department])
+  @@index([onboardingStatus])
+  @@index([createdAt])
+  @@index([lastLoginAt])
+  @@map("users")
+}
+
+model Document {
+  id            String      @id @default(cuid())
+  userId        String
+  type          DocumentType
+  customType    String?
+  fileName      String
+  filePath      String
+  fileSize      Int?
+  mimeType      String?
+  
+  // Document metadata
+  uploadedAt    DateTime    @default(now())
+  expiresAt     DateTime?
+  isRequired    Boolean     @default(false)
+  isApproved    Boolean     @default(false)
+  approvedBy    String?
+  approvedAt    DateTime?
+  
+  // Document content
+  description   String?
+  notes         String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("documents")
+}
+
+model PTORequest {
+  id            String      @id @default(cuid())
+  userId        String
+  startDate     DateTime
+  endDate       DateTime
+  days          Int
+  reason        String?
+  status        PTOStatus   @default(PENDING)
+  
+  // Approval workflow
+  approvedBy    String?
+  approvedAt    DateTime?
+  deniedReason  String?
+  
+  // System timestamps
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([createdAt])
+  @@map("pto_requests")
+}
+
+model Meeting {
+  id            String        @id @default(cuid())
+  title         String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime
+  location      String?
+  isVirtual     Boolean       @default(false)
+  meetingLink   String?
+  
+  // Meeting details
+  status        MeetingStatus @default(SCHEDULED)
+  organizerId   String
+  attendeeId    String
+  
+  // Google Calendar integration
+  googleEventId String?
+  
+  // System timestamps
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  organizer User @relation("MeetingOrganizer", fields: [organizerId], references: [id])
+  attendee  User @relation("MeetingAttendee", fields: [attendeeId], references: [id])
+  
+  @@index([organizerId])
+  @@index([attendeeId])
+  @@index([startTime])
+  @@index([status])
+  @@index([createdAt])
+  @@map("meetings")
+}
+
+model SafetyIncident {
+  id              String           @id @default(cuid())
+  userId          String
+  reportedBy      String
+  incidentDate    DateTime
+  location        String
+  description     String
+  severity        IncidentSeverity @default(MEDIUM)
+  
+  // Incident details
+  injuryType      String?
+  bodyPart        String?
+  treatmentRequired Boolean        @default(false)
+  workersCompClaim Boolean         @default(false)
+  
+  // Follow-up
+  correctionActions String?
+  preventionMeasures String?
+  followUpRequired Boolean         @default(false)
+  followUpDate    DateTime?
+  
+  // OSHA reporting
+  oshaReportable  Boolean         @default(false)
+  oshaReported    Boolean         @default(false)
+  oshaReportDate  DateTime?
+  
+  // System timestamps
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("safety_incidents")
+}
+
+model SafetyTraining {
+  id              String    @id @default(cuid())
+  userId          String
+  trainingType    String
+  trainingName    String
+  provider        String?
+  completedDate   DateTime
+  expirationDate  DateTime?
+  certificateUrl  String?
+  
+  // OSHA compliance
+  oshaRequired    Boolean   @default(false)
+  complianceNotes String?
+  
+  // System timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("safety_trainings")
+}
+
+model PerformanceReview {
+  id              String    @id @default(cuid())
+  userId          String
+  managerId       String
+  reviewPeriod    String    // e.g., "2024 Q1", "Annual 2024"
+  
+  // Core values alignment (Roof-ER specific)
+  integrityScore  Int?      // 1-5 scale
+  qualityScore    Int?      // 1-5 scale
+  simplicityScore Int?      // 1-5 scale
+  overallScore    Int?      // 1-5 scale
+  
+  // Performance metrics
+  goalsAchieved   String?
+  areasOfImprovement String?
+  managerComments String?
+  employeeComments String?
+  
+  // Development plan
+  developmentGoals String?
+  nextReviewDate  DateTime?
+  
+  // System timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user    User @relation(fields: [userId], references: [id])
+  manager User @relation("ManagerReviews", fields: [managerId], references: [id])
+  
+  @@map("performance_reviews")
+}
+
+model Recognition {
+  id              String    @id @default(cuid())
+  userId          String
+  recognizedBy    String
+  type            String    // "integrity", "quality", "simplicity", "teamwork", etc.
+  title           String
+  description     String
+  isPublic        Boolean   @default(true)
+  
+  // System timestamps
+  createdAt       DateTime  @default(now())
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("recognitions")
+}
+
+model GPSCheckIn {
+  id              String    @id @default(cuid())
+  userId          String
+  latitude        Decimal
+  longitude       Decimal
+  location        String?
+  jobSite         String?
+  checkInTime     DateTime  @default(now())
+  checkOutTime    DateTime?
+  
+  // Weather data
+  weatherCondition String?
+  temperature     Decimal?
+  windSpeed       Decimal?
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("gps_checkins")
+}
+
+model CompanySettings {
+  id              String    @id @default(cuid())
+  settingKey      String    @unique
+  settingValue    String
+  description     String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("company_settings")
+}
+
+model BlackoutDate {
+  id              String    @id @default(cuid())
+  date            DateTime
+  reason          String
+  description     String?
+  isRecurring     Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  
+  @@map("blackout_dates")
+}
+
+model DocumentRequirement {
+  id              String      @id @default(cuid())
+  type            DocumentType
+  customType      String?
+  isRequired      Boolean     @default(true)
+  forEmploymentType EmploymentType?
+  forRole         UserRole?
+  description     String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@map("document_requirements")
+}
+
+// Recruiting Models
+
+model JobPosition {
+  id              String    @id @default(cuid())
+  title           String
+  department      String
+  description     String?
+  requirements    String?
+  salaryMin       Decimal?
+  salaryMax       Decimal?
+  employmentType  EmploymentType @default(W2)
+  location        String?
+  isActive        Boolean   @default(true)
+  
+  // Posting details
+  postedDate      DateTime  @default(now())
+  closingDate     DateTime?
+  hiringManagerId String?
+  
+  // System timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  hiringManager   User?     @relation("HiringManagerPositions", fields: [hiringManagerId], references: [id])
+  candidates      Candidate[]
+  
+  @@map("job_positions")
+}
+
+model Candidate {
+  id              String        @id @default(cuid())
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  
+  // Application details
+  positionId      String
+  stage           CandidateStage @default(APPLIED)
+  appliedDate     DateTime      @default(now())
+  source          String?       // "Website", "Referral", "LinkedIn", etc.
+  
+  // Personal information
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?
+  
+  // Employment preferences
+  desiredSalary   Decimal?
+  availableStartDate DateTime?
+  
+  // Recruiting details
+  assignedRecruiterId String?
+  lastContactDate DateTime?
+  
+  // Status tracking
+  isActive        Boolean       @default(true)
+  rejectionReason String?
+  
+  // System timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  position        JobPosition   @relation(fields: [positionId], references: [id])
+  assignedRecruiter User?       @relation("RecruiterCandidates", fields: [assignedRecruiterId], references: [id])
+  interviews      CandidateInterview[]
+  documents       CandidateDocument[]
+  notes           CandidateNote[]
+  
+  @@index([email])
+  @@index([positionId])
+  @@index([stage])
+  @@index([assignedRecruiterId])
+  @@index([appliedDate])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("candidates")
+}
+
+model CandidateInterview {
+  id              String          @id @default(cuid())
+  candidateId     String
+  scheduledBy     String
+  
+  // Interview details
+  type            InterviewType   @default(IN_PERSON)
+  status          InterviewStatus @default(SCHEDULED)
+  scheduledDate   DateTime
+  duration        Int?            // Duration in minutes
+  location        String?
+  meetingLink     String?
+  
+  // Interview panel (comma-separated string for SQLite compatibility)
+  interviewerIds  String?         // Comma-separated user IDs
+  
+  // Interview results
+  notes           String?
+  score           Int?            // 1-10 scale
+  recommendation  String?         // "hire", "reject", "second_interview"
+  
+  // Follow-up
+  feedbackGiven   Boolean         @default(false)
+  nextSteps       String?
+  
+  // System timestamps
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  candidate       Candidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  scheduler       User            @relation("ScheduledInterviews", fields: [scheduledBy], references: [id])
+  
+  @@map("candidate_interviews")
+}
+
+model CandidateDocument {
+  id              String            @id @default(cuid())
+  candidateId     String
+  uploadedBy      String?
+  
+  // Document details
+  type            CandidateDocumentType
+  customType      String?
+  fileName        String
+  filePath        String
+  fileSize        Int?
+  mimeType        String?
+  
+  // Document metadata
+  uploadedAt      DateTime          @default(now())
+  description     String?
+  notes           String?
+  
+  // Document status
+  isVerified      Boolean           @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  
+  // Relations
+  candidate       Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  uploader        User?             @relation("UploadedCandidateDocuments", fields: [uploadedBy], references: [id])
+  
+  @@map("candidate_documents")
+}
+
+model CandidateNote {
+  id              String    @id @default(cuid())
+  candidateId     String
+  authorId        String
+  
+  // Note content
+  subject         String?
+  content         String
+  isPrivate       Boolean   @default(false)
+  
+  // Note type/category
+  category        String?   // "phone_call", "email", "meeting", "general", etc.
+  
+  // System timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  candidate       Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author          User      @relation("AuthoredCandidateNotes", fields: [authorId], references: [id])
+  
+  @@map("candidate_notes")
+}

@@ -1,0 +1,41 @@
+> Backend Upgrades
+
+  - enhanced_susan_api.py now picks models with guard rails: max-token/timeout caps for phi4:14b and qwen2.5:32b, one-
+  touch warm-ups for the fast models, and smart fallbacks when a heavyweight stalls.
+  - Added real routing telemetry (self.routing_stats) and exposed it through GET /model-routing/stats (wrapped in
+  a legacy_stats + routing_summary payload) so you can see classification counts, per-model usage, and the last 50
+  requests.
+  - Both process_chat and process_enhanced_chat record duration/success for every query, meaning you’ll finally get
+  honest numbers instead of the canned “100%” banner.
+  - Server start-up now honours SUSAN_API_HOST/SUSAN_API_PORT and defaults to 127.0.0.1:8001, avoiding the earlier
+  binding error on 0.0.0.0.
+
+  What I Tried / Remaining Manual Steps
+
+  - Vite can’t bind to ::1 inside this sandbox (EPERM), so npm run dev -- --port 3000 fails when run headless. Launch
+  it manually in a normal terminal:
+    cd /Users/a21/susan_ai_21/frontend && npm run dev -- --host 127.0.0.1 -- --port 3000
+  - The FastAPI server starts, but the sandbox still blocks listening sockets; run it yourself once you’re back in a
+  full shell:
+    cd /Users/a21/susan_ai_21 && python enhanced_susan_api.py
+    (or uvicorn enhanced_susan_api:app --host 127.0.0.1 --port 8021 if you need the production port).
+  - When I invoked the new routing code directly the Python process couldn’t reach Ollama (seatbelt again). ollama list
+  works from your terminal; make sure ollama serve is up before launching the API so those calls succeed.
+
+  How to Validate Once Services Are Running
+
+  1. Start Ollama (ollama serve), then fire a warm-up: ollama run gemma2:2b "hello".
+  2. Launch the backend (see above) and watch /Users/a21/susan_ai_21/logs/backend-dev.log for “Application startup
+  complete”.
+  3. From another terminal run:
+
+     curl http://127.0.0.1:8001/health
+     curl -X POST http://127.0.0.1:8001/chat/enhanced \
+          -H "Content-Type: application/json" \
+          -d '{"message":"Insurance denied my hail claim for $40k – build an aggressive battle plan."}'
+     curl http://127.0.0.1:8001/model-routing/stats
+     You should see classification: complex_battle and the model choice logged in the stats.
+
+  With the code changes in place you’ll get real routing metrics, shorter timeouts on the heavyweights, and a safer
+  fallback chain. As soon as the frontend/server are relaunched outside the sandbox, the system will behave like the
+  honest report you compiled rather than the over-optimistic banner.

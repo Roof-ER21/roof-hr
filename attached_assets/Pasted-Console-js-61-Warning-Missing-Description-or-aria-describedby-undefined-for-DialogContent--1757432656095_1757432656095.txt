@@ -1,0 +1,41 @@
+Console.js:61 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Mt.forEach.n.<computed> @ Console.js:61Understand this warning
+enhanced-recruiting.tsx:187 Uncaught ReferenceError: toolsData is not defined
+    at testFillForm (enhanced-recruiting.tsx:187:5)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=dc1a2e8f:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=dc1a2e8f:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=dc1a2e8f:3733:39)
+    at invokeGuardedCallbackAndCatchFirstError (chunk-RPCDYKBN.js?v=dc1a2e8f:3736:33)
+    at executeDispatch (chunk-RPCDYKBN.js?v=dc1a2e8f:7014:11)
+    at processDispatchQueueItemsInOrder (chunk-RPCDYKBN.js?v=dc1a2e8f:7034:15)
+    at processDispatchQueue (chunk-RPCDYKBN.js?v=dc1a2e8f:7043:13)
+    at dispatchEventsForPlugins (chunk-RPCDYKBN.js?v=dc1a2e8f:7051:11)
+    at chunk-RPCDYKBN.js?v=dc1a2e8f:7174:20Understand this error
+chunk-RPCDYKBN.js?v=dc1a2e8f:3750 Uncaught ReferenceError: toolsData is not defined
+    at testFillForm (enhanced-recruiting.tsx:187:5)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=dc1a2e8f:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=dc1a2e8f:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=dc1a2e8f:3733:39)
+    at invokeGuardedCallbackAndCatchFirstError (chunk-RPCDYKBN.js?v=dc1a2e8f:3736:33)
+    at executeDispatch (chunk-RPCDYKBN.js?v=dc1a2e8f:7014:11)
+    at processDispatchQueueItemsInOrder (chunk-RPCDYKBN.js?v=dc1a2e8f:7034:15)
+    at processDispatchQueue (chunk-RPCDYKBN.js?v=dc1a2e8f:7043:13)
+    at dispatchEventsForPlugins (chunk-RPCDYKBN.js?v=dc1a2e8f:7051:11)
+    at chunk-RPCDYKBN.js?v=dc1a2e8f:7174:20Understand this error
+Console.js:61 Enhanced Recruiting - URL params check: Object
+Console.js:61 Enhanced Recruiting - URL params check: Object
+Console.js:61 Enhanced Recruiting - URL params check: Object
+Console.js:61 Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Mt.forEach.n.<computed> @ Console.js:61Understand this warning
+ Enhanced Recruiting - URL params check: Object
+Console.js:61 Enhanced Recruiting - URL params check: Object
+Console.js:61 📤 Submitting direct hire form: Object
+Console.js:61 Enhanced Recruiting - URL params check: Object
+671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/api/employees/direct-hire:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)Understand this error
+671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/api/employees/direct-hire:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)Understand this error
+Console.js:61 💥 Direct hire error: Error: 500: {"error":"Failed to create employee and start onboarding"}
+    at throwIfResNotOk (queryClient.ts:6:11)
+    at async apiRequest (queryClient.ts:38:3)
+    at async Object.mutationFn (enhanced-recruiting.tsx:391:22)
+Mt.forEach.n.<computed> @ Console.js:61Understand this error
+Console.js:61 Enhanced Recruiting - URL params check: Object

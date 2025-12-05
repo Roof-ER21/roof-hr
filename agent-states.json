@@ -1,0 +1,33 @@
+{
+  "PTO Expiration Reminder": {
+    "isActive": true,
+    "lastRun": {
+      "timestamp": "2025-08-20T16:33:18.419Z",
+      "status": "completed"
+    },
+    "lastStatus": "completed"
+  },
+  "Performance Review Automation": {
+    "lastRun": {
+      "timestamp": "2025-08-20T16:33:42.843Z",
+      "status": "completed"
+    },
+    "lastStatus": "completed"
+  },
+  "Document Expiration Monitor": {
+    "lastRun": {
+      "timestamp": "2025-08-20T16:33:38.194Z",
+      "status": "completed"
+    },
+    "lastStatus": "completed"
+  },
+  "Onboarding Workflow": {},
+  "COI Document Alert Agent": {
+    "isActive": true,
+    "lastRun": {
+      "timestamp": "2025-09-23T08:00:00.244Z",
+      "status": "completed"
+    },
+    "lastStatus": "completed"
+  }
+}

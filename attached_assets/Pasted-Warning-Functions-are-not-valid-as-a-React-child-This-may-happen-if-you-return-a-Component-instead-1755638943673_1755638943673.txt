@@ -1,0 +1,43 @@
+Warning: Functions are not valid as a React child. This may happen if you return a Component instead of <Component /> from render. Or maybe you meant to call this function rather than return it.%s 
+    at p
+    at div
+    at div
+    at MotionComponent (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/framer-motion.js?v=bb4afc8b:6536:40)
+    at div
+    at div
+    at div
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-Q6YJROYD.js?v=bb4afc8b:42:13
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-scroll-area.js?v=bb4afc8b:116:13
+    at div
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-Q6YJROYD.js?v=bb4afc8b:42:13
+    at Provider (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=bb4afc8b:38:15)
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-scroll-area.js?v=bb4afc8b:54:7
+    at _c (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/src/components/ui/scroll-area.tsx:21:11)
+    at div
+    at div
+    at div
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-Q6YJROYD.js?v=bb4afc8b:42:13
+    at Presence (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-E4UC4BFD.js?v=bb4afc8b:24:11)
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=bb4afc8b:176:13
+    at _c5 (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/src/components/ui/tabs.tsx:72:12)
+    at div
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-Q6YJROYD.js?v=bb4afc8b:42:13
+    at Provider (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=bb4afc8b:38:15)
+    at https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=bb4afc8b:54:7
+    at div
+    at div
+    at SusanAIPage (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/src/pages/susan-ai.tsx:52:35)
+    at RenderedRoute (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/react-router-dom.js?v=bb4afc8b:5455:26)
+    at Routes (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/react-router-dom.js?v=bb4afc8b:6188:3)
+    at main
+    at div
+    at div
+    at AppLayout (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/src/components/layout/app-layout.tsx:21:29)
+    at AppRoutes (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/src/App.tsx?v=Y6Htm1UrxcXSVvZopWIIJ:100:46)
+    at RenderedRoute (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/react-router-dom.js?v=bb4afc8b:5455:26)
+    at Routes (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/react-router-dom.js?v=bb4afc8b:6188:3)
+    at AuthProvider (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/src/lib/auth.tsx:21:32)
+    at Router (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/react-router-dom.js?v=bb4afc8b:6131:13)
+    at BrowserRouter (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/react-router-dom.js?v=bb4afc8b:9149:3)
+    at QueryClientProvider (https://671307a2-1a36-4877-a4b0-7360be2f7636-00-6f8i5qi8w122.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=bb4afc8b:2805:3)
+    at App

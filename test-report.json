@@ -1,0 +1,369 @@
+{
+  "timestamp": "2025-09-12T16:20:10.218Z",
+  "url": "http://localhost:5000",
+  "summary": {
+    "total": 24,
+    "passed": 17,
+    "failed": 7,
+    "percentage": 71,
+    "status": "FAIR"
+  },
+  "categories": {
+    "Authentication": {
+      "passed": 4,
+      "failed": 0,
+      "tests": [
+        {
+          "category": "Authentication",
+          "name": "Login as admin (ahmed.mahmoud@theroofdocs.com)",
+          "status": "PASSED",
+          "details": "Logged in as Ahmed Mahmoud (ADMIN)"
+        },
+        {
+          "category": "Authentication",
+          "name": "Login as manager (ford.barsi@theroofdocs.com)",
+          "status": "PASSED",
+          "details": "Logged in as Ford Barsi (ADMIN)"
+        },
+        {
+          "category": "Authentication",
+          "name": "Login as employee (test.employee@company.com)",
+          "status": "PASSED",
+          "details": "Logged in as Test Employee (EMPLOYEE)"
+        },
+        {
+          "category": "Authentication",
+          "name": "Token validation",
+          "status": "PASSED",
+          "details": "Token valid for ahmed.mahmoud@theroofdocs.com"
+        }
+      ]
+    },
+    "PTO": {
+      "passed": 2,
+      "failed": 1,
+      "tests": [
+        {
+          "category": "PTO",
+          "name": "Create PTO request (server-side day calculation)",
+          "status": "PASSED",
+          "details": "PTO request created with 3 days (calculated server-side)"
+        },
+        {
+          "category": "PTO",
+          "name": "Create half-day PTO request",
+          "status": "FAILED",
+          "error": "Failed with status 400"
+        },
+        {
+          "category": "PTO",
+          "name": "Fetch PTO requests",
+          "status": "PASSED",
+          "details": "Fetched 2 PTO requests"
+        }
+      ]
+    },
+    "Documents": {
+      "passed": 1,
+      "failed": 1,
+      "tests": [
+        {
+          "category": "Documents",
+          "name": "GET /api/documents (JSON response)",
+          "status": "PASSED",
+          "details": "Received JSON array with 0 documents"
+        },
+        {
+          "category": "Documents",
+          "name": "Create document metadata",
+          "status": "FAILED",
+          "error": "Failed with status 400"
+        }
+      ]
+    },
+    "Tools": {
+      "passed": 2,
+      "failed": 1,
+      "tests": [
+        {
+          "category": "Tools",
+          "name": "GET /api/tools/inventory",
+          "status": "PASSED",
+          "details": "Fetched 99 tools from inventory"
+        },
+        {
+          "category": "Tools",
+          "name": "Create new tool",
+          "status": "FAILED",
+          "error": "Failed with status 500"
+        },
+        {
+          "category": "Tools",
+          "name": "GET /api/tools/assignments",
+          "status": "PASSED",
+          "details": "Fetched 11 tool assignments"
+        }
+      ]
+    },
+    "Recruitment": {
+      "passed": 3,
+      "failed": 1,
+      "tests": [
+        {
+          "category": "Recruitment",
+          "name": "GET /api/candidates",
+          "status": "PASSED",
+          "details": "Fetched 17 candidates"
+        },
+        {
+          "category": "Recruitment",
+          "name": "Create new candidate",
+          "status": "FAILED",
+          "error": "Failed with status 400"
+        },
+        {
+          "category": "Recruitment",
+          "name": "Recruitment bot status",
+          "status": "PASSED",
+          "details": "Bot status: Unknown"
+        },
+        {
+          "category": "Recruitment",
+          "name": "GET /api/interviews",
+          "status": "PASSED",
+          "details": "Fetched 8 interviews"
+        }
+      ]
+    },
+    "Contracts": {
+      "passed": 1,
+      "failed": 1,
+      "tests": [
+        {
+          "category": "Contracts",
+          "name": "GET /api/contract-templates",
+          "status": "PASSED",
+          "details": "Fetched 11 contract templates"
+        },
+        {
+          "category": "Contracts",
+          "name": "GET /api/contracts",
+          "status": "FAILED",
+          "error": "Failed with status 200"
+        }
+      ]
+    },
+    "Susan AI": {
+      "passed": 0,
+      "failed": 2,
+      "tests": [
+        {
+          "category": "Susan AI",
+          "name": "GET /api/analytics/overview (no crashes)",
+          "status": "FAILED",
+          "error": "Failed with status 200"
+        },
+        {
+          "category": "Susan AI",
+          "name": "Susan AI system status",
+          "status": "FAILED",
+          "error": "Failed with status 200"
+        }
+      ]
+    },
+    "Territories": {
+      "passed": 1,
+      "failed": 0,
+      "tests": [
+        {
+          "category": "Territories",
+          "name": "GET /api/territories",
+          "status": "PASSED",
+          "details": "Fetched 3 territories"
+        }
+      ]
+    },
+    "PTO Policies": {
+      "passed": 1,
+      "failed": 0,
+      "tests": [
+        {
+          "category": "PTO Policies",
+          "name": "GET /api/pto-policies",
+          "status": "PASSED",
+          "details": "Fetched 115 PTO policies"
+        }
+      ]
+    },
+    "Email Templates": {
+      "passed": 1,
+      "failed": 0,
+      "tests": [
+        {
+          "category": "Email Templates",
+          "name": "GET /api/email-templates",
+          "status": "PASSED",
+          "details": "Fetched 3 email templates"
+        }
+      ]
+    },
+    "Workflows": {
+      "passed": 1,
+      "failed": 0,
+      "tests": [
+        {
+          "category": "Workflows",
+          "name": "GET /api/workflows",
+          "status": "PASSED",
+          "details": "Fetched 7 workflows"
+        }
+      ]
+    }
+  },
+  "tests": [
+    {
+      "category": "Authentication",
+      "name": "Login as admin (ahmed.mahmoud@theroofdocs.com)",
+      "status": "PASSED",
+      "details": "Logged in as Ahmed Mahmoud (ADMIN)"
+    },
+    {
+      "category": "Authentication",
+      "name": "Login as manager (ford.barsi@theroofdocs.com)",
+      "status": "PASSED",
+      "details": "Logged in as Ford Barsi (ADMIN)"
+    },
+    {
+      "category": "Authentication",
+      "name": "Login as employee (test.employee@company.com)",
+      "status": "PASSED",
+      "details": "Logged in as Test Employee (EMPLOYEE)"
+    },
+    {
+      "category": "Authentication",
+      "name": "Token validation",
+      "status": "PASSED",
+      "details": "Token valid for ahmed.mahmoud@theroofdocs.com"
+    },
+    {
+      "category": "PTO",
+      "name": "Create PTO request (server-side day calculation)",
+      "status": "PASSED",
+      "details": "PTO request created with 3 days (calculated server-side)"
+    },
+    {
+      "category": "PTO",
+      "name": "Create half-day PTO request",
+      "status": "FAILED",
+      "error": "Failed with status 400"
+    },
+    {
+      "category": "PTO",
+      "name": "Fetch PTO requests",
+      "status": "PASSED",
+      "details": "Fetched 2 PTO requests"
+    },
+    {
+      "category": "Documents",
+      "name": "GET /api/documents (JSON response)",
+      "status": "PASSED",
+      "details": "Received JSON array with 0 documents"
+    },
+    {
+      "category": "Documents",
+      "name": "Create document metadata",
+      "status": "FAILED",
+      "error": "Failed with status 400"
+    },
+    {
+      "category": "Tools",
+      "name": "GET /api/tools/inventory",
+      "status": "PASSED",
+      "details": "Fetched 99 tools from inventory"
+    },
+    {
+      "category": "Tools",
+      "name": "Create new tool",
+      "status": "FAILED",
+      "error": "Failed with status 500"
+    },
+    {
+      "category": "Tools",
+      "name": "GET /api/tools/assignments",
+      "status": "PASSED",
+      "details": "Fetched 11 tool assignments"
+    },
+    {
+      "category": "Recruitment",
+      "name": "GET /api/candidates",
+      "status": "PASSED",
+      "details": "Fetched 17 candidates"
+    },
+    {
+      "category": "Recruitment",
+      "name": "Create new candidate",
+      "status": "FAILED",
+      "error": "Failed with status 400"
+    },
+    {
+      "category": "Recruitment",
+      "name": "Recruitment bot status",
+      "status": "PASSED",
+      "details": "Bot status: Unknown"
+    },
+    {
+      "category": "Recruitment",
+      "name": "GET /api/interviews",
+      "status": "PASSED",
+      "details": "Fetched 8 interviews"
+    },
+    {
+      "category": "Contracts",
+      "name": "GET /api/contract-templates",
+      "status": "PASSED",
+      "details": "Fetched 11 contract templates"
+    },
+    {
+      "category": "Contracts",
+      "name": "GET /api/contracts",
+      "status": "FAILED",
+      "error": "Failed with status 200"
+    },
+    {
+      "category": "Susan AI",
+      "name": "GET /api/analytics/overview (no crashes)",
+      "status": "FAILED",
+      "error": "Failed with status 200"
+    },
+    {
+      "category": "Susan AI",
+      "name": "Susan AI system status",
+      "status": "FAILED",
+      "error": "Failed with status 200"
+    },
+    {
+      "category": "Territories",
+      "name": "GET /api/territories",
+      "status": "PASSED",
+      "details": "Fetched 3 territories"
+    },
+    {
+      "category": "PTO Policies",
+      "name": "GET /api/pto-policies",
+      "status": "PASSED",
+      "details": "Fetched 115 PTO policies"
+    },
+    {
+      "category": "Email Templates",
+      "name": "GET /api/email-templates",
+      "status": "PASSED",
+      "details": "Fetched 3 email templates"
+    },
+    {
+      "category": "Workflows",
+      "name": "GET /api/workflows",
+      "status": "PASSED",
+      "details": "Fetched 7 workflows"
+    }
+  ]
+}

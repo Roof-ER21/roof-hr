@@ -1,0 +1,21 @@
+here are some things i wanted added/changed, then i want a full detailed printable list containing all the features and access levels in our app/web: I want 
+  the PTO Policy to be customizable by each person with a starting base number of days provided by manager. Each Depertment will have its own "assigned" PTO 
+  days. There should also be a warning when 2 or more people in the same depertment are taking overlaping PTO days. Ford Barsi, General Manager is the only one
+   allowed to approve PTO and once approved it should show in green, if pending gray and if denied it should just desepear. Next I want to track reps COI and 
+  when it expires. I want a system that alerts them and managment a month before, then alerts them 2 weeks before, then 1 week then everyday after that until 
+  they get it renewed. I want to create the ability for recruiters and managers to assign themselves or each other employees that they would be "primarily" in 
+  charge of. I also want the ability for managers/ admin to assign responsibilties such as keeping track of peoples COI [workers comp]. I would like to also 
+  add Territories and the ability to promote somoene to territory sales manager where they can only admin over that terretory and it's people. I also want to 
+  make sure we keep track of hire dates and terrmination dates. for the recruiting process i want to make sure interviews don't get scheduled on top of each 
+  other so an alert or warning should pop up when scheduling same day/time interviews. for advancing canidates ffrom any position to scheduling an interview a 
+  pop up for the person performing the action should pop up requiring them to verify they have a valid drivers licence, A reliable Car, and can communicate 
+  clearly. If they answer NO to any of the following it should not let them move them forward, only true Admin and Sales Mangers can get past this. for the 
+  look and labels under list view for canidates i want it to display, "Recruiter" "Name" "E-mail" "Phone #" "Stage" "Last Update". I also want the pop up notes
+   section for each canidate to /Users/a21/Downloads/IMG_4734.HEIC look like the provided picture. I also want to add a contract builder for templates to save 
+  for diffrent territories that can be copied and pasted for new hires. There shouls also be a requirememt for an e-signature for any contracts sent out with 
+  al alert for managers when signed. Contracts and employee documents should be saved under their own person profile under the documents section and same with 
+  all employees and any document uploaded and saved by admin/manager/recruiter pertaining to them. In the admin section when you check on the status of any 
+  canidate you should also have the power and ability to move them to any stage from their. Once moved it should take you to their new stage and ask for whats 
+  next step. Let's start with these changes/additions first and test front and back to ensure everything is probably running and we covered all aspects of what
+   is in the new upgrade. Please use ultra think or whatever means you need to ensure this comes out beautiful and industry ready with proper security and 
+  functions and flows. ask me any questions that may help before, during or after.

@@ -1,0 +1,69 @@
+  Clarifying Questions:
+
+  PTO Policy System:
+
+  1. When you say "customizable PTO per person" - do you mean employees can customize their own policy rules, or managers set custom policies for each
+  employee?
+  2. For department PTO assignments - should this be a base allocation that gets added to individual allocations, or does it override individual settings?
+  3. What happens when someone requests PTO and it conflicts with department overlaps - should it block the request or just show a warning?
+
+  COI Tracking:
+
+  1. What specific COI documents should we track? (Workers Comp, General Liability, Auto Insurance, etc.)
+  2. Should COI tracking be mandatory for all employees or only certain roles/departments?
+  3. Who can upload/update COI documents - only the employee, or can managers/HR do it too?
+
+  Territory & Role Management:
+
+  1. How many territories do you anticipate having? Should territories be geographic (by state/region) or by other criteria?
+  2. When someone becomes a Territory Sales Manager, do they lose access to other territories completely?
+  3. Should Territory Sales Managers have the same powers as regular managers within their territory?
+
+  Employee Assignment:
+
+  1. Can an employee be assigned to multiple people, or should it be one primary assignment?
+  2. What specific responsibilities can be assigned besides COI tracking?
+
+  Contract Builder:
+
+  1. What contract types do you need templates for? (Employment agreements, NDAs, contractor agreements, etc.)
+  2. Should the e-signature integration be with a specific service (DocuSign, HelloSign) or a simple digital signature?
+  3. Who can create/edit contract templates?
+
+  User Roles Clarification:
+
+  1. You mentioned "Ford Barsi, General Manager" for PTO approval - should this be a specific user account or a "General Manager" role that could be assigned
+  to different people?
+  2. What's the difference between "true Admin" and regular admin in terms of bypass privileges?
+
+  Technical Questions:
+
+  1. For the candidate notes UI image you referenced - I couldn't load the HEIC file. Could you describe what layout you're looking for, or convert it to
+  JPG/PNG?
+  2. Should all these features be available immediately or can we implement them in phases?
+
+  Once I have these clarifications, I'll start building this comprehensive upgrade with proper security, beautiful UI, and industry-ready functionality!
+
+PTO: 1. managers set custome policy for each employee and it's usually based on tenure. 2. depertment is set as a base for everyone in the dep, managers can   │
+│   alter the amount after. 3. it should show a warning with the reason and a "Ford will be right with you" meassage. COI: 1. workers comp, and general insurance  │
+│   liability. 2. COI tracking should be for all sales reps, sub-contractors, Field Techs and 1099 employees if H-R/manager finds it neccicery. 3. H-R and         │
+│   Territory managers should be in charge of uploading and updating these docs. Territory: 1. I for see over 30 territories and they should be by region and      │
+│   created. I want to start with three territories for now with all not having a sales manager yet. the first will be called the DMV, the second will be called   │
+│   Richmond and the third will be PA. 2. yes unless granted "full Sales Manager" access. 3. yes. Employee Assignment: 1. yes they can be assigned to multiple     │
+│   people. 2. they are primarily in charge of moving them through the portal. this should allow for tracking each H-R recruiter and their abilty from screen to   │
+│   hire. Contract Builder: 1. employment agreements. 2. let's start with a simple electronic signature. 3. H-R and admin or select sales managers. User Roles:    │
+│   1. General Manager is a role and Ford Barsi is currently in that role. 2. True admin like Ahmed has power to adjust AI things and regular admin has to ask     │
+│   permission. I believe this is the code for the look i want for the notes part and the colors const computedStyles = window.getComputedStyle($0);               │
+│   const data = {                                                                                                                                                 │
+│     elementStyles: {                                                                                                                                             │
+│       backgroundColor: computedStyles.getPropertyValue('background-color'),                                                                                      │
+│       border: computedStyles.getPropertyValue('border'),                                                                                                         │
+│       borderRadius: computedStyles.getPropertyValue('border-radius'),                                                                                            │
+│       padding: computedStyles.getPropertyValue('padding'),                                                                                                       │
+│       margin: computedStyles.getPropertyValue('margin'),                                                                                                         │
+│       overflowY: computedStyles.getPropertyValue('overflow-y'),                                                                                                  │
+│       display: computedStyles.getPropertyValue('display'),                                                                                                       │
+│       flexDirection: computedStyles.getPropertyValue('flex-direction'),                                                                                          │
+│       gap: computedStyles.getPropertyValue('gap'),                                                                                                               │
+│     },                                                                                                                                                           │
+│   };                   2. I want all these features but i want the best results so if we need to split it into phases lets do it

@@ -1,0 +1,35 @@
+chunk-NXESFFTV.js?v=1084230f:14080 The above error occurred in the <CandidateComparison> component:
+
+    at CandidateComparison (http://localhost:5001/src/components/recruiting/candidate-comparison.tsx?t=1755633517147:38:39)
+    at div
+    at AdvancedRecruiting (http://localhost:5001/src/pages/advanced-recruiting.tsx?t=1755633517147:427:20)
+    at RenderedRoute (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/react-router-dom.js?v=54c147c9:5623:26)
+    at Routes (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/react-router-dom.js?v=54c147c9:6358:3)
+    at Suspense
+    at main
+    at div
+    at div
+    at AppLayout (http://localhost:5001/src/components/layout/app-layout.tsx?t=1755631475556:23:29)
+    at AppRoutes (http://localhost:5001/src/App.tsx?t=1755633517147&v=vlMNi-XygwCEohyDF7UlC:119:46)
+    at RenderedRoute (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/react-router-dom.js?v=54c147c9:5623:26)
+    at Routes (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/react-router-dom.js?v=54c147c9:6358:3)
+    at AuthProvider (http://localhost:5001/src/lib/auth.tsx:21:32)
+    at Router (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/react-router-dom.js?v=54c147c9:6301:13)
+    at BrowserRouter (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/react-router-dom.js?v=54c147c9:9373:3)
+    at QueryClientProvider (http://localhost:5001/@fs/Users/a21/Desktop/HumanResourceTracker/node_modules/.vite/deps/@tanstack_react-query.js?v=19c31e7c:2874:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+logCapturedError @ chunk-NXESFFTV.js?v=1084230f:14080Understand this error
+chunk-NXESFFTV.js?v=1084230f:9176 Uncaught Error: useDndMonitor must be used within a children of <DndContext>
+    at @dnd-kit_core.js?v=d896a24e:341:13
+    at commitHookEffectListMount (chunk-NXESFFTV.js?v=1084230f:16963:34)
+    at commitPassiveMountOnFiber (chunk-NXESFFTV.js?v=1084230f:18206:19)
+    at commitPassiveMountEffects_complete (chunk-NXESFFTV.js?v=1084230f:18179:17)
+    at commitPassiveMountEffects_begin (chunk-NXESFFTV.js?v=1084230f:18169:15)
+    at commitPassiveMountEffects (chunk-NXESFFTV.js?v=1084230f:18159:11)
+    at flushPassiveEffectsImpl (chunk-NXESFFTV.js?v=1084230f:19543:11)
+    at flushPassiveEffects (chunk-NXESFFTV.js?v=1084230f:19500:22)
+    at commitRootImpl (chunk-NXESFFTV.js?v=1084230f:19469:13)
+    at commitRoot (chunk-NXESFFTV.js?v=1084230f:19330:13)

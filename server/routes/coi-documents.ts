@@ -1,0 +1,821 @@
+import express from 'express';
+import multer from 'multer';
+import { storage } from '../storage';
+import { insertCoiDocumentSchema } from '../../shared/schema';
+import { v4 as uuidv4 } from 'uuid';
+import { googleDriveService } from '../services/google-drive-service';
+import { googleSyncEnhanced } from '../services/google-sync-enhanced';
+import { parseCOIDocument, COIParsedData } from '../services/document-parser';
+import { matchEmployeeFromName, MatchResult } from '../services/employee-matcher';
+
+const router = express.Router();
+
+// Configure multer for file upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept PDFs and images
+    if (file.mimetype === 'application/pdf' || 
+        file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF and image files are allowed'));
+    }
+  }
+});
+
+// Middleware
+function requireAuth(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  next();
+}
+
+function requireHROrManager(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  // HR, Managers, and Territory Managers can manage COI documents
+  if (!['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'HR or Manager access required' });
+  }
+  
+  next();
+}
+
+// Get all COI documents
+router.get('/api/coi-documents', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const documents = await storage.getAllCoiDocuments();
+    res.json(documents);
+  } catch (error) {
+    console.error('Error fetching COI documents:', error);
+    res.status(500).json({ error: 'Failed to fetch COI documents' });
+  }
+});
+
+// Get COI documents for specific employee
+router.get('/api/coi-documents/employee/:employeeId', requireAuth, async (req, res) => {
+  try {
+    // Users can view their own documents, HR/managers can view any
+    if (req.user.id !== req.params.employeeId && 
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Can only view your own COI documents' });
+    }
+    
+    const documents = await storage.getCoiDocumentsByEmployeeId(req.params.employeeId);
+    res.json(documents);
+  } catch (error) {
+    console.error('Error fetching employee COI documents:', error);
+    res.status(500).json({ error: 'Failed to fetch COI documents' });
+  }
+});
+
+// Get expiring COI documents
+router.get('/api/coi-documents/expiring/:days', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const days = parseInt(req.params.days);
+    if (isNaN(days)) {
+      return res.status(400).json({ error: 'Invalid days parameter' });
+    }
+    
+    const documents = await storage.getExpiringCoiDocuments(days);
+    res.json(documents);
+  } catch (error) {
+    console.error('Error fetching expiring COI documents:', error);
+    res.status(500).json({ error: 'Failed to fetch expiring COI documents' });
+  }
+});
+
+// Get COI document by ID
+router.get('/api/coi-documents/:id', requireAuth, async (req, res) => {
+  try {
+    const document = await storage.getCoiDocumentById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ error: 'COI document not found' });
+    }
+    
+    // Check access permissions
+    if (document.employeeId !== req.user.id && 
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    res.json(document);
+  } catch (error) {
+    console.error('Error fetching COI document:', error);
+    res.status(500).json({ error: 'Failed to fetch COI document' });
+  }
+});
+
+// Create new COI document with file upload
+router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
+  try {
+    const { employeeId, type, issueDate, expirationDate, notes } = req.body;
+    
+    console.log('[COI Upload] Starting upload for employee:', employeeId, 'Type:', type);
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required' });
+    }
+    
+    console.log('[COI Upload] File received:', req.file.originalname, 'Size:', req.file.size);
+
+    // Get employee details
+    const employee = await storage.getUserById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    console.log('[COI Upload] Employee found:', employee.firstName, employee.lastName);
+
+    // Get or create employee folder structure
+    const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
+    if (!employeeFolders || !employeeFolders.coiFolderId) {
+      console.error('[COI Upload] Failed to get employee folder structure:', employeeFolders);
+      throw new Error('Failed to get employee COI folder');
+    }
+    
+    console.log('[COI Upload] Employee folder structure obtained, COI folder ID:', employeeFolders.coiFolderId);
+
+    // Upload file to Google Drive
+    const fileName = `COI_${type}_${employee.lastName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
+    console.log('[COI Upload] Uploading to Google Drive with filename:', fileName);
+    
+    const driveFile = await googleDriveService.uploadFile({
+      name: fileName,
+      mimeType: req.file.mimetype,
+      content: req.file.buffer,
+      parentFolderId: employeeFolders.coiFolderId,
+      description: `COI Document - ${type} - Expires: ${expirationDate}`
+    });
+    
+    console.log('[COI Upload] File uploaded to Google Drive successfully:', driveFile.id, 'Link:', driveFile.webViewLink);
+
+    // Create database record with Google Drive info
+    // Store the Google Drive view link as the document URL for easy access
+    const data = insertCoiDocumentSchema.parse({
+      employeeId,
+      type,
+      documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
+      googleDriveId: driveFile.id,
+      filePath: driveFile.id, // Store Drive ID as reference
+      issueDate,
+      expirationDate,
+      notes,
+      uploadedBy: req.user.id,
+      status: 'ACTIVE'
+    });
+    
+    console.log('[COI Upload] Creating database record with Google Drive link');
+    
+    // Check expiration date to set initial status
+    const expDate = new Date(expirationDate);
+    const today = new Date();
+    const daysUntilExpiration = Math.floor((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    let status = 'ACTIVE';
+    let alertFrequency = null;
+    
+    if (daysUntilExpiration <= 0) {
+      status = 'EXPIRED';
+      alertFrequency = 'DAILY';
+    } else if (daysUntilExpiration <= 6) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'DAILY';
+    } else if (daysUntilExpiration <= 7) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'ONE_WEEK';
+    } else if (daysUntilExpiration <= 14) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'TWO_WEEKS';
+    } else if (daysUntilExpiration <= 30) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'MONTH_BEFORE';
+    }
+    
+    const document = await storage.createCoiDocument({
+      ...data,
+      status,
+      alertFrequency
+    });
+    
+    console.log('[COI Upload] COI document created successfully. ID:', document.id, 'Google Drive ID:', driveFile.id);
+    
+    // TODO: Notify Susan AI about the new COI document
+    // This would trigger alerts and tracking
+    
+    res.json({
+      ...document,
+      googleDriveUrl: driveFile.webViewLink // Include direct link for frontend
+    });
+  } catch (error: any) {
+    console.error('[COI Upload] Error uploading COI document:', error);
+    console.error('[COI Upload] Error stack:', error.stack);
+    
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid document data', details: error.errors });
+    }
+    
+    // Provide more specific error messages
+    if (error.message.includes('Google Drive')) {
+      return res.status(500).json({ 
+        error: 'Failed to upload file to Google Drive. Please check Google Drive integration.',
+        details: error.message 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: error.message || 'Failed to upload COI document',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Create new COI document (without file - for backward compatibility)
+router.post('/api/coi-documents', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const data = insertCoiDocumentSchema.parse({
+      ...req.body,
+      uploadedBy: req.user.id,
+      status: 'ACTIVE' // New documents start as active
+    });
+    
+    // Check expiration date to set initial status
+    const expirationDate = new Date(data.expirationDate);
+    const today = new Date();
+    const daysUntilExpiration = Math.floor((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    let status = 'ACTIVE';
+    let alertFrequency = null;
+    
+    if (daysUntilExpiration <= 0) {
+      status = 'EXPIRED';
+      alertFrequency = 'DAILY'; // Daily alerts after expiration
+    } else if (daysUntilExpiration <= 6) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'DAILY'; // Daily alerts for 6 days before expiration
+    } else if (daysUntilExpiration <= 7) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'ONE_WEEK'; // Alert at 1 week
+    } else if (daysUntilExpiration <= 14) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'TWO_WEEKS'; // Alert at 2 weeks
+    } else if (daysUntilExpiration <= 30) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'MONTH_BEFORE'; // Alert at 1 month
+    }
+    
+    const document = await storage.createCoiDocument({
+      ...data,
+      status,
+      alertFrequency
+    });
+    
+    res.json(document);
+  } catch (error: any) {
+    console.error('Error creating COI document:', error);
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid document data', details: error.errors });
+    }
+    res.status(500).json({ error: 'Failed to create COI document' });
+  }
+});
+
+// Update COI document
+router.patch('/api/coi-documents/:id', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const document = await storage.getCoiDocumentById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ error: 'COI document not found' });
+    }
+    
+    // Update status based on new expiration date if provided
+    let updateData = { ...req.body };
+    
+    if (req.body.expirationDate) {
+      const expirationDate = new Date(req.body.expirationDate);
+      const today = new Date();
+      const daysUntilExpiration = Math.floor((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysUntilExpiration <= 0) {
+        updateData.status = 'EXPIRED';
+        updateData.alertFrequency = 'DAILY'; // Daily alerts after expiration
+      } else if (daysUntilExpiration <= 6) {
+        updateData.status = 'EXPIRING_SOON';
+        updateData.alertFrequency = 'DAILY'; // Daily alerts for 6 days before expiration
+      } else if (daysUntilExpiration <= 7) {
+        updateData.status = 'EXPIRING_SOON';
+        updateData.alertFrequency = 'ONE_WEEK'; // Alert at 1 week
+      } else if (daysUntilExpiration <= 14) {
+        updateData.status = 'EXPIRING_SOON';
+        updateData.alertFrequency = 'TWO_WEEKS'; // Alert at 2 weeks
+      } else if (daysUntilExpiration <= 30) {
+        updateData.status = 'EXPIRING_SOON';
+        updateData.alertFrequency = 'MONTH_BEFORE'; // Alert at 1 month
+      } else {
+        updateData.status = 'ACTIVE';
+        updateData.alertFrequency = null; // No alerts for documents expiring > 30 days
+      }
+    }
+    
+    const updatedDocument = await storage.updateCoiDocument(req.params.id, updateData);
+    res.json(updatedDocument);
+  } catch (error) {
+    console.error('Error updating COI document:', error);
+    res.status(500).json({ error: 'Failed to update COI document' });
+  }
+});
+
+// Delete COI document
+router.delete('/api/coi-documents/:id', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    await storage.deleteCoiDocument(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting COI document:', error);
+    res.status(500).json({ error: 'Failed to delete COI document' });
+  }
+});
+
+// Send COI expiration alerts
+router.post('/api/coi-documents/send-alerts', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const expiringDocuments = await storage.getExpiringCoiDocuments(30);
+    const alertsSent: any[] = [];
+    
+    for (const doc of expiringDocuments) {
+      const expirationDate = new Date(doc.expirationDate);
+      const today = new Date();
+      const daysUntilExpiration = Math.floor((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Determine if alert should be sent based on frequency
+      let shouldSendAlert = false;
+      const lastAlertSent = doc.lastAlertSent ? new Date(doc.lastAlertSent) : null;
+      const hoursSinceLastAlert = lastAlertSent ? 
+        (today.getTime() - lastAlertSent.getTime()) / (1000 * 60 * 60) : Infinity;
+      
+      if (daysUntilExpiration <= 0) {
+        // Expired - send daily alerts
+        shouldSendAlert = hoursSinceLastAlert >= 24;
+      } else if (daysUntilExpiration <= 6) {
+        // 6 days before expiration - send daily alerts
+        shouldSendAlert = hoursSinceLastAlert >= 24;
+      } else if (daysUntilExpiration === 7 && hoursSinceLastAlert >= 24) {
+        // 1 week before - send alert
+        shouldSendAlert = true;
+      } else if (daysUntilExpiration === 14 && hoursSinceLastAlert >= 24 * 7) {
+        // 2 weeks before - send alert
+        shouldSendAlert = true;
+      } else if (daysUntilExpiration === 30 && !lastAlertSent) {
+        // 1 month before - send initial alert
+        shouldSendAlert = true;
+      }
+      
+      if (shouldSendAlert) {
+        // Here you would send the actual alert (email, notification, etc.)
+        // For now, we'll just track that an alert was sent
+        
+        await storage.updateCoiDocument(doc.id, {
+          lastAlertSent: new Date()
+        });
+        
+        alertsSent.push({
+          documentId: doc.id,
+          employeeId: doc.employeeId,
+          type: doc.type,
+          daysUntilExpiration,
+          alertType: doc.alertFrequency
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      alertsSent: alertsSent.length,
+      alerts: alertsSent
+    });
+  } catch (error) {
+    console.error('Error sending COI alerts:', error);
+    res.status(500).json({ error: 'Failed to send COI alerts' });
+  }
+});
+
+// Trigger COI alerts manually (for testing and immediate processing)
+router.post('/api/coi-documents/trigger-alerts', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const { coiAlertService } = await import('../services/coi-alert-service');
+    await coiAlertService.checkAndSendAlerts();
+    const summary = await coiAlertService.getAlertSummary();
+    
+    res.json({
+      success: true,
+      message: 'COI alerts triggered successfully',
+      summary
+    });
+  } catch (error) {
+    console.error('Error triggering COI alerts:', error);
+    res.status(500).json({ error: 'Failed to trigger COI alerts' });
+  }
+});
+
+// Get COI alert summary
+router.get('/api/coi-documents/alert-summary', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const { coiAlertService } = await import('../services/coi-alert-service');
+    const summary = await coiAlertService.getAlertSummary();
+    res.json(summary);
+  } catch (error) {
+    console.error('Error fetching COI alert summary:', error);
+    res.status(500).json({ error: 'Failed to fetch alert summary' });
+  }
+});
+
+// Manual sync - Import COI documents from Google Drive
+router.post('/api/coi-documents/sync-from-drive', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    console.log('[COI Sync] Manual sync triggered by user:', req.user?.email);
+    
+    // Import enhanced Google sync service
+    const { googleSyncEnhanced } = await import('../services/google-sync-enhanced');
+    
+    // Run the import
+    await googleSyncEnhanced.importCOIDocumentsFromDrive();
+    
+    // Get updated document count
+    const documents = await storage.getAllCoiDocuments();
+    
+    res.json({
+      success: true,
+      message: 'COI documents imported from Google Drive successfully',
+      totalDocuments: documents.length
+    });
+  } catch (error) {
+    console.error('Error syncing COI documents from Drive:', error);
+    res.status(500).json({ 
+      error: 'Failed to sync COI documents from Google Drive',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Manual two-way sync
+router.post('/api/coi-documents/sync', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    console.log('[COI Sync] Two-way sync triggered by user:', req.user?.email);
+
+    // Import enhanced Google sync service
+    const { googleSyncEnhanced } = await import('../services/google-sync-enhanced');
+
+    // Run the full two-way sync
+    await googleSyncEnhanced.syncCOIDocuments();
+
+    // Get updated document count
+    const documents = await storage.getAllCoiDocuments();
+
+    res.json({
+      success: true,
+      message: 'Two-way COI sync completed successfully',
+      totalDocuments: documents.length
+    });
+  } catch (error) {
+    console.error('Error in two-way COI sync:', error);
+    res.status(500).json({
+      error: 'Failed to complete two-way COI sync',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// ============================================
+// SMART UPLOAD - Parse PDF and auto-assign
+// ============================================
+
+interface SmartUploadResponse {
+  success: boolean;
+  parsedData: COIParsedData;
+  employeeMatch: MatchResult;
+  requiresConfirmation: boolean;
+  document?: any;
+  message?: string;
+}
+
+// Smart upload - parses PDF and auto-assigns to employee
+router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
+  try {
+    console.log('[COI Smart Upload] Starting smart upload...');
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required' });
+    }
+
+    console.log('[COI Smart Upload] File received:', req.file.originalname, 'Size:', req.file.size, 'Type:', req.file.mimetype);
+
+    // Only parse PDFs (images can't be parsed for text without OCR)
+    let parsedData: COIParsedData;
+    if (req.file.mimetype === 'application/pdf') {
+      console.log('[COI Smart Upload] Parsing PDF...');
+      parsedData = await parseCOIDocument(req.file.buffer);
+      console.log('[COI Smart Upload] Parsed data:', {
+        insuredName: parsedData.insuredName,
+        policyNumber: parsedData.policyNumber,
+        effectiveDate: parsedData.effectiveDate,
+        expirationDate: parsedData.expirationDate,
+        documentType: parsedData.documentType,
+        confidence: parsedData.confidence
+      });
+    } else {
+      // For images, return empty parsed data with a flag
+      parsedData = {
+        insuredName: null,
+        policyNumber: null,
+        effectiveDate: null,
+        expirationDate: null,
+        insurerName: null,
+        coverageAmounts: {},
+        documentType: 'UNKNOWN',
+        rawText: 'IMAGE_FILE', // Flag to indicate this was an image
+        confidence: 0
+      };
+      console.log('[COI Smart Upload] Image file detected - cannot extract text from images');
+    }
+
+    // Try to match employee
+    console.log('[COI Smart Upload] Attempting employee match...');
+    const employeeMatch = await matchEmployeeFromName(parsedData.insuredName);
+    console.log('[COI Smart Upload] Employee match result:', {
+      matchedEmployee: employeeMatch.matchedEmployee?.firstName + ' ' + employeeMatch.matchedEmployee?.lastName,
+      confidence: employeeMatch.confidence,
+      matchType: employeeMatch.matchType,
+      suggestions: employeeMatch.suggestedEmployees.length
+    });
+
+    // Always return parsed data for user review - never auto-save
+    console.log('[COI Smart Upload] Returning parsed data for user review');
+    console.log('[COI Smart Upload] Final result:', {
+      insuredName: parsedData.insuredName,
+      matchedEmployee: employeeMatch.matchedEmployee
+        ? `${employeeMatch.matchedEmployee.firstName} ${employeeMatch.matchedEmployee.lastName}`
+        : null,
+      confidence: employeeMatch.confidence,
+      suggestionsCount: employeeMatch.suggestedEmployees.length,
+    });
+
+    // Build informative message based on what was found
+    let message: string;
+    const isImageFile = parsedData.rawText === 'IMAGE_FILE';
+
+    if (isImageFile) {
+      message = 'Image files (JPG/PNG) cannot be scanned for text. Please upload a PDF version of the COI, or enter the details manually below.';
+    } else if (employeeMatch.matchedEmployee && employeeMatch.confidence >= 80) {
+      message = `Matched to ${employeeMatch.matchedEmployee.firstName} ${employeeMatch.matchedEmployee.lastName} (${employeeMatch.confidence}% confidence)`;
+    } else if (parsedData.insuredName) {
+      message = `Found "${parsedData.insuredName}" but no confident match. Please select employee manually.`;
+    } else {
+      message = 'Could not extract insured name from document. Please select employee manually.';
+    }
+
+    const response: SmartUploadResponse = {
+      success: true,
+      parsedData: {
+        ...parsedData,
+        // Truncate raw text for response but keep enough for debugging
+        rawText: parsedData.rawText?.substring(0, 300) || ''
+      },
+      employeeMatch,
+      requiresConfirmation: true, // Always require confirmation
+      message
+    };
+
+    res.json(response);
+
+  } catch (error: any) {
+    console.error('[COI Smart Upload] Error:', error.message);
+    console.error('[COI Smart Upload] Stack:', error.stack);
+    res.status(500).json({
+      error: 'Smart upload failed',
+      details: error.message
+    });
+  }
+});
+
+// Confirm smart upload assignment - saves the document with selected employee
+router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
+  try {
+    const { employeeId, type, issueDate, expirationDate, notes, policyNumber, insurerName } = req.body;
+
+    console.log('[COI Confirm] Confirming assignment for employee:', employeeId);
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required' });
+    }
+
+    if (!employeeId) {
+      return res.status(400).json({ error: 'Employee ID is required' });
+    }
+
+    // Get employee details
+    const employee = await storage.getUserById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    console.log('[COI Confirm] Employee found:', employee.firstName, employee.lastName);
+
+    // Get or create employee folder structure
+    const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
+    if (!employeeFolders || !employeeFolders.coiFolderId) {
+      throw new Error('Failed to get employee COI folder');
+    }
+
+    // Upload file to Google Drive
+    const coiType = type || 'GENERAL_LIABILITY';
+    const fileName = `COI_${coiType}_${employee.lastName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
+
+    const driveFile = await googleDriveService.uploadFile({
+      name: fileName,
+      mimeType: req.file.mimetype,
+      content: req.file.buffer,
+      parentFolderId: employeeFolders.coiFolderId,
+      description: `COI Document - ${coiType} - Confirmed Upload`
+    });
+
+    console.log('[COI Confirm] Uploaded to Google Drive:', driveFile.id);
+
+    // Parse dates or use defaults
+    const today = new Date();
+    const oneYearFromNow = new Date(today);
+    oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+
+    const finalIssueDate = issueDate || today.toISOString().split('T')[0];
+    const finalExpirationDate = expirationDate || oneYearFromNow.toISOString().split('T')[0];
+
+    // Calculate status
+    const expDate = new Date(finalExpirationDate);
+    const daysUntilExpiration = Math.floor((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    let status = 'ACTIVE';
+    let alertFrequency = null;
+
+    if (daysUntilExpiration <= 0) {
+      status = 'EXPIRED';
+      alertFrequency = 'DAILY';
+    } else if (daysUntilExpiration <= 6) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'DAILY';
+    } else if (daysUntilExpiration <= 7) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'ONE_WEEK';
+    } else if (daysUntilExpiration <= 14) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'TWO_WEEKS';
+    } else if (daysUntilExpiration <= 30) {
+      status = 'EXPIRING_SOON';
+      alertFrequency = 'MONTH_BEFORE';
+    }
+
+    // Create database record
+    const document = await storage.createCoiDocument({
+      employeeId,
+      type: coiType as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
+      documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
+      googleDriveId: driveFile.id,
+      filePath: driveFile.id,
+      issueDate: finalIssueDate,
+      expirationDate: finalExpirationDate,
+      notes: notes || `Policy: ${policyNumber || 'Unknown'}. Insurer: ${insurerName || 'Unknown'}`,
+      uploadedBy: req.user.id,
+      status,
+      alertFrequency
+    });
+
+    console.log('[COI Confirm] Document saved successfully:', document.id);
+
+    res.json({
+      success: true,
+      document,
+      message: `COI document saved for ${employee.firstName} ${employee.lastName}`
+    });
+
+  } catch (error: any) {
+    console.error('[COI Confirm] Error:', error.message);
+    res.status(500).json({
+      error: 'Failed to confirm assignment',
+      details: error.message
+    });
+  }
+});
+
+// ============================================
+// DOCUMENT RETRIEVAL - Download and preview
+// ============================================
+
+// Download COI document from Google Drive
+router.get('/api/coi-documents/:id/download', requireAuth, async (req, res) => {
+  try {
+    const document = await storage.getCoiDocumentById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ error: 'COI document not found' });
+    }
+
+    // Check access permissions
+    if (document.employeeId !== req.user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get file from Google Drive
+    const googleDriveId = document.googleDriveId || document.filePath;
+    if (!googleDriveId) {
+      return res.status(404).json({ error: 'Document file not found in storage' });
+    }
+
+    console.log('[COI Download] Downloading file from Google Drive:', googleDriveId);
+
+    const fileContent = await googleDriveService.downloadFile(googleDriveId);
+
+    // Get file metadata for content type
+    const fileMetadata = await googleDriveService.getFileMetadata(googleDriveId);
+    const mimeType = fileMetadata?.mimeType || 'application/octet-stream';
+    const fileName = fileMetadata?.name || `COI_${document.type}_${document.id}`;
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(fileContent);
+
+  } catch (error: any) {
+    console.error('[COI Download] Error:', error.message);
+    res.status(500).json({ error: 'Failed to download document', details: error.message });
+  }
+});
+
+// Get preview URL for COI document
+router.get('/api/coi-documents/:id/preview', requireAuth, async (req, res) => {
+  try {
+    const document = await storage.getCoiDocumentById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ error: 'COI document not found' });
+    }
+
+    // Check access permissions
+    if (document.employeeId !== req.user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Return the Google Drive view URL
+    const googleDriveId = document.googleDriveId || document.filePath;
+    let previewUrl = document.documentUrl;
+
+    if (googleDriveId && !previewUrl) {
+      previewUrl = `https://drive.google.com/file/d/${googleDriveId}/preview`;
+    }
+
+    // Convert view link to preview link if needed
+    if (previewUrl && previewUrl.includes('/view')) {
+      previewUrl = previewUrl.replace('/view', '/preview');
+    }
+
+    res.json({
+      previewUrl,
+      documentUrl: document.documentUrl,
+      googleDriveId,
+      type: document.type,
+      employeeId: document.employeeId
+    });
+
+  } catch (error: any) {
+    console.error('[COI Preview] Error:', error.message);
+    res.status(500).json({ error: 'Failed to get preview URL', details: error.message });
+  }
+});
+
+// Get all employees for dropdown selection
+router.get('/api/coi-documents/employees/list', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const allUsers = await storage.getAllUsers();
+    // Filter to active employees and format for dropdown
+    const employees = allUsers
+      .filter(u => u.isActive !== false)
+      .map(u => ({
+        id: u.id,
+        firstName: u.firstName || '',
+        lastName: u.lastName || '',
+        email: u.email,
+        fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim()
+      }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+    res.json(employees);
+  } catch (error: any) {
+    console.error('[COI Employees] Error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+export default router;

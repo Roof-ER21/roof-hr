@@ -1,0 +1,35 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+
+# Environment and secrets
+.env
+.env.*
+*.local
+.config/
+.local/
+
+# Credentials and secrets
+*credentials*.json
+*service-account*.json
+google-credentials*.json
+roofhr-*.json
+OAUTH*.md
+UPDATE_SECRETS*.md
+GOOGLE_OAUTH*.md
+GMAIL_APP_PASSWORD*.md
+LOGIN_CREDENTIALS*.md
+
+# Uploads and logs
+uploads/
+*.log
+public/
+
+# Scripts that may contain secrets
+scripts/fetch-email.ts
+
+# OS files
+__MACOSX/

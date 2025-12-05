@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: hsl(0, 0%, 98%);
+    --foreground: hsl(0, 0%, 15%);
+    --card: hsl(0, 0%, 100%);
+    --card-foreground: hsl(0, 0%, 15%);
+    --popover: hsl(0, 0%, 100%);
+    --popover-foreground: hsl(0, 0%, 15%);
+    --primary: hsl(0, 97%, 36%);
+    --primary-foreground: hsl(0, 0%, 98%);
+    --secondary: hsl(0, 0%, 19%);
+    --secondary-foreground: hsl(0, 0%, 98%);
+    --muted: hsl(0, 0%, 96%);
+    --muted-foreground: hsl(0, 0%, 45%);
+    --accent: hsl(0, 0%, 96%);
+    --accent-foreground: hsl(0, 0%, 15%);
+    --destructive: hsl(0, 84%, 60%);
+    --destructive-foreground: hsl(0, 0%, 98%);
+    --border: hsl(0, 0%, 90%);
+    --input: hsl(0, 0%, 90%);
+    --ring: hsl(0, 97%, 36%);
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: hsl(0, 0%, 4%);
+    --foreground: hsl(0, 0%, 98%);
+    --card: hsl(0, 0%, 4%);
+    --card-foreground: hsl(0, 0%, 98%);
+    --popover: hsl(0, 0%, 4%);
+    --popover-foreground: hsl(0, 0%, 98%);
+    --primary: hsl(0, 97%, 36%);
+    --primary-foreground: hsl(0, 0%, 98%);
+    --secondary: hsl(0, 0%, 19%);
+    --secondary-foreground: hsl(0, 0%, 98%);
+    --muted: hsl(0, 0%, 10%);
+    --muted-foreground: hsl(0, 0%, 65%);
+    --accent: hsl(0, 0%, 10%);
+    --accent-foreground: hsl(0, 0%, 98%);
+    --destructive: hsl(0, 62%, 30%);
+    --destructive-foreground: hsl(0, 0%, 98%);
+    --border: hsl(0, 0%, 15%);
+    --input: hsl(0, 0%, 15%);
+    --ring: hsl(0, 97%, 36%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+  
+  .animate-count-up {
+    animation: countUp 0.5s ease-out;
+  }
+  
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes slideIn {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+  
+  @keyframes countUp {
+    0% {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
