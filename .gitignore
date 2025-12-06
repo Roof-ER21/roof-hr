@@ -33,3 +33,8 @@ scripts/fetch-email.ts
 
 # OS files
 __MACOSX/
+
+# Archive files (may contain credentials)
+*.zip
+*.rar
+*.7z
