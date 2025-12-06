@@ -462,6 +462,30 @@ router.post('/api/auth/change-password', requireAuth, async (req: any, res) => {
   }
 });
 
+// Get current user info - alias for /api/auth/validate
+router.get('/api/auth/me', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      employmentType: user.employmentType,
+      department: user.department,
+      position: user.position,
+      mustChangePassword: user.mustChangePassword,
+    });
+  } catch (error) {
+    res.status(401).json({ error: 'Failed to get user info' });
+  }
+});
+
 router.get('/api/auth/validate', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
@@ -500,16 +524,44 @@ router.post('/api/auth/clear-rate-limit', requireAuth, requireAdmin, async (req:
   try {
     const { clearRateLimit } = await import('./middleware/security');
     const { ip } = req.body;
-    
+
     clearRateLimit(ip);
-    
-    res.json({ 
-      success: true, 
-      message: `Rate limit cleared for ${ip || 'all IPs'}` 
+
+    res.json({
+      success: true,
+      message: `Rate limit cleared for ${ip || 'all IPs'}`
     });
   } catch (error) {
     console.error('Error clearing rate limit:', error);
     res.status(500).json({ error: 'Failed to clear rate limit' });
+  }
+});
+
+// Clear all COI documents (Admin only)
+router.delete('/api/admin/clear-coi-documents', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    const count = await storage.clearAllCoiDocuments();
+    res.json({
+      success: true,
+      message: `Cleared ${count} COI documents`
+    });
+  } catch (error) {
+    console.error('Error clearing COI documents:', error);
+    res.status(500).json({ error: 'Failed to clear COI documents' });
+  }
+});
+
+// Clear all tool assignments (Admin only)
+router.delete('/api/admin/clear-tool-assignments', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    const count = await storage.clearAllToolAssignments();
+    res.json({
+      success: true,
+      message: `Cleared ${count} tool assignments`
+    });
+  } catch (error) {
+    console.error('Error clearing tool assignments:', error);
+    res.status(500).json({ error: 'Failed to clear tool assignments' });
   }
 });
 

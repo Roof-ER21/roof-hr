@@ -340,7 +340,9 @@ export interface IStorage {
   getExpiringCoiDocuments(daysBeforeExpiration: number): Promise<CoiDocument[]>;
   updateCoiDocument(id: string, data: Partial<InsertCoiDocument>): Promise<CoiDocument>;
   deleteCoiDocument(id: string): Promise<void>;
-  
+  clearAllCoiDocuments(): Promise<number>;
+  clearAllToolAssignments(): Promise<number>;
+
   // Employee Assignment Management - NEW
   createEmployeeAssignment(data: InsertEmployeeAssignment): Promise<EmployeeAssignment>;
   getEmployeeAssignmentById(id: string): Promise<EmployeeAssignment | null>;
@@ -1765,7 +1767,17 @@ class DrizzleStorage implements IStorage {
   async deleteCoiDocument(id: string): Promise<void> {
     await db.delete(coiDocuments).where(eq(coiDocuments.id, id));
   }
-  
+
+  async clearAllCoiDocuments(): Promise<number> {
+    const result = await db.delete(coiDocuments);
+    return result.rowCount || 0;
+  }
+
+  async clearAllToolAssignments(): Promise<number> {
+    const result = await db.delete(toolAssignments);
+    return result.rowCount || 0;
+  }
+
   // Employee Assignment Management Implementation - NEW
   async createEmployeeAssignment(data: InsertEmployeeAssignment): Promise<EmployeeAssignment> {
     const id = uuidv4();
