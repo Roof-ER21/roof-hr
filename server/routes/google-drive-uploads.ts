@@ -64,6 +64,7 @@ function requireHROrManager(req: any, res: any, next: any) {
 // Upload candidate with resume to Google Drive
 router.post('/api/candidates/upload-with-resume', requireAuth, requireHROrManager, upload.single('resume'), async (req, res) => {
   try {
+    const user = req.user!; // User exists due to requireAuth middleware
     const candidateData = req.body;
     
     console.log('[Candidate Upload] Starting candidate creation with resume upload');
@@ -164,6 +165,7 @@ router.post('/api/candidates/upload-with-resume', requireAuth, requireHROrManage
 // Upload COI document for existing employee
 router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
   try {
+    const user = req.user!; // User exists due to requireAuth middleware
     const { employeeName, type, issueDate, expirationDate, notes } = req.body;
     
     console.log('[COI Upload] Starting COI upload for employee:', employeeName, 'Type:', type);
@@ -232,7 +234,7 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrMa
       issueDate,
       expirationDate,
       notes,
-      uploadedBy: req.user.id,
+      uploadedBy: user.id,
       status: 'ACTIVE'
     });
     
@@ -305,6 +307,7 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrMa
  */
 router.post('/api/resumes/upload', requireAuth, requireHROrManager, upload.single('resume'), async (req, res) => {
   try {
+    const user = req.user!; // User exists due to requireAuth middleware
     const { category } = req.body;
 
     if (!req.file) {
@@ -478,6 +481,7 @@ router.post('/api/resumes/upload', requireAuth, requireHROrManager, upload.singl
  */
 router.post('/api/resumes/sync-from-drive', requireAuth, requireHROrManager, async (req, res) => {
   try {
+    const user = req.user!; // User exists due to requireAuth middleware
     const { category, sourceFolderId } = req.body;
 
     if (!category || !CATEGORY_POSITIONS[category]) {
@@ -608,6 +612,7 @@ router.post('/api/resumes/sync-from-drive', requireAuth, requireHROrManager, asy
  */
 router.get('/api/resumes/recent', requireAuth, requireHROrManager, async (req, res) => {
   try {
+    const user = req.user!; // User exists due to requireAuth middleware
     const { category, limit = 20 } = req.query;
 
     const allCandidates = await storage.getAllCandidates();

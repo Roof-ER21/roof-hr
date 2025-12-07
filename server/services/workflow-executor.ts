@@ -32,10 +32,10 @@ export class WorkflowExecutor {
       logger.info(`Starting workflow execution: ${workflow.name}`, { workflowId, context });
 
       // Get workflow steps
-      const steps = await storage.getWorkflowSteps(workflowId);
-      
+      const steps = await storage.getWorkflowStepsByWorkflowId(workflowId);
+
       // Execute steps in sequence
-      for (const step of steps.sort((a, b) => a.stepNumber - b.stepNumber)) {
+      for (const step of steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber)) {
         logger.info(`Executing step ${step.stepNumber}: ${step.name}`);
         
         try {
@@ -101,8 +101,9 @@ export class WorkflowExecutor {
         const candidate = await storage.getCandidateById(context.candidateId);
         if (candidate) {
           recipient = candidate.email;
-          subject = this.replaceVariables(config.subject || 'Notification', { candidate, ...context });
-          body = this.replaceVariables(config.body || 'You have a new notification.', { candidate, ...context });
+          const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+          subject = this.replaceVariables(config.subject || 'Notification', { candidate: { ...candidate, name: candidateName }, ...context });
+          body = this.replaceVariables(config.body || 'You have a new notification.', { candidate: { ...candidate, name: candidateName }, ...context });
         }
       }
 
@@ -145,6 +146,10 @@ export class WorkflowExecutor {
     if (!candidate) return;
 
     try {
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+      const candidateNotes = candidate.notes || 'No additional notes';
+      const parsedData = candidate.parsedResumeData ? JSON.parse(candidate.parsedResumeData) : {};
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
@@ -155,26 +160,26 @@ export class WorkflowExecutor {
           {
             role: "user",
             content: `Evaluate this candidate:
-              Name: ${candidate.name}
+              Name: ${candidateName}
               Position: ${candidate.position}
-              Experience: ${candidate.experience || 'Not provided'}
-              Skills: ${candidate.skills || 'Not provided'}
-              Resume: ${candidate.resume || 'Not provided'}`
+              Experience: ${parsedData.experience || candidateNotes}
+              Skills: ${parsedData.skills || 'Not provided'}
+              Resume: ${candidate.resumeUrl || 'Not provided'}`
           }
         ],
         temperature: 0.3,
       });
 
       const response = completion.choices[0].message.content;
-      logger.info(`AI screening result for ${candidate.name}: ${response}`);
-      
-      // Update candidate with AI score
+      logger.info(`AI screening result for ${candidateName}: ${response}`);
+
+      // Update candidate with AI insights
       const scoreMatch = response?.match(/\d+/);
       if (scoreMatch) {
         const score = parseInt(scoreMatch[0]);
         await storage.updateCandidate(context.candidateId, {
-          aiScore: score,
-          aiNotes: response
+          matchScore: score,
+          aiInsights: response
         });
       }
     } catch (error) {
@@ -188,18 +193,14 @@ export class WorkflowExecutor {
     const candidate = await storage.getCandidateById(context.candidateId);
     if (!candidate) return;
 
+    const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+
     // Create calendar event
     const event = {
-      summary: `Interview with ${candidate.name}`,
+      summary: `Interview with ${candidateName}`,
       description: `Interview for ${candidate.position} position`,
-      start: {
-        dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
-        timeZone: 'America/New_York',
-      },
-      end: {
-        dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(), // 1 hour duration
-        timeZone: 'America/New_York',
-      },
+      startTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
+      endTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(), // 1 hour duration
       attendees: [
         { email: candidate.email }
       ],
@@ -207,7 +208,7 @@ export class WorkflowExecutor {
 
     try {
       const createdEvent = await googleCalendarService.createEvent(event);
-      logger.info(`Interview scheduled for ${candidate.name}:`, createdEvent);
+      logger.info(`Interview scheduled for ${candidateName}:`, createdEvent);
     } catch (error) {
       logger.error('Failed to schedule interview:', error);
     }

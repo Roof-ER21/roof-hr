@@ -103,9 +103,9 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
       sickDays,
       personalDays,
       totalDays: vacationDays + sickDays + personalDays,
-      overridesCompany: req.body.overridesCompany !== false,
-      createdBy: user.id,
-      lastUpdatedBy: user.id
+      inheritFromCompany: req.body.inheritFromCompany !== false,
+      customNotes: req.body.customNotes || null,
+      createdBy: user.id
     };
 
     const newSettings = await storage.createDepartmentPtoSetting(settingsData);
@@ -273,20 +273,24 @@ router.get('/api/pto-policies/employee/:employeeId', requireAuth, async (req, re
       const user = await storage.getUserById(req.params.employeeId);
       if (user) {
         const deptSetting = await storage.getDepartmentPtoSettingByDepartment(user.department);
-        const baseDays = deptSetting?.baseDays || 10; // Default 10 days if no department setting
-        
+        const totalDays = deptSetting?.totalDays || 18; // Default 18 days if no department setting
+        const vacationDays = deptSetting?.vacationDays || 10;
+        const sickDays = deptSetting?.sickDays || 5;
+        const personalDays = deptSetting?.personalDays || 3;
+
         const newPolicy = await storage.createPtoPolicy({
           employeeId: req.params.employeeId,
-          baseDays,
+          policyLevel: 'COMPANY',
+          vacationDays,
+          sickDays,
+          personalDays,
+          baseDays: totalDays,
           additionalDays: 0,
-          totalDays: baseDays,
+          totalDays,
           usedDays: 0,
-          remainingDays: baseDays,
-          customizedBy: null,
-          customizationDate: null,
-          notes: null
+          remainingDays: totalDays
         });
-        
+
         return res.json(newPolicy);
       }
       return res.status(404).json({ error: 'Employee not found' });
@@ -315,7 +319,10 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
 
     // Get department base days
     const deptSetting = await storage.getDepartmentPtoSettingByDepartment(employee.department);
-    const baseDays = deptSetting?.totalDays || 10;
+    const baseDays = deptSetting?.totalDays || 18;
+    const vacationDays = deptSetting?.vacationDays || 10;
+    const sickDays = deptSetting?.sickDays || 5;
+    const personalDays = deptSetting?.personalDays || 3;
 
     // Check if policy exists
     const existingPolicy = await storage.getPtoPolicyByEmployeeId(employeeId);
@@ -340,13 +347,17 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
       // Create new policy
       const newPolicy = await storage.createPtoPolicy({
         employeeId,
+        policyLevel: 'DEPARTMENT',
+        vacationDays,
+        sickDays,
+        personalDays,
         baseDays,
         additionalDays: additionalDays || 0,
         totalDays,
         usedDays: 0,
         remainingDays: totalDays,
-        customizedBy: additionalDays ? currentUser.id : null,
-        customizationDate: additionalDays ? new Date() : null,
+        customizedBy: additionalDays ? currentUser.id : undefined,
+        customizationDate: additionalDays ? new Date() : undefined,
         notes
       });
       res.json(newPolicy);
@@ -386,15 +397,15 @@ router.post('/api/pto-policies/initialize', requireAuth, requireGeneralManager, 
       }
       
       // Get department settings if available
-      const deptSetting = user.department ? 
+      const deptSetting = user.department ?
         departmentSettings.find((d: any) => d.department === user.department) : null;
-      
+
       // Calculate days based on hierarchy: Individual > Department > Company
       const vacationDays = deptSetting?.vacationDays || companyPolicy.vacationDays;
       const sickDays = deptSetting?.sickDays || companyPolicy.sickDays;
       const personalDays = deptSetting?.personalDays || companyPolicy.personalDays;
       const totalDays = vacationDays + sickDays + personalDays;
-      
+
       // Create the policy
       await storage.createPtoPolicy({
         employeeId: user.id,
@@ -407,8 +418,8 @@ router.post('/api/pto-policies/initialize', requireAuth, requireGeneralManager, 
         additionalDays: 0,
         usedDays: 0,
         remainingDays: totalDays,
-        effectiveDate: new Date().toISOString().split('T')[0],
-        customizedBy: req.user.id,
+        customizedBy: req.user!.id,
+        customizationDate: new Date(),
         notes: 'Auto-initialized from company/department policy'
       });
       
@@ -484,19 +495,24 @@ router.get('/api/department-pto-settings/:department', requireAuth, async (req, 
 
 router.post('/api/department-pto-settings', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     const data = insertDepartmentPtoSettingSchema.parse({
       ...req.body,
-      createdBy: req.user.id
+      createdBy: user.id
     });
-    
+
     // Check if setting exists for department
     const existing = await storage.getDepartmentPtoSettingByDepartment(data.department);
-    
+
     if (existing) {
       // Update existing
       const updated = await storage.updateDepartmentPtoSetting(data.department, {
-        baseDays: data.baseDays,
-        createdBy: req.user.id
+        vacationDays: data.vacationDays,
+        sickDays: data.sickDays,
+        personalDays: data.personalDays,
+        totalDays: data.totalDays,
+        inheritFromCompany: data.inheritFromCompany,
+        customNotes: data.customNotes
       });
       res.json(updated);
     } else {
