@@ -95,8 +95,7 @@ function AdminControlHubContent() {
   // Update agent configuration
   const updateAgent = useMutation({
     mutationFn: async ({ id, ...data }: Partial<HrAgentConfig> & { id: string }) => {
-      const response = await apiRequest('PATCH', `/api/hr-agents/${id}`, data);
-      return response.json();
+      return await apiRequest('PATCH', `/api/hr-agents/${id}`, data);
     },
     onSuccess: (data) => {
       console.log('[UpdateAgent Success]', data);
@@ -121,8 +120,7 @@ function AdminControlHubContent() {
   // Test agent
   const testAgent = useMutation({
     mutationFn: async ({ id, agentName }: { id: string; agentName: string }) => {
-      const response = await apiRequest('POST', `/api/hr-agents/${id}/test`, { agentName });
-      return response.json();
+      return await apiRequest('POST', `/api/hr-agents/${id}/test`, { agentName });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/hr-agents/logs'] });

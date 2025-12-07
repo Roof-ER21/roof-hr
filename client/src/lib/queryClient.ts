@@ -7,27 +7,27 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-export async function apiRequest(
+export async function apiRequest<T = unknown>(
   url: string,
   options: { method: string; body?: string } | string,
   data?: unknown | undefined,
-): Promise<Response> {
+): Promise<T> {
   const token = localStorage.getItem('token');
   const headers: HeadersInit = {};
-  
+
   // Handle options as object or string (for backwards compatibility)
   const method = typeof options === 'string' ? options : options.method;
-  const body = typeof options === 'object' && options.body ? options.body : 
+  const body = typeof options === 'object' && options.body ? options.body :
                data ? JSON.stringify(data) : undefined;
-  
+
   if (body) {
     headers["Content-Type"] = "application/json";
   }
-  
+
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  
+
   const res = await fetch(url, {
     method,
     headers,
@@ -36,7 +36,13 @@ export async function apiRequest(
   });
 
   await throwIfResNotOk(res);
-  return res;
+
+  // Parse JSON response - handle empty responses
+  const text = await res.text();
+  if (!text) {
+    return {} as T;
+  }
+  return JSON.parse(text) as T;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

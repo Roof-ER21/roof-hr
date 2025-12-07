@@ -224,8 +224,7 @@ export function Tools() {
   // Create tool mutation
   const createToolMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest('/api/tools/inventory', 'POST', data);
-      return res.json();
+      return await apiRequest('/api/tools/inventory', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
@@ -259,8 +258,7 @@ export function Tools() {
   // Update tool mutation
   const updateToolMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await apiRequest(`/api/tools/inventory/${id}`, 'PATCH', data);
-      return res.json();
+      return await apiRequest(`/api/tools/inventory/${id}`, 'PATCH', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
@@ -283,8 +281,7 @@ export function Tools() {
   // Delete tool mutation
   const deleteToolMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await apiRequest(`/api/tools/inventory/${id}`, 'DELETE');
-      return res.json();
+      return await apiRequest(`/api/tools/inventory/${id}`, 'DELETE');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
@@ -305,8 +302,7 @@ export function Tools() {
   // Create assignment mutation
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest('/api/tools/assignments', 'POST', data);
-      return res.json();
+      return await apiRequest('/api/tools/assignments', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
@@ -332,8 +328,7 @@ export function Tools() {
   // Return tool mutation
   const returnToolMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await apiRequest(`/api/tools/assignments/${id}/return`, 'POST', data);
-      return res.json();
+      return await apiRequest(`/api/tools/assignments/${id}/return`, 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
@@ -355,8 +350,7 @@ export function Tools() {
   // Adjust quantity mutation
   const adjustQuantityMutation = useMutation({
     mutationFn: async ({ id, adjustment, notes }: { id: string; adjustment: number; notes: string }) => {
-      const res = await apiRequest(`/api/tools/inventory/${id}/adjust-quantity`, 'PATCH', { adjustment, notes });
-      return res.json();
+      return await apiRequest(`/api/tools/inventory/${id}/adjust-quantity`, 'PATCH', { adjustment, notes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
@@ -379,8 +373,7 @@ export function Tools() {
   // Sync with Google Sheets mutation
   const syncSheetsMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest('/api/tools/sync-sheets', 'POST');
-      return res.json();
+      return await apiRequest('/api/tools/sync-sheets', 'POST');
     },
     onSuccess: () => {
       toast({
@@ -400,8 +393,7 @@ export function Tools() {
   // Import from Google Sheets mutation
   const importSheetsMutation = useMutation({
     mutationFn: async (spreadsheetId: string) => {
-      const res = await apiRequest('/api/tools/import-sheets', 'POST', { spreadsheetId });
-      return res.json();
+      return await apiRequest('/api/tools/import-sheets', 'POST', { spreadsheetId });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });

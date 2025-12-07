@@ -1211,46 +1211,7 @@ class DrizzleStorage implements IStorage {
     return generation;
   }
 
-  // Workflow Automation Methods (Phase 4)
-  async createWorkflow(data: any): Promise<any> {
-    const id = uuidv4();
-    const [workflow] = await db.insert(workflows).values({ ...data, id }).returning();
-    return workflow;
-  }
-
-  async getWorkflowById(id: string): Promise<any> {
-    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id));
-    return workflow || null;
-  }
-
-  async getAllWorkflows(): Promise<any[]> {
-    return await db.select().from(workflows);
-  }
-
-  async updateWorkflow(id: string, data: any): Promise<any> {
-    const [workflow] = await db.update(workflows).set(data).where(eq(workflows.id, id)).returning();
-    return workflow;
-  }
-
-  async createWorkflowStep(data: any): Promise<any> {
-    const id = uuidv4();
-    const [step] = await db.insert(workflowSteps).values({ ...data, id }).returning();
-    return step;
-  }
-
-  async getWorkflowSteps(workflowId: string): Promise<any[]> {
-    return await db.select().from(workflowSteps).where(eq(workflowSteps.workflowId, workflowId));
-  }
-
-  async updateWorkflowStep(id: string, data: any): Promise<any> {
-    const [step] = await db.update(workflowSteps).set(data).where(eq(workflowSteps.id, id)).returning();
-    return step;
-  }
-
-  async deleteWorkflowStep(id: string): Promise<void> {
-    await db.delete(workflowSteps).where(eq(workflowSteps.id, id));
-  }
-
+  // Workflow Execution Methods (core workflow CRUD is defined below in Workflow Methods section)
   async createWorkflowExecution(data: any): Promise<any> {
     const id = uuidv4();
     const [execution] = await db.insert(workflowExecutions).values({ ...data, id }).returning();
@@ -1564,22 +1525,6 @@ class DrizzleStorage implements IStorage {
     await db.delete(workflowSteps).where(eq(workflowSteps.id, id));
   }
   
-  // Workflow Execution Methods
-  async createWorkflowExecution(data: any): Promise<string> {
-    const id = uuidv4();
-    await db.insert(workflowExecutions).values({ ...data, id });
-    return id;
-  }
-  
-  async getWorkflowExecutionById(id: string): Promise<any | null> {
-    const [execution] = await db.select().from(workflowExecutions).where(eq(workflowExecutions.id, id));
-    return execution || null;
-  }
-  
-  async updateWorkflowExecution(id: string, data: any): Promise<void> {
-    await db.update(workflowExecutions).set(data).where(eq(workflowExecutions.id, id));
-  }
-  
   // Workflow Step Execution Methods
   async createWorkflowStepExecution(data: any): Promise<void> {
     const id = uuidv4();
@@ -1662,10 +1607,9 @@ class DrizzleStorage implements IStorage {
     return policy || null;
   }
 
+  // Alias for backwards compatibility
   async getPtoPolicyByEmployeeId(employeeId: string): Promise<PtoPolicy | null> {
-    const [policy] = await db.select().from(ptoPolicies)
-      .where(eq(ptoPolicies.employeeId, employeeId));
-    return policy || null;
+    return this.getPtoPolicyByEmployee(employeeId);
   }
   
   async getAllPtoPolicies(): Promise<PtoPolicy[]> {
@@ -1882,10 +1826,6 @@ class DrizzleStorage implements IStorage {
   }
 
   // Additional PTO Policy Methods for Three-Level System
-  async getAllDepartmentPtoSettings(): Promise<DepartmentPtoSetting[]> {
-    return await db.select().from(departmentPtoSettings);
-  }
-
   async getPtoPolicyById(id: string): Promise<PtoPolicy | null> {
     const [policy] = await db.select().from(ptoPolicies)
       .where(eq(ptoPolicies.id, id));
@@ -1992,11 +1932,6 @@ class DrizzleStorage implements IStorage {
       .where(eq(users.role, role as any));
   }
   
-  async getUsersByRoles(roles: string[]): Promise<User[]> {
-    return await db.select().from(users)
-      .where(inArray(users.role, roles as any));
-  }
-  
   async getAllToolInventory(): Promise<ToolInventory[]> {
     return await db.select().from(toolInventory);
   }
@@ -2017,10 +1952,6 @@ class DrizzleStorage implements IStorage {
   
   async getAllCOIDocuments(): Promise<any[]> {
     return await db.select().from(coiDocuments);
-  }
-  
-  async getAllInterviews(): Promise<Interview[]> {
-    return await db.select().from(interviews);
   }
   
   async updatePTORequest(id: string, data: Partial<PtoRequest>): Promise<PtoRequest> {
