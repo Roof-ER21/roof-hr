@@ -25,32 +25,33 @@ export class SusanDocumentManager {
    */
   async uploadDocument(data: {
     name: string;
-    type: string;
-    category: string;
-    employeeId?: string;
-    departmentId?: string;
+    originalName: string;
+    type: 'PDF' | 'DOC' | 'DOCX' | 'XLS' | 'XLSX' | 'TXT' | 'IMAGE' | 'OTHER';
+    category: 'POLICY' | 'FORM' | 'HANDBOOK' | 'PROCEDURE' | 'TEMPLATE' | 'LEGAL' | 'TRAINING' | 'OTHER';
     fileUrl: string;
-    expiryDate?: Date;
-    metadata?: any;
+    fileSize: number;
+    description?: string;
+    expiresAt?: Date;
+    tags?: string[];
   }): Promise<{ success: boolean; documentId?: string; error?: string }> {
     try {
       const documentId = uuidv4();
-      
+
       await db.insert(documents).values({
         id: documentId,
         name: data.name,
+        originalName: data.originalName,
+        description: data.description || null,
         type: data.type,
         category: data.category,
-        employeeId: data.employeeId || null,
-        departmentId: data.departmentId || null,
         fileUrl: data.fileUrl,
-        version: 1,
-        expiryDate: data.expiryDate || null,
-        metadata: data.metadata || {},
-        status: 'ACTIVE',
-        uploadedBy: 'susan-ai',
-        uploadedAt: new Date(),
-        lastModified: new Date()
+        fileSize: data.fileSize,
+        version: '1.0',
+        expiresAt: data.expiresAt || null,
+        tags: data.tags || null,
+        status: 'DRAFT',
+        visibility: 'EMPLOYEE',
+        createdBy: 'susan-ai'
       });
 
       console.log(`[SUSAN-DOCUMENTS] Uploaded document: ${data.name} (${documentId})`);
@@ -68,22 +69,19 @@ export class SusanDocumentManager {
     documentId: string,
     updates: Partial<{
       name: string;
-      category: string;
-      expiryDate: Date;
-      status: string;
-      metadata: any;
+      description: string;
+      category: 'POLICY' | 'FORM' | 'HANDBOOK' | 'PROCEDURE' | 'TEMPLATE' | 'LEGAL' | 'TRAINING' | 'OTHER';
+      expiresAt: Date;
+      status: 'DRAFT' | 'REVIEW' | 'APPROVED' | 'ARCHIVED';
+      visibility: 'PUBLIC' | 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
+      tags: string[];
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Increment version if content changed
-      const versionUpdate = updates.name || updates.category ? 
-        { version: sql`${documents.version} + 1` } : {};
-
       await db.update(documents)
         .set({
           ...updates,
-          ...versionUpdate,
-          lastModified: new Date()
+          updatedAt: new Date()
         })
         .where(eq(documents.id, documentId));
 
@@ -133,8 +131,8 @@ export class SusanDocumentManager {
       } else {
         await db.update(documents)
           .set({
-            status: 'DELETED',
-            lastModified: new Date()
+            status: 'ARCHIVED',
+            updatedAt: new Date()
           })
           .where(eq(documents.id, documentId));
         console.log(`[SUSAN-DOCUMENTS] Soft deleted document ${documentId}`);
@@ -153,15 +151,19 @@ export class SusanDocumentManager {
   async expireDocuments(): Promise<{ success: boolean; expiredCount?: number; error?: string }> {
     try {
       const today = new Date();
-      
-      const result = await db.update(documents)
+
+      await db.update(documents)
         .set({
-          status: 'EXPIRED',
-          lastModified: new Date()
+          status: 'ARCHIVED',
+          updatedAt: new Date()
         })
         .where(and(
-          sql`${documents.expiryDate} < ${today}`,
-          eq(documents.status, 'ACTIVE')
+          sql`${documents.expiresAt} < ${today}`,
+          or(
+            eq(documents.status, 'DRAFT'),
+            eq(documents.status, 'REVIEW'),
+            eq(documents.status, 'APPROVED')
+          )
         ));
 
       console.log(`[SUSAN-DOCUMENTS] Expired documents`);
@@ -182,14 +184,18 @@ export class SusanDocumentManager {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-      const result = await db.update(documents)
+      await db.update(documents)
         .set({
           status: 'ARCHIVED',
-          lastModified: new Date()
+          updatedAt: new Date()
         })
         .where(and(
-          sql`${documents.lastModified} < ${cutoffDate}`,
-          eq(documents.status, 'ACTIVE')
+          sql`${documents.updatedAt} < ${cutoffDate}`,
+          or(
+            eq(documents.status, 'DRAFT'),
+            eq(documents.status, 'REVIEW'),
+            eq(documents.status, 'APPROVED')
+          )
         ));
 
       console.log(`[SUSAN-DOCUMENTS] Archived old documents`);
@@ -236,16 +242,18 @@ export class SusanDocumentManager {
   async bulkUpdateDocuments(
     documentIds: string[],
     updates: Partial<{
-      category: string;
-      status: string;
-      expiryDate: Date;
+      category: 'POLICY' | 'FORM' | 'HANDBOOK' | 'PROCEDURE' | 'TEMPLATE' | 'LEGAL' | 'TRAINING' | 'OTHER';
+      status: 'DRAFT' | 'REVIEW' | 'APPROVED' | 'ARCHIVED';
+      expiresAt: Date;
+      visibility: 'PUBLIC' | 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
+      tags: string[];
     }>
   ): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
     try {
       await db.update(documents)
         .set({
           ...updates,
-          lastModified: new Date()
+          updatedAt: new Date()
         })
         .where(inArray(documents.id, documentIds));
 
@@ -270,8 +278,10 @@ export class SusanDocumentManager {
         type: 'upload_document',
         data: {
           name: nameMatch?.[1]?.trim() || 'New Document',
-          type: 'GENERAL',
-          category: 'HR'
+          originalName: nameMatch?.[1]?.trim() || 'New Document',
+          type: 'OTHER',
+          category: 'OTHER',
+          fileSize: 0
         }
       };
     }

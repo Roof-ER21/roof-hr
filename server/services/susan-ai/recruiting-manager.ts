@@ -40,25 +40,28 @@ export class SusanRecruitingManager {
   }): Promise<{ success: boolean; candidateId?: string; error?: string }> {
     try {
       const candidateId = uuidv4();
-      
+
+      // Split name into first and last name
+      const nameParts = data.name.trim().split(/\s+/);
+      const firstName = nameParts[0] || 'Unknown';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
       await db.insert(candidates).values({
         id: candidateId,
-        name: data.name,
+        firstName,
+        lastName,
         email: data.email,
         phone: data.phone || '',
         position: data.position,
-        department: data.department || 'Engineering',
-        status: data.status || 'NEW',
-        source: data.source || 'Direct',
+        status: (data.status as any) || 'APPLIED',
+        stage: 'New',
         resumeUrl: data.resumeUrl || '',
-        linkedinUrl: data.linkedinUrl || '',
         notes: data.notes || '',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        appliedDate: new Date()
       });
 
       console.log(`[SUSAN-RECRUITING] Created candidate: ${data.name} (${candidateId})`);
-      
+
       // Send welcome email to candidate
       if (data.email) {
         await this.sendCandidateEmail(candidateId, 'welcome');
@@ -89,11 +92,25 @@ export class SusanRecruitingManager {
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      const updateData: any = {};
+
+      // Handle name splitting
+      if (updates.name) {
+        const nameParts = updates.name.trim().split(/\s+/);
+        updateData.firstName = nameParts[0] || 'Unknown';
+        updateData.lastName = nameParts.slice(1).join(' ') || '';
+      }
+
+      // Copy other fields (excluding fields not in schema)
+      if (updates.email) updateData.email = updates.email;
+      if (updates.phone) updateData.phone = updates.phone;
+      if (updates.position) updateData.position = updates.position;
+      if (updates.status) updateData.status = updates.status;
+      if (updates.resumeUrl) updateData.resumeUrl = updates.resumeUrl;
+      if (updates.notes) updateData.notes = updates.notes;
+
       await db.update(candidates)
-        .set({
-          ...updates,
-          updatedAt: new Date()
-        })
+        .set(updateData)
         .where(eq(candidates.id, candidateId));
 
       console.log(`[SUSAN-RECRUITING] Updated candidate ${candidateId}`);
@@ -112,25 +129,25 @@ export class SusanRecruitingManager {
     newStage: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const validStages = ['NEW', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED', 'WITHDRAWN', 'DEAD_BY_US'];
+      const validStatuses = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE'];
 
-      if (!validStages.includes(newStage.toUpperCase())) {
-        return { success: false, error: `Invalid stage. Must be one of: ${validStages.join(', ')}` };
+      const statusUpper = newStage.toUpperCase();
+      if (!validStatuses.includes(statusUpper)) {
+        return { success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` };
       }
 
       await db.update(candidates)
         .set({
-          status: newStage.toUpperCase(),
-          updatedAt: new Date()
+          status: statusUpper as any
         })
         .where(eq(candidates.id, candidateId));
 
       // Send appropriate email based on stage
-      if (newStage === 'INTERVIEW') {
+      if (statusUpper === 'INTERVIEW') {
         await this.sendCandidateEmail(candidateId, 'interview_scheduled');
-      } else if (newStage === 'OFFER') {
+      } else if (statusUpper === 'OFFER') {
         await this.sendCandidateEmail(candidateId, 'offer');
-      } else if (newStage === 'REJECTED') {
+      } else if (statusUpper === 'REJECTED') {
         await this.sendCandidateEmail(candidateId, 'rejection');
       }
 
@@ -235,8 +252,8 @@ export class SusanRecruitingManager {
           
           // Update interview with calendar event ID
           if (calendarEvent?.id) {
-            await this.storage.updateInterview(interview.id, { 
-              calendarEventId: calendarEvent.id 
+            await this.storage.updateInterview(interview.id, {
+              googleEventId: calendarEvent.id
             });
           }
           
@@ -334,14 +351,14 @@ export class SusanRecruitingManager {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
+      // Note: Using DEAD_BY_CANDIDATE as a pseudo-archive status since ARCHIVED doesn't exist in schema
       const result = await db.update(candidates)
         .set({
-          status: 'ARCHIVED',
-          updatedAt: new Date()
+          status: 'DEAD_BY_CANDIDATE'
         })
         .where(and(
-          sql`${candidates.updatedAt} < ${cutoffDate}`,
-          inArray(candidates.status, ['NEW', 'SCREENING', 'WITHDRAWN'])
+          sql`${candidates.appliedDate} < ${cutoffDate}`,
+          inArray(candidates.status, ['APPLIED', 'SCREENING'])
         ));
 
       console.log(`[SUSAN-RECRUITING] Archived old candidates`);
@@ -367,6 +384,8 @@ export class SusanRecruitingManager {
 
       if (!candidate || !candidate.email) return;
 
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
+
       let subject = '';
       let html = '';
 
@@ -374,7 +393,7 @@ export class SusanRecruitingManager {
         case 'welcome':
           subject = 'Thank you for your application';
           html = `
-            <p>Dear ${candidate.name},</p>
+            <p>Dear ${candidateName},</p>
             <p>Thank you for your interest in the ${candidate.position} position at ROOF-ER.</p>
             <p>We have received your application and will review it shortly.</p>
             <p>Best regards,<br>ROOF-ER Recruiting Team</p>
@@ -383,7 +402,7 @@ export class SusanRecruitingManager {
         case 'interview_scheduled':
           subject = 'Interview Scheduled - ROOF-ER';
           html = `
-            <p>Dear ${candidate.name},</p>
+            <p>Dear ${candidateName},</p>
             <p>We are pleased to inform you that your interview for ${candidate.position} has been scheduled.</p>
             <p>Our team will contact you with the details shortly.</p>
             <p>Best regards,<br>ROOF-ER Recruiting Team</p>
@@ -392,7 +411,7 @@ export class SusanRecruitingManager {
         case 'offer':
           subject = 'Job Offer - ROOF-ER';
           html = `
-            <p>Dear ${candidate.name},</p>
+            <p>Dear ${candidateName},</p>
             <p>Congratulations! We are pleased to extend an offer for the ${candidate.position} position.</p>
             <p>Our HR team will contact you with the offer details.</p>
             <p>Best regards,<br>ROOF-ER Team</p>
@@ -401,7 +420,7 @@ export class SusanRecruitingManager {
         case 'rejection':
           subject = 'Application Update - ROOF-ER';
           html = `
-            <p>Dear ${candidate.name},</p>
+            <p>Dear ${candidateName},</p>
             <p>Thank you for your interest in the ${candidate.position} position at ROOF-ER.</p>
             <p>After careful consideration, we have decided to move forward with other candidates.</p>
             <p>We wish you the best in your job search.</p>

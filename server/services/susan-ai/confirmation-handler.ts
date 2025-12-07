@@ -227,11 +227,11 @@ export class SusanConfirmationHandler {
       // Find the PTO request
       let ptoRequest;
       if (requestId) {
-        ptoRequest = await this.storage.getPTORequestById(requestId);
+        ptoRequest = await this.storage.getPtoRequestById(requestId);
       } else if (employeeId) {
         // Find pending request for this employee
-        const requests = await this.storage.getPendingPTORequestsByManager(user.id);
-        ptoRequest = requests.find((r: any) => r.userId === employeeId && r.status === 'PENDING');
+        const requests = await this.storage.getPendingPtoRequests();
+        ptoRequest = requests.find((r: any) => r.employeeId === employeeId && r.status === 'PENDING');
       }
 
       if (!ptoRequest) {
@@ -239,11 +239,11 @@ export class SusanConfirmationHandler {
       }
 
       // Approve the request
-      await this.storage.updatePTORequest(ptoRequest.id, {
+      await this.storage.updatePtoRequest(ptoRequest.id, {
         status: 'APPROVED',
-        approvedBy: user.id,
-        approvedAt: new Date(),
-        notes: `Approved by ${user.firstName} ${user.lastName} via Susan AI`
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+        reviewNotes: `Approved by ${user.firstName} ${user.lastName} via Susan AI`
       });
 
       return {
@@ -274,11 +274,11 @@ export class SusanConfirmationHandler {
     }
 
     try {
-      await this.storage.updatePTORequest(requestId, {
+      await this.storage.updatePtoRequest(requestId, {
         status: 'DENIED',
-        approvedBy: user.id,
-        approvedAt: new Date(),
-        notes: reason || `Denied by ${user.firstName} ${user.lastName} via Susan AI`
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+        reviewNotes: reason || `Denied by ${user.firstName} ${user.lastName} via Susan AI`
       });
 
       return {
@@ -325,16 +325,21 @@ export class SusanConfirmationHandler {
       // Generate temporary password
       const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
 
+      // Import bcrypt for password hashing
+      const bcrypt = await import('bcrypt');
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
       const newUser = await this.storage.createUser({
         firstName,
         lastName,
         email,
-        password: tempPassword, // Will be hashed by storage layer
+        passwordHash: hashedPassword,
         role: role || 'EMPLOYEE',
+        employmentType: 'W2',
         department: department || 'Operations',
+        position: 'Employee',
         phone: phone || '',
-        startDate: startDate ? new Date(startDate) : new Date(),
-        hourlyRate: salary ? String(salary) : undefined,
+        hireDate: startDate ? String(startDate) : new Date().toISOString().split('T')[0],
         mustChangePassword: true,
         isActive: true
       });
@@ -377,8 +382,10 @@ export class SusanConfirmationHandler {
     }
 
     try {
-      // Get tool
-      const tool = await this.storage.getToolById(toolId);
+      // Get all tools and find the one we need
+      const allTools = await this.storage.getAllTools();
+      const tool = allTools.find(t => t.id === toolId);
+
       if (!tool) {
         return { success: false, message: 'Tool not found', error: 'NOT_FOUND' };
       }
@@ -387,13 +394,23 @@ export class SusanConfirmationHandler {
         return { success: false, message: 'Tool is not available', error: 'NOT_AVAILABLE' };
       }
 
-      // Create assignment
-      await this.storage.createToolAssignment({
+      // Create assignment using direct db insert
+      const { db } = await import('../../db');
+      const { toolAssignments } = await import('@shared/schema');
+      const { v4: uuidv4 } = await import('uuid');
+
+      await db.insert(toolAssignments).values({
+        id: uuidv4(),
         toolId,
         employeeId,
         assignedBy: user.id,
         assignedDate: new Date(),
-        notes: notes || `Assigned by ${user.firstName} ${user.lastName} via Susan AI`
+        status: 'ASSIGNED',
+        condition: tool.condition,
+        notes: notes || `Assigned by ${user.firstName} ${user.lastName} via Susan AI`,
+        signatureRequired: true,
+        signatureReceived: false,
+        emailSent: false
       });
 
       // Update tool quantity
@@ -435,17 +452,23 @@ export class SusanConfirmationHandler {
     try {
       // Update assignment
       if (assignmentId) {
-        await this.storage.updateToolAssignment(assignmentId, {
-          returnedDate: new Date(),
-          returnedBy: user.id,
-          returnCondition: condition || 'GOOD',
-          notes: notes || `Returned via Susan AI`
-        });
+        const { db } = await import('../../db');
+        const { toolAssignments } = await import('@shared/schema');
+        const { eq } = await import('drizzle-orm');
+
+        await db.update(toolAssignments)
+          .set({
+            returnDate: new Date(),
+            status: 'RETURNED',
+            notes: notes || `Returned via Susan AI`
+          })
+          .where(eq(toolAssignments.id, assignmentId));
       }
 
       // Update tool quantity
       if (toolId) {
-        const tool = await this.storage.getToolById(toolId);
+        const allTools = await this.storage.getAllTools();
+        const tool = allTools.find(t => t.id === toolId);
         if (tool) {
           await this.storage.updateToolInventory(toolId, {
             availableQuantity: tool.availableQuantity + 1

@@ -104,19 +104,19 @@ class GoogleSyncEnhanced extends EventEmitter {
       this.hrRootFolderId = hrFolder.id;
       
       // Create management folder
-      let mgmtFolder = await googleDriveService.findFolderByName('Management', this.hrRootFolderId);
+      let mgmtFolder = await googleDriveService.findFolderByName('Management', this.hrRootFolderId ?? undefined);
       if (!mgmtFolder) {
-        mgmtFolder = await googleDriveService.createFolder('Management', this.hrRootFolderId);
+        mgmtFolder = await googleDriveService.createFolder('Management', this.hrRootFolderId ?? undefined);
         await this.shareWithOwners(mgmtFolder.id);
       }
       this.managementFolderId = mgmtFolder.id;
-      
+
       // Create subfolders in management
       const mgmtSubfolders = ['COI Documents', 'Performance Reviews', 'Contracts', 'Reports', 'Analytics'];
       for (const folderName of mgmtSubfolders) {
-        let folder = await googleDriveService.findFolderByName(folderName, this.managementFolderId);
+        let folder = await googleDriveService.findFolderByName(folderName, this.managementFolderId ?? undefined);
         if (!folder) {
-          folder = await googleDriveService.createFolder(folderName, this.managementFolderId);
+          folder = await googleDriveService.createFolder(folderName, this.managementFolderId ?? undefined);
           await this.shareWithOwners(folder.id);
         }
       }
@@ -325,12 +325,14 @@ class GoogleSyncEnhanced extends EventEmitter {
         this.toolsSpreadsheetId = spreadsheet.spreadsheetId!;
         
         // Share with owners
-        for (const owner of DEFAULT_OWNERS) {
-          await googleDriveService.shareFile(this.toolsSpreadsheetId, {
-            type: 'user',
-            role: 'writer',
-            emailAddress: owner.email
-          });
+        if (this.toolsSpreadsheetId) {
+          for (const owner of DEFAULT_OWNERS) {
+            await googleDriveService.shareFile(this.toolsSpreadsheetId, {
+              type: 'user',
+              role: 'writer',
+              emailAddress: owner.email
+            });
+          }
         }
       } else {
         this.toolsSpreadsheetId = toolsSheet[0].id;
@@ -344,12 +346,14 @@ class GoogleSyncEnhanced extends EventEmitter {
         this.employeesSpreadsheetId = spreadsheet.spreadsheetId!;
         
         // Share with owners
-        for (const owner of DEFAULT_OWNERS) {
-          await googleDriveService.shareFile(this.employeesSpreadsheetId, {
-            type: 'user',
-            role: 'writer',
-            emailAddress: owner.email
-          });
+        if (this.employeesSpreadsheetId) {
+          for (const owner of DEFAULT_OWNERS) {
+            await googleDriveService.shareFile(this.employeesSpreadsheetId, {
+              type: 'user',
+              role: 'writer',
+              emailAddress: owner.email
+            });
+          }
         }
       } else {
         this.employeesSpreadsheetId = empSheet[0].id;
@@ -363,12 +367,14 @@ class GoogleSyncEnhanced extends EventEmitter {
         this.reviewsSpreadsheetId = spreadsheet.spreadsheetId!;
         
         // Share with owners and managers only
-        for (const owner of DEFAULT_OWNERS) {
-          await googleDriveService.shareFile(this.reviewsSpreadsheetId, {
-            type: 'user',
-            role: 'writer',
-            emailAddress: owner.email
-          });
+        if (this.reviewsSpreadsheetId) {
+          for (const owner of DEFAULT_OWNERS) {
+            await googleDriveService.shareFile(this.reviewsSpreadsheetId, {
+              type: 'user',
+              role: 'writer',
+              emailAddress: owner.email
+            });
+          }
         }
       } else {
         this.reviewsSpreadsheetId = reviewSheet[0].id;
@@ -497,27 +503,30 @@ class GoogleSyncEnhanced extends EventEmitter {
       const sheetToolsMap = new Map(sheetTools.map((row: any[]) => [row[0], row]));
 
       // Update database with changes from sheets
-      for (const [id, row] of sheetToolsMap) {
-        if (!dbToolsMap.has(id)) {
+      for (const [id, row] of Array.from(sheetToolsMap)) {
+        const rowData = row as any[];
+        const toolId = id as string;
+
+        if (!dbToolsMap.has(toolId)) {
           // New tool in sheets, add to database
           await storage.createTool({
-            name: row[1] || '',
-            category: row[2] || '',
-            serialNumber: row[3] || '',
-            model: row[4] || '',
-            quantity: parseInt(String(row[5])) || 0,
-            availableQuantity: parseInt(String(row[6])) || 0,
-            condition: row[7] || '',
-            location: row[10] || ''
+            name: rowData[1] || '',
+            category: rowData[2] || '',
+            serialNumber: rowData[3] || '',
+            model: rowData[4] || '',
+            quantity: parseInt(String(rowData[5])) || 0,
+            availableQuantity: parseInt(String(rowData[6])) || 0,
+            condition: rowData[7] || '',
+            location: rowData[10] || ''
           });
         } else {
           // Check for updates
-          const dbTool = dbToolsMap.get(id);
-          if (dbTool && (dbTool.quantity !== parseInt(String(row[5])) ||
-              dbTool.availableQuantity !== parseInt(String(row[6])))) {
-            await storage.updateTool(id, {
-              quantity: parseInt(String(row[5])),
-              availableQuantity: parseInt(String(row[6]))
+          const dbTool = dbToolsMap.get(toolId);
+          if (dbTool && (dbTool.quantity !== parseInt(String(rowData[5])) ||
+              dbTool.availableQuantity !== parseInt(String(rowData[6])))) {
+            await storage.updateTool(toolId, {
+              quantity: parseInt(String(rowData[5])),
+              availableQuantity: parseInt(String(rowData[6]))
             });
           }
         }
@@ -577,17 +586,17 @@ class GoogleSyncEnhanced extends EventEmitter {
       ];
       
       const employeeData = employees.map(emp => [
-        emp.employeeId || '',
+        emp.id || '',
         `${emp.firstName || ''} ${emp.lastName || ''}`,
         emp.email || '',
         emp.department || '',
         emp.position || '',
-        emp.managerId || '',
-        emp.status || '',
+        '', // managerId - not on user type
+        emp.isActive ? 'Active' : 'Inactive',
         emp.hireDate ? new Date(emp.hireDate).toLocaleDateString() : '',
         emp.phone || '',
-        emp.location || '',
-        emp.territoryId || ''
+        '', // location - not on user type
+        '' // territoryId - not on user type
       ]);
       
       await googleSheetsService.updateSheet(
@@ -619,17 +628,17 @@ class GoogleSyncEnhanced extends EventEmitter {
     op.status = 'syncing';
     
     try {
-      const ptoRequests = await storage.getAllPTORequests();
+      const ptoRequests = await storage.getAllPtoRequests();
       
       for (const pto of ptoRequests) {
-        const employee = await storage.getUser(pto.userId);
+        const employee = await storage.getUser(pto.employeeId);
         if (!employee) continue;
 
         const eventSummary = `${employee.firstName || ''} ${employee.lastName || ''} - PTO`;
-        const eventDescription = `Type: ${pto.type || ''}\\nReason: ${pto.reason || 'N/A'}\\nStatus: ${pto.status || ''}`;
-        
+        const eventDescription = `Reason: ${pto.reason || 'N/A'}\\nStatus: ${pto.status || ''}`;
+
         // Only create/update calendar events for approved PTOs
-        if (pto.status === 'approved' && pto.googleEventId) {
+        if (pto.status === 'APPROVED' && pto.googleEventId) {
           // Update existing event
           await googleCalendarService.updateEventWithId(
             this.ptoCalendarId!,
@@ -645,7 +654,7 @@ class GoogleSyncEnhanced extends EventEmitter {
               }
             }
           );
-        } else if (pto.status === 'approved' && !pto.googleEventId) {
+        } else if (pto.status === 'APPROVED' && !pto.googleEventId) {
           // Create new event for approved PTO
           const event = await googleCalendarService.createEventWithId(
             this.ptoCalendarId!,
@@ -695,23 +704,23 @@ class GoogleSyncEnhanced extends EventEmitter {
       const reviews = await storage.getAllPerformanceReviews();
       
       const headers = [
-        ['Review ID', 'Employee', 'Reviewer', 'Review Date', 'Type', 
-         'Overall Rating', 'Goals Met', 'Areas of Excellence', 'Areas for Improvement', 'Status']
+        ['Review ID', 'Employee', 'Reviewer', 'Review Date', 'Type',
+         'Overall Rating', 'Goals', 'Strengths', 'Areas for Improvement', 'Status']
       ];
       
       const reviewsData = await Promise.all(reviews.map(async (review: any) => {
-        const employee = await storage.getUser(review.employeeId);
+        const employee = await storage.getUser(review.revieweeId);
         const reviewer = await storage.getUser(review.reviewerId);
 
         return [
           review.id || '',
           employee ? `${employee.firstName || ''} ${employee.lastName || ''}` : 'Unknown',
           reviewer ? `${reviewer.firstName || ''} ${reviewer.lastName || ''}` : 'Unknown',
-          review.reviewDate ? new Date(review.reviewDate).toLocaleDateString() : '',
+          review.dueDate ? new Date(review.dueDate).toLocaleDateString() : '',
           review.reviewType || '',
           review.overallRating || '',
-          review.goalsMet || '',
-          review.areasOfExcellence || '',
+          review.goals || '',
+          review.strengths || '',
           review.areasForImprovement || '',
           review.status || ''
         ];
@@ -725,23 +734,26 @@ class GoogleSyncEnhanced extends EventEmitter {
       
       // Also save reviews to individual employee folders
       for (const review of reviews) {
-        const employeeFolder = this.employeeFolders.get(review.employeeId);
-        if (employeeFolder && review.reviewDate) {
-          // Create review document in employee's folder
-          const reviewContent = `Performance Review - ${new Date(review.reviewDate).toLocaleDateString()}
+        const employeeFolder = this.employeeFolders.get(review.revieweeId);
+        if (employeeFolder && review.dueDate) {
+          const employee = await storage.getUser(review.revieweeId);
+          const reviewer = await storage.getUser(review.reviewerId);
 
-Employee: ${review.employeeName || 'N/A'}
-Reviewer: ${review.reviewerName || 'N/A'}
+          // Create review document in employee's folder
+          const reviewContent = `Performance Review - ${new Date(review.dueDate).toLocaleDateString()}
+
+Employee: ${employee ? `${employee.firstName || ''} ${employee.lastName || ''}` : 'N/A'}
+Reviewer: ${reviewer ? `${reviewer.firstName || ''} ${reviewer.lastName || ''}` : 'N/A'}
 Rating: ${review.overallRating || 'N/A'}/5
 
-Goals Met: ${review.goalsMet || 'N/A'}
-Areas of Excellence: ${review.areasOfExcellence || 'N/A'}
+Goals: ${review.goals || 'N/A'}
+Strengths: ${review.strengths || 'N/A'}
 Areas for Improvement: ${review.areasForImprovement || 'N/A'}
 
-Next Steps: ${review.nextSteps || 'N/A'}`;
+Communication Score: ${review.communicationScore || 'N/A'}/5`;
 
           await googleDriveService.uploadFile({
-            name: `Review_${new Date(review.reviewDate).toISOString().split('T')[0]}.txt`,
+            name: `Review_${new Date(review.dueDate).toISOString().split('T')[0]}.txt`,
             mimeType: 'text/plain',
             content: Buffer.from(reviewContent),
             parentFolderId: employeeFolder.reviewsFolderId
@@ -766,8 +778,16 @@ Next Steps: ${review.nextSteps || 'N/A'}`;
       
       // Get all employees
       const employees = await storage.getAllUsers();
-      const existingDocs = await storage.getAllCOIDocuments();
-      const existingDriveIds = new Set(existingDocs.map(doc => doc.googleDriveId).filter((id): id is string => id !== null && id !== undefined));
+      const existingDocs = await storage.getAllCoiDocuments();
+      // Extract Drive IDs from the notes field where we stored them
+      const existingDriveIds = new Set(
+        existingDocs
+          .map(doc => {
+            const match = doc.notes?.match(/Drive ID: ([^)]+)/);
+            return match ? match[1] : null;
+          })
+          .filter((id): id is string => id !== null && id !== undefined)
+      );
       
       let importedCount = 0;
       
@@ -816,18 +836,17 @@ Next Steps: ${review.nextSteps || 'N/A'}`;
             const issueDate = new Date();
             issueDate.setFullYear(issueDate.getFullYear() - 1); // Default issue date to 1 year before expiration
             
-            await storage.createCoiDocument({
+            const docData: any = {
               employeeId: employee.id,
               type: coiType,
               documentUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-              googleDriveId: file.id,
-              filePath: file.id, // Store Drive ID as reference
               issueDate: issueDate.toISOString().split('T')[0],
               expirationDate: expirationDate.toISOString().split('T')[0],
-              uploadedBy: 'system', // System import
+              uploadedBy: 'system',
               status: 'ACTIVE',
-              notes: `Imported from Google Drive: ${filename}`
-            });
+              notes: `Imported from Google Drive: ${filename} (Drive ID: ${file.id})`
+            };
+            await storage.createCoiDocument(docData);
             
             importedCount++;
             console.log(`[Enhanced Google Sync] Imported COI document: ${filename} for ${employee.firstName || ''} ${employee.lastName || ''}`);
@@ -860,45 +879,11 @@ Next Steps: ${review.nextSteps || 'N/A'}`;
       await this.importCOIDocumentsFromDrive();
       
       // Part 2: Sync FROM database TO Google Drive (export documents)
-      const coiDocuments = await storage.getAllCOIDocuments();
-      
-      for (const doc of coiDocuments) {
-        const employee = await storage.getUser(doc.employeeId);
-        if (!employee) continue;
+      const coiDocuments = await storage.getAllCoiDocuments();
 
-        const employeeFolder = this.employeeFolders.get(doc.employeeId);
-        if (!employeeFolder) continue;
-
-        // Upload to employee's COI folder
-        if (doc.filePath && !doc.googleDriveId) {
-          const file = await googleDriveService.uploadFile({
-            name: `COI_${doc.type || 'UNKNOWN'}_${doc.expirationDate || 'NO_DATE'}.pdf`,
-            mimeType: 'application/pdf',
-            content: Buffer.from(doc.filePath), // This should be actual file content
-            parentFolderId: employeeFolder.coiFolderId,
-            description: `${doc.type || 'UNKNOWN'} - Expires: ${doc.expirationDate || 'N/A'}`
-          });
-
-          // Also copy to management folder
-          const mgmtCoiFolder = await googleDriveService.findFolderByName('COI Documents', this.managementFolderId!);
-          if (mgmtCoiFolder) {
-            await googleDriveService.uploadFile({
-              name: `${employee.firstName || 'Unknown'}_${employee.lastName || 'Employee'}_COI_${doc.type || 'UNKNOWN'}_${doc.expirationDate || 'NO_DATE'}.pdf`,
-              mimeType: 'application/pdf',
-              content: Buffer.from(doc.filePath),
-              parentFolderId: mgmtCoiFolder.id,
-              description: `Employee: ${employee.firstName || ''} ${employee.lastName || ''} - ${doc.type || 'UNKNOWN'} - Expires: ${doc.expirationDate || 'N/A'}`
-            });
-          }
-
-          // Update document with Google Drive ID
-          if (file?.id) {
-            await storage.updateCOIDocument(doc.id, {
-              googleDriveId: file.id
-            });
-          }
-        }
-      }
+      // Note: We're only importing from Google Drive, not uploading to it
+      // because documents are already stored there and referenced via documentUrl
+      // This sync focuses on ensuring the database is up to date with Drive
       
       op.status = 'idle';
       op.lastSync = new Date();
