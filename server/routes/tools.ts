@@ -130,7 +130,7 @@ async function syncToolsToGoogleSheets() {
     
     // Update or create spreadsheet
     let spreadsheetId = process.env.TOOLS_SPREADSHEET_ID;
-    
+
     if (!spreadsheetId) {
       // Create new spreadsheet if it doesn't exist
       const spreadsheet = await googleSheetsService.createSpreadsheet('ROOF-ER Tools Inventory', ['Inventory']);
@@ -138,9 +138,11 @@ async function syncToolsToGoogleSheets() {
       console.log('Created new tools spreadsheet:', spreadsheetId);
       // Consider saving this ID to environment variables or database
     }
-    
-    // Write data to the spreadsheet
-    await googleSheetsService.writeToSpreadsheet(spreadsheetId, 'Inventory!A1', [headers, ...rows]);
+
+    // Write data to the spreadsheet (only if spreadsheetId is defined)
+    if (spreadsheetId) {
+      await googleSheetsService.writeToSpreadsheet(spreadsheetId, 'Inventory!A1', [headers, ...rows]);
+    }
     
     console.log('Successfully synced tools to Google Sheets');
   } catch (error) {
@@ -230,26 +232,33 @@ router.get('/inventory', async (req, res) => {
 // Create new tool (Admin/Manager only)
 router.post('/inventory', checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
+    const user = req.user!;
+
     // Valid categories for tool inventory
-    const validCategories = ['LAPTOP', 'LADDER', 'IPAD', 'BOOTS', 'POLO', 'CAR', 'OTHER'];
-    
+    const validCategories = ['LAPTOP', 'LADDER', 'IPAD', 'BOOTS', 'POLO', 'CAR', 'OTHER'] as const;
+    type ValidCategory = typeof validCategories[number];
+
     // Map invalid categories to 'OTHER'
-    const category = validCategories.includes(req.body.category) ? req.body.category : 'OTHER';
-    
+    const category: ValidCategory = validCategories.includes(req.body.category) ? req.body.category : 'OTHER';
+
     // Transform purchaseDate string to Date object if it exists
     const dataToValidate = {
       ...req.body,
       category,
       purchaseDate: req.body.purchaseDate ? new Date(req.body.purchaseDate) : undefined
     };
-    
+
     const validatedData = insertToolInventorySchema.parse(dataToValidate);
-    
-    const newTool = await db.insert(toolInventory).values({
+
+    // Explicitly type the values to match schema constraints
+    const insertValues: any = {
       id: uuidv4(),
       ...validatedData,
-      createdBy: req.user!.id
-    }).returning();
+      category,
+      createdBy: user.id
+    };
+
+    const newTool = await db.insert(toolInventory).values(insertValues).returning();
 
     // Sync with Google Sheets after creating
     await syncToolsToGoogleSheets();
@@ -497,6 +506,7 @@ router.get('/assignments', async (req, res) => {
 // Create new assignment(s) with email notification
 router.post('/assignments', async (req, res) => {
   try {
+    const user = req.user!;
     const { employeeId, toolIds, notes } = req.body;
 
     if (!employeeId || !toolIds || !Array.isArray(toolIds) || toolIds.length === 0) {
@@ -526,27 +536,27 @@ router.post('/assignments', async (req, res) => {
     // Create assignments
     const assignments = [];
     const assignmentTokens: { [key: string]: string } = {};
-    
+
     for (const toolId of toolIds) {
       const tool = tools.find(t => t.id === toolId);
       if (!tool) continue;
 
       // Check availability
       if (tool.availableQuantity <= 0) {
-        return res.status(400).json({ 
-          error: `Tool "${tool.name}" is not available` 
+        return res.status(400).json({
+          error: `Tool "${tool.name}" is not available`
         });
       }
 
       const assignmentId = uuidv4();
       const signatureToken = uuidv4();
-      
+
       assignments.push({
         id: assignmentId,
         toolId,
         employeeId,
-        assignedBy: req.user!.id,
-        condition: 'GOOD',
+        assignedBy: user.id,
+        condition: 'GOOD' as const,
         notes,
         signatureToken,
         signatureRequired: true,
@@ -559,7 +569,7 @@ router.post('/assignments', async (req, res) => {
       // Update available quantity
       await db
         .update(toolInventory)
-        .set({ 
+        .set({
           availableQuantity: tool.availableQuantity - 1,
           updatedAt: new Date()
         })
@@ -1004,7 +1014,7 @@ router.get('/bundles', requireAuth, async (req, res) => {
             });
             
             // For display: show minimum available across all sizes
-            const sizeCounts = Object.values(availableBySize);
+            const sizeCounts = Object.values(availableBySize) as number[];
             availableQuantity = sizeCounts.length > 0 ? Math.min(...sizeCounts) : 0;
             
             // Item is available if at least one size has enough quantity
@@ -1142,7 +1152,7 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
           .from(toolInventory)
           .where(
             and(
-              eq(toolInventory.category, item.itemCategory),
+              eq(toolInventory.category, item.itemCategory as any),
               sql`${toolInventory.name} ILIKE '%${size}%'`,
               eq(toolInventory.isActive, true)
             )
@@ -1165,7 +1175,7 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
           .from(toolInventory)
           .where(
             and(
-              eq(toolInventory.category, item.itemCategory),
+              eq(toolInventory.category, item.itemCategory as any),
               eq(toolInventory.isActive, true)
             )
           )
@@ -1196,7 +1206,7 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
 
     // Insert assignment items
     if (assignmentItems.length > 0) {
-      await db.insert(bundleAssignmentItems).values(assignmentItems);
+      await db.insert(bundleAssignmentItems).values(assignmentItems as any);
     }
 
     // Update inventory quantities

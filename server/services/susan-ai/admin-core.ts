@@ -86,7 +86,7 @@ export class AdminSusanAI extends SusanAI {
     let userData: any = null;
     console.log('[ADMIN-SUSAN-AI] Storage object:', typeof storage, storage ? 'exists' : 'null');
     console.log('[ADMIN-SUSAN-AI] Fetching user data for:', context.userId, 'Storage available:', !!storage);
-    
+
     if (storage && context.userId !== 'anonymous') {
       try {
         console.log('[ADMIN-SUSAN-AI] Attempting to fetch user by ID...');
@@ -101,7 +101,7 @@ export class AdminSusanAI extends SusanAI {
         console.error('[ADMIN-SUSAN-AI] Failed to fetch user data:', error);
       }
     }
-    
+
     // Create fallback user object if needed
     if (!userData) {
       console.log('[ADMIN-SUSAN-AI] Creating fallback user object with role:', context.userRole);
@@ -132,22 +132,30 @@ export class AdminSusanAI extends SusanAI {
     }
 
     // First, check for actionable requests and process them
-    const actionResults = await actionHandler.processRequest({
+    const handlerResults = await actionHandler.processRequest({
       user: userData,
       message: query
     });
 
+    // Convert action-handler ActionResults to core ActionResults
+    const actionResults = handlerResults.map(r => ({
+      type: r.success ? 'action' : 'error',
+      status: r.success ? 'success' as const : 'failed' as const,
+      details: r.data || {},
+      message: r.message
+    }));
+
     // Check for system-specific queries
     const lowerQuery = query.toLowerCase();
     console.log('[ADMIN-SUSAN-AI] Processing query:', lowerQuery);
-    
+
     // System health check
     if (lowerQuery.includes('system') && (lowerQuery.includes('status') || lowerQuery.includes('health') || lowerQuery.includes('how'))) {
       console.log('[ADMIN-SUSAN-AI] Matched system health query');
       const response = await this.getSystemStatus(context);
       if (actionResults.length > 0) {
         response.actions = actionResults;
-        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => `• ${a.message}`).join('\n')}`;
+        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => a.message || '').filter(m => m).join('\n')}`;
       }
       return response;
     }
@@ -158,7 +166,7 @@ export class AdminSusanAI extends SusanAI {
       const response = await this.handleAgentQuery(query, context);
       if (actionResults.length > 0) {
         response.actions = actionResults;
-        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => `• ${a.message}`).join('\n')}`;
+        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => a.message || '').filter(m => m).join('\n')}`;
       }
       return response;
     }
@@ -168,7 +176,7 @@ export class AdminSusanAI extends SusanAI {
       const response = await this.generateAnalyticsReport(query, context);
       if (actionResults.length > 0) {
         response.actions = actionResults;
-        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => `• ${a.message}`).join('\n')}`;
+        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => a.message || '').filter(m => m).join('\n')}`;
       }
       return response;
     }
@@ -178,16 +186,16 @@ export class AdminSusanAI extends SusanAI {
       const response = await this.getCompleteSystemOverview(context);
       if (actionResults.length > 0) {
         response.actions = actionResults;
-        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => `• ${a.message}`).join('\n')}`;
+        response.message += `\n\n**Actions Performed:**\n${actionResults.map(a => a.message || '').filter(m => m).join('\n')}`;
       }
       return response;
     }
 
     // If actions were performed but no specific admin query, create response based on actions
-    if (actionResults.length > 0) {
-      const successActions = actionResults.filter(a => a.success);
-      const failedActions = actionResults.filter(a => !a.success);
-      
+    if (handlerResults.length > 0) {
+      const successActions = handlerResults.filter(a => a.success);
+      const failedActions = handlerResults.filter(a => !a.success);
+
       let message = '';
       if (successActions.length > 0) {
         message += `✅ **Actions Completed:**\n${successActions.map(a => `• ${a.message}`).join('\n')}`;
@@ -200,7 +208,7 @@ export class AdminSusanAI extends SusanAI {
         message: message || 'I processed your request.',
         confidence: 1.0,
         actions: actionResults,
-        quickActions: this.generateContextualActions(query, actionResults)
+        quickActions: this.generateContextualActions(query, handlerResults)
       };
     }
 
@@ -648,7 +656,7 @@ class AgentController {
   async runAgentNow(agentId: string): Promise<any> {
     try {
       const { agentManager } = await import('../../agents/agent-manager');
-      await agentManager.runAgentNow(agentId);
+      await agentManager.runAgent(agentId);
       return { success: true, message: 'Agent execution triggered' };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

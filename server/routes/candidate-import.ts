@@ -1,39 +1,48 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
 import { insertCandidateSchema, insertCandidateSourceSchema } from '../../shared/schema';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
+// Extend Request type to include user
+interface AuthRequest extends Request {
+  user?: Express.User;
+}
+
 // Middleware to check authentication
-function requireAuth(req: any, res: any, next: any) {
+function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
   next();
 }
 
-function requireManager(req: any, res: any, next: any) {
+function requireManager(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Manager access required' });
   }
-  
+
   next();
 }
 
 // Import candidates from external source
-router.post('/api/candidates/import', requireManager, async (req: any, res) => {
+router.post('/api/candidates/import', requireManager, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
     const { source, jobPostingId, candidates } = req.body;
-    
+
     if (!source || !candidates || !Array.isArray(candidates)) {
       return res.status(400).json({ error: 'Invalid import data' });
     }
-    
+
     const batchId = uuidv4();
     const importResults = {
       total: candidates.length,
@@ -41,7 +50,7 @@ router.post('/api/candidates/import', requireManager, async (req: any, res) => {
       failed: 0,
       candidateIds: [] as string[],
     };
-    
+
     // Create import log
     await storage.createJobImportLog({
       source,
@@ -95,9 +104,9 @@ router.post('/api/candidates/import', requireManager, async (req: any, res) => {
       totalCandidates: candidates.length,
       successfulImports: importResults.successful,
       failedImports: importResults.failed,
-      importedBy: req.user.id,
+      importedBy: req.user!.id,
     });
-    
+
     res.json(importResults);
   } catch (error) {
     console.error('Error importing candidates:', error);
@@ -106,7 +115,7 @@ router.post('/api/candidates/import', requireManager, async (req: any, res) => {
 });
 
 // Get import history
-router.get('/api/candidates/import-history', requireAuth, async (req, res) => {
+router.get('/api/candidates/import-history', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const logs = await storage.getJobImportLogs(50);
     res.json(logs);
@@ -117,7 +126,7 @@ router.get('/api/candidates/import-history', requireAuth, async (req, res) => {
 });
 
 // Get candidate sources
-router.get('/api/candidates/:id/sources', requireAuth, async (req, res) => {
+router.get('/api/candidates/:id/sources', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const sources = await storage.getCandidateSourcesByCandidateId(req.params.id);
     res.json(sources);
@@ -128,10 +137,14 @@ router.get('/api/candidates/:id/sources', requireAuth, async (req, res) => {
 });
 
 // Simulate Indeed candidate import
-router.post('/api/candidates/import-indeed', requireManager, async (req: any, res) => {
+router.post('/api/candidates/import-indeed', requireManager, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
     const { jobPostingId } = req.body;
-    
+
     if (!jobPostingId) {
       return res.status(400).json({ error: 'Job posting ID required' });
     }
@@ -205,9 +218,9 @@ router.post('/api/candidates/import-indeed', requireManager, async (req: any, re
       totalCandidates: mockCandidates.length,
       successfulImports: importResults.successful,
       failedImports: importResults.failed,
-      importedBy: req.user.id,
+      importedBy: req.user!.id,
     });
-    
+
     res.json(importResults);
   } catch (error) {
     console.error('Error simulating Indeed import:', error);

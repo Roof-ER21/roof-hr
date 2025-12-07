@@ -1,11 +1,21 @@
 import { Router } from 'express';
 import { storage } from '../storage';
-import { insertAttendanceSessionSchema, insertAttendanceCheckInSchema } from '../../shared/schema';
+import { insertAttendanceSessionSchema, insertAttendanceCheckInSchema, type User } from '../../shared/schema';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { requireAuth, requireManager } from '../middleware/auth';
+// @ts-ignore - json2csv doesn't have type definitions
 import { parse } from 'json2csv';
 import { AttendanceGoogleSync } from '../services/attendance-google-sync';
+
+// Extend Express Request to include user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: User;
+    }
+  }
+}
 
 const router = Router();
 
@@ -22,7 +32,11 @@ export function initializeAttendanceGoogleSync(googleSync: any) {
 // Create a new attendance session (Manager only)
 router.post('/sessions', requireManager, async (req, res) => {
   try {
-    const sessionData = {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const validatedData = insertAttendanceSessionSchema.parse({
       name: req.body.name,
       location: req.body.location,
       startsAt: req.body.startsAt ? new Date(req.body.startsAt) : new Date(),
@@ -30,9 +44,11 @@ router.post('/sessions', requireManager, async (req, res) => {
       createdByUserId: req.user.id,
       qrToken: crypto.randomUUID(),
       status: 'ACTIVE' as const,
-    };
-    
-    const session = await storage.createAttendanceSession(sessionData);
+      notes: req.body.notes || null,
+    });
+
+    // Storage method expects InsertAttendanceSession (will generate id internally)
+    const session = await storage.createAttendanceSession(validatedData as any);
     
     // Generate QR URL with proper public URL detection
     const proto = req.get('x-forwarded-proto') || req.protocol;
@@ -49,7 +65,8 @@ router.post('/sessions', requireManager, async (req, res) => {
     res.json({ ...session, qrUrl });
   } catch (error) {
     console.error('Error creating attendance session:', error);
-    res.status(400).json({ error: error.message });
+    const message = error instanceof Error ? error.message : 'Failed to create session';
+    res.status(400).json({ error: message });
   }
 });
 
@@ -234,15 +251,16 @@ router.post('/sessions/:id/check-in', async (req, res) => {
     const checkInData = insertAttendanceCheckInSchema.parse({
       sessionId: session.id,
       name,
-      email,
-      location,
+      email: email || null,
+      location: session.location, // Use session's location (RICHMOND | PHILLY | DMV)
       userId: userId || null,
-      userAgent: req.get('User-Agent'),
+      userAgent: req.get('User-Agent') || null,
       ipHash: crypto.createHash('sha256').update(req.ip || '').digest('hex'),
       latLng: req.body.latLng || null,
     });
-    
-    const checkIn = await storage.createAttendanceCheckIn(checkInData);
+
+    // Storage method expects InsertAttendanceCheckIn (will generate id internally)
+    const checkIn = await storage.createAttendanceCheckIn(checkInData as any);
     
     // Emit WebSocket event for real-time updates
     if (req.app.locals.io) {
@@ -264,7 +282,8 @@ router.post('/sessions/:id/check-in', async (req, res) => {
     res.json({ success: true, checkIn });
   } catch (error) {
     console.error('Error checking in:', error);
-    res.status(400).json({ error: error.message });
+    const message = error instanceof Error ? error.message : 'Failed to check in';
+    res.status(400).json({ error: message });
   }
 });
 
