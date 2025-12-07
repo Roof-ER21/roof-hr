@@ -331,7 +331,7 @@ class DeadlineTracker extends EventEmitter {
     }
     
     // Send notifications
-    for (const [assigneeId, assigneeAlerts] of alertsByAssignee) {
+    for (const [assigneeId, assigneeAlerts] of Array.from(alertsByAssignee)) {
       // Get assignee details
       const assignee = assigneeId === 'admin' 
         ? { email: 'admin@roof-er.com', firstName: 'Admin' }
@@ -340,31 +340,31 @@ class DeadlineTracker extends EventEmitter {
       if (!assignee) continue;
       
       // Prepare notification
-      const highPriorityAlerts = assigneeAlerts.filter(a => a.priority === 'HIGH');
-      const mediumPriorityAlerts = assigneeAlerts.filter(a => a.priority === 'MEDIUM');
-      const lowPriorityAlerts = assigneeAlerts.filter(a => a.priority === 'LOW');
+      const highPriorityAlerts = assigneeAlerts.filter((a: DeadlineAlert) => a.priority === 'HIGH');
+      const mediumPriorityAlerts = assigneeAlerts.filter((a: DeadlineAlert) => a.priority === 'MEDIUM');
+      const lowPriorityAlerts = assigneeAlerts.filter((a: DeadlineAlert) => a.priority === 'LOW');
       
       let message = `Hello ${assignee.firstName},\n\nYou have ${assigneeAlerts.length} upcoming deadlines:\n\n`;
       
       if (highPriorityAlerts.length > 0) {
         message += '🔴 HIGH PRIORITY:\n';
-        highPriorityAlerts.forEach(alert => {
+        highPriorityAlerts.forEach((alert: DeadlineAlert) => {
           message += `- ${alert.message}\n`;
         });
         message += '\n';
       }
-      
+
       if (mediumPriorityAlerts.length > 0) {
         message += '🟡 MEDIUM PRIORITY:\n';
-        mediumPriorityAlerts.forEach(alert => {
+        mediumPriorityAlerts.forEach((alert: DeadlineAlert) => {
           message += `- ${alert.message}\n`;
         });
         message += '\n';
       }
-      
+
       if (lowPriorityAlerts.length > 0) {
         message += '🟢 LOW PRIORITY:\n';
-        lowPriorityAlerts.forEach(alert => {
+        lowPriorityAlerts.forEach((alert: DeadlineAlert) => {
           message += `- ${alert.message}\n`;
         });
       }

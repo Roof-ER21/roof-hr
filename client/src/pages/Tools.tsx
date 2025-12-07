@@ -137,26 +137,26 @@ export function Tools() {
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   // Fetch tools inventory
-  const { data: tools = [], isLoading: toolsLoading, error: toolsError } = useQuery({
+  const { data: tools = [], isLoading: toolsLoading, error: toolsError } = useQuery<Tool[]>({
     queryKey: ['/api/tools/inventory'],
     queryFn: async () => {
       const token = localStorage.getItem('token');
       const headers: HeadersInit = {};
-      
+
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
-      
+
       const res = await fetch('/api/tools/inventory', {
         headers,
         credentials: "include",
       });
-      
+
       if (!res.ok) {
         const text = await res.text() || res.statusText;
         throw new Error(`${res.status}: ${text}`);
       }
-      
+
       return await res.json();
     },
     enabled: true
@@ -168,52 +168,52 @@ export function Tools() {
   console.log('Tools error:', toolsError);
 
   // Fetch assignments
-  const { data: assignments = [], isLoading: assignmentsLoading, error: assignmentsError } = useQuery({
+  const { data: assignments = [], isLoading: assignmentsLoading, error: assignmentsError } = useQuery<Assignment[]>({
     queryKey: ['/api/tools/assignments'],
     queryFn: async () => {
       const token = localStorage.getItem('token');
       const headers: HeadersInit = {};
-      
+
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
-      
+
       const res = await fetch('/api/tools/assignments', {
         headers,
         credentials: "include",
       });
-      
+
       if (!res.ok) {
         const text = await res.text() || res.statusText;
         throw new Error(`${res.status}: ${text}`);
       }
-      
+
       return await res.json();
     },
     enabled: true
   });
 
   // Fetch employees for assignment
-  const { data: employees = [], error: employeesError } = useQuery({
+  const { data: employees = [], error: employeesError } = useQuery<Employee[]>({
     queryKey: ['/api/users'],
     queryFn: async () => {
       const token = localStorage.getItem('token');
       const headers: HeadersInit = {};
-      
+
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
-      
+
       const res = await fetch('/api/users', {
         headers,
         credentials: "include",
       });
-      
+
       if (!res.ok) {
         const text = await res.text() || res.statusText;
         throw new Error(`${res.status}: ${text}`);
       }
-      
+
       return await res.json();
     },
     enabled: true

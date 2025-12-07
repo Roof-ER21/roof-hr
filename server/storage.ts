@@ -1588,10 +1588,15 @@ class DrizzleStorage implements IStorage {
     }
   }
 
-  // Individual PTO Policy Management Implementation - NEW  
+  // Individual PTO Policy Management Implementation - NEW
   async createPtoPolicy(data: InsertPtoPolicy): Promise<PtoPolicy> {
     const id = uuidv4();
-    const [policy] = await db.insert(ptoPolicies).values({ ...data, id }).returning();
+    const [policy] = await db.insert(ptoPolicies).values({
+      ...data,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
     return policy;
   }
   
@@ -1611,8 +1616,12 @@ class DrizzleStorage implements IStorage {
   }
   
   async updatePtoPolicy(id: string, data: Partial<InsertPtoPolicy>): Promise<PtoPolicy> {
+    const updateData: Partial<PtoPolicy> = {
+      ...data,
+      updatedAt: new Date()
+    };
     const [policy] = await db.update(ptoPolicies)
-      .set({ ...data, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(ptoPolicies.id, id))
       .returning();
     return policy;

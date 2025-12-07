@@ -1000,7 +1000,7 @@ export default function Contracts() {
                           {territory ? territory.name : 'All territories'}
                         </TableCell>
                         <TableCell>
-                          {template.variables?.length > 0 ? (
+                          {template.variables && template.variables.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {template.variables.slice(0, 3).map((v, idx) => (
                                 <Badge key={idx} variant="secondary" className="text-xs">

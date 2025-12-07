@@ -49,8 +49,9 @@ function requireManager(req: any, res: any, next: any) {
 // Contract Templates
 
 // Get all contract templates
-router.get('/api/contract-templates', async (req: any, res) => {
+router.get('/api/contract-templates', requireAuth, async (req: any, res) => {
   try {
+    const user = req.user!;
     // For now, bypass auth to verify templates are working
     const templates = await storage.getAllContractTemplates();
     console.log(`Returning ${templates.length} contract templates`);

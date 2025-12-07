@@ -50,7 +50,7 @@ export default function QRCodes() {
     queryKey: ['/api/qr-codes'],
   });
 
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<any[]>({
     queryKey: ['/api/users'],
   });
 

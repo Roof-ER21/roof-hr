@@ -201,11 +201,13 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
     }
 
     const document = await storage.createCoiDocument({
+      id: uuidv4(),
       ...data,
+      type: data.type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       status,
       alertFrequency
     });
-    
+
     console.log('[COI Upload] COI document created successfully. ID:', document.id, 'Google Drive ID:', driveFile.id);
     
     // TODO: Notify Susan AI about the new COI document
@@ -274,11 +276,13 @@ router.post('/api/coi-documents', requireAuth, requireHROrManager, async (req, r
     }
 
     const document = await storage.createCoiDocument({
+      id: uuidv4(),
       ...data,
+      type: data.type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       status,
       alertFrequency
     });
-    
+
     res.json(document);
   } catch (error: any) {
     console.error('Error creating COI document:', error);
@@ -684,6 +688,7 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
 
     // Create database record
     const document = await storage.createCoiDocument({
+      id: uuidv4(),
       employeeId,
       type: coiType as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,

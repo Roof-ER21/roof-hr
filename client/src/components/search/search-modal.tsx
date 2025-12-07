@@ -26,10 +26,10 @@ export function SearchModal() {
   const [searchTerm, setSearchTerm] = useState('');
   const [, setLocation] = useLocation();
 
-  const { data: searchResults = [], isLoading } = useQuery({
+  const { data: searchResults = [], isLoading } = useQuery<SearchResult[]>({
     queryKey: ['/api/search', searchTerm],
-    queryFn: () => searchTerm.length >= 2 
-      ? apiRequest(`/api/search?q=${encodeURIComponent(searchTerm)}`)
+    queryFn: () => searchTerm.length >= 2
+      ? apiRequest<SearchResult[]>(`/api/search?q=${encodeURIComponent(searchTerm)}`)
       : Promise.resolve([]),
     enabled: searchTerm.length >= 2,
   });
@@ -140,7 +140,7 @@ export function SearchModal() {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {searchResults.map((result: SearchResult) => (
+                  {searchResults.map((result) => (
                     <button
                       key={`${result.type}-${result.id}`}
                       className="w-full text-left p-3 hover:bg-gray-50 rounded-lg transition-colors flex items-start gap-3"

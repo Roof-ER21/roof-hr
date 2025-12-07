@@ -212,7 +212,7 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
     // If reminders are enabled, schedule them
     if (data.sendReminders) {
       const reminderTime = new Date(data.scheduledDate);
-      reminderTime.setHours(reminderTime.getHours() - data.reminderHours);
+      reminderTime.setHours(reminderTime.getHours() - (data.reminderHours || 24));
 
       // Schedule candidate reminder
       await storage.createInterviewReminder({
@@ -243,7 +243,7 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
       
       // Get candidate and interviewer info for attendees
       const candidateDetails = await storage.getCandidateById(data.candidateId);
-      const interviewerDetails = await storage.getUserById(data.interviewerId);
+      const interviewerDetails = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
       
       if (candidateDetails && interviewerDetails) {
         const startDateTime = new Date(data.scheduledDate);

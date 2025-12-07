@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { storage } from '../storage';
 import { insertCandidateSchema, insertCoiDocumentSchema } from '../../shared/schema';
@@ -10,6 +10,17 @@ import { extractResumeText } from '../services/resume-text-extractor';
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
+
+// Extend Express Request type to include user
+interface AuthRequest extends Omit<Request, 'user'> {
+  user?: {
+    id: number;
+    email: string;
+    role: string;
+    firstName?: string;
+    lastName?: string;
+  };
+}
 
 // Position mapping for resume categories
 const CATEGORY_POSITIONS: Record<string, string> = {
@@ -27,9 +38,9 @@ const upload = multer({
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     // Accept PDFs and common document formats
-    if (file.mimetype === 'application/pdf' || 
+    if (file.mimetype === 'application/pdf' ||
         file.mimetype.startsWith('image/') ||
         file.mimetype === 'application/msword' ||
         file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
@@ -41,30 +52,30 @@ const upload = multer({
 });
 
 // Middleware
-function requireAuth(req: any, res: any, next: any) {
+function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
   next();
 }
 
-function requireHROrManager(req: any, res: any, next: any) {
+function requireHROrManager(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   // HR, Managers, and Territory Managers can manage documents
   if (!['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
     return res.status(403).json({ error: 'HR or Manager access required' });
   }
-  
+
   next();
 }
 
 // Upload candidate with resume to Google Drive
-router.post('/api/candidates/upload-with-resume', requireAuth, requireHROrManager, upload.single('resume'), async (req, res) => {
+router.post('/api/candidates/upload-with-resume', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
   try {
-    const user = req.user!; // User exists due to requireAuth middleware
+    const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const candidateData = req.body;
     
     console.log('[Candidate Upload] Starting candidate creation with resume upload');
@@ -100,20 +111,15 @@ router.post('/api/candidates/upload-with-resume', requireAuth, requireHROrManage
 
     // Upload resume to Google Drive
     const resumeFileName = `Resume_${candidateData.firstName}_${candidateData.lastName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
-    
-    // Convert buffer to stream for Google Drive API
-    const bufferStream = new Readable();
-    bufferStream.push(req.file.buffer);
-    bufferStream.push(null);
-    
+
     const driveFile = await googleDriveService.uploadFile({
       name: resumeFileName,
       mimeType: req.file.mimetype,
-      content: bufferStream,
+      content: req.file.buffer,
       parentFolderId: candidateFolder.id,
       description: `Resume for ${candidateData.firstName} ${candidateData.lastName} - Position: ${candidateData.position || 'Not specified'}`
     });
-    
+
     console.log('[Candidate Upload] Resume uploaded to Google Drive:', driveFile.id, 'Link:', driveFile.webViewLink);
 
     // Create candidate in database with Google Drive resume URL
@@ -123,15 +129,9 @@ router.post('/api/candidates/upload-with-resume', requireAuth, requireHROrManage
       email: candidateData.email,
       phone: candidateData.phone,
       position: candidateData.position || 'Roofing Specialist',
-      department: candidateData.department || 'Operations',
       resumeUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
-      googleDriveResumeId: driveFile.id,
-      googleDriveFolderId: candidateFolder.id,
       status: 'SCREENING',
-      stage: candidateData.stage || 'Initial Review', // Add stage field
-      skills: candidateData.skills || [],
-      experience: candidateData.experience || '',
-      source: candidateData.source || 'Manual Upload',
+      stage: candidateData.stage || 'Initial Review',
       appliedDate: new Date(),
       notes: candidateData.notes || `Resume uploaded to Google Drive: ${driveFile.webViewLink}`
     });
@@ -163,9 +163,9 @@ router.post('/api/candidates/upload-with-resume', requireAuth, requireHROrManage
 });
 
 // Upload COI document for existing employee
-router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
+router.post('/api/coi-documents/upload-for-employee', requireAuth as any, requireHROrManager as any, upload.single('file'), async (req: Request, res: Response) => {
   try {
-    const user = req.user!; // User exists due to requireAuth middleware
+    const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const { employeeName, type, issueDate, expirationDate, notes } = req.body;
     
     console.log('[COI Upload] Starting COI upload for employee:', employeeName, 'Type:', type);
@@ -198,56 +198,37 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrMa
 
     // Get or create employee folder structure
     const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
-    if (!employeeFolders || !employeeFolders.coidocumentsFolderId) {
+    if (!employeeFolders || !employeeFolders.coiFolderId) {
       console.error('[COI Upload] Failed to get employee folder structure:', employeeFolders);
       throw new Error('Failed to get employee COI folder');
     }
-    
-    console.log('[COI Upload] Employee folder structure obtained, COI folder ID:', employeeFolders.coidocumentsFolderId);
+
+    console.log('[COI Upload] Employee folder structure obtained, COI folder ID:', employeeFolders.coiFolderId);
 
     // Upload file to Google Drive
     const fileName = `COI_${type}_${employee.lastName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
     console.log('[COI Upload] Uploading to Google Drive with filename:', fileName);
-    
-    // Convert buffer to stream for Google Drive API
-    const bufferStream = new Readable();
-    bufferStream.push(req.file.buffer);
-    bufferStream.push(null);
-    
+
     const driveFile = await googleDriveService.uploadFile({
       name: fileName,
       mimeType: req.file.mimetype,
-      content: bufferStream,
-      parentFolderId: employeeFolders.coidocumentsFolderId,
+      content: req.file.buffer,
+      parentFolderId: employeeFolders.coiFolderId,
       description: `COI Document - ${type} - Valid: ${issueDate} to ${expirationDate}`
     });
     
     console.log('[COI Upload] File uploaded to Google Drive successfully:', driveFile.id, 'Link:', driveFile.webViewLink);
 
-    // Create database record with Google Drive info
-    const data = insertCoiDocumentSchema.parse({
-      employeeId: employee.id,
-      type,
-      documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
-      googleDriveId: driveFile.id,
-      filePath: driveFile.id, // Store Drive ID as reference
-      issueDate,
-      expirationDate,
-      notes,
-      uploadedBy: user.id,
-      status: 'ACTIVE'
-    });
-    
     console.log('[COI Upload] Creating database record with Google Drive link');
-    
+
     // Check expiration date to set initial status
     const expDate = new Date(expirationDate);
     const today = new Date();
     const daysUntilExpiration = Math.floor((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
-    let status = 'ACTIVE';
-    let alertFrequency = null;
-    
+
+    let status: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' = 'ACTIVE';
+    let alertFrequency: 'MONTH_BEFORE' | 'TWO_WEEKS' | 'ONE_WEEK' | 'DAILY' | null = null;
+
     if (daysUntilExpiration <= 0) {
       status = 'EXPIRED';
       alertFrequency = 'DAILY';
@@ -264,12 +245,18 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrMa
       status = 'EXPIRING_SOON';
       alertFrequency = 'MONTH_BEFORE';
     }
-    
+
     const document = await storage.createCoiDocument({
-      ...data,
+      employeeId: employee.id,
+      type: type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
+      documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
+      issueDate,
+      expirationDate,
+      notes,
+      uploadedBy: String(user.id),
       status,
       alertFrequency
-    });
+    } as any);
     
     console.log('[COI Upload] COI document created successfully. ID:', document.id, 'Google Drive ID:', driveFile.id);
     
@@ -305,9 +292,9 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth, requireHROrMa
  * Creates a candidate automatically from resume content
  * Works with or without Google Drive configured
  */
-router.post('/api/resumes/upload', requireAuth, requireHROrManager, upload.single('resume'), async (req, res) => {
+router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
   try {
-    const user = req.user!; // User exists due to requireAuth middleware
+    const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const { category } = req.body;
 
     if (!req.file) {
@@ -387,14 +374,10 @@ router.post('/api/resumes/upload', requireAuth, requireHROrManager, upload.singl
           const fileExt = req.file.originalname.split('.').pop() || 'pdf';
           const fileName = `${parsedData.firstName}_${parsedData.lastName}_${timestamp}.${fileExt}`;
 
-          const bufferStream = new Readable();
-          bufferStream.push(req.file.buffer);
-          bufferStream.push(null);
-
           const driveFile = await googleDriveService.uploadFile({
             name: fileName,
             mimeType: req.file.mimetype,
-            content: bufferStream,
+            content: req.file.buffer,
             parentFolderId: categoryFolder.id,
             description: `Resume for ${parsedData.firstName} ${parsedData.lastName} - ${position}`
           });
@@ -444,7 +427,6 @@ router.post('/api/resumes/upload', requireAuth, requireHROrManager, upload.singl
       stage: 'Application Review',
       appliedDate: new Date(),
       parsedResumeData: JSON.stringify(parsedData),
-      source: 'Resume Upload',
       notes: `Auto-created from resume upload (${req.file.originalname}). Skills: ${(parsedData.skills || []).join(', ')}${!parsedData.email ? ' [Email not extracted]' : ''}${!parsedData.phone ? ' [Phone not extracted]' : ''}`
     });
 
@@ -479,9 +461,9 @@ router.post('/api/resumes/upload', requireAuth, requireHROrManager, upload.singl
  * Sync resumes from a Google Drive folder
  * Reads all resumes from a source folder and creates candidates
  */
-router.post('/api/resumes/sync-from-drive', requireAuth, requireHROrManager, async (req, res) => {
+router.post('/api/resumes/sync-from-drive', requireAuth as any, requireHROrManager as any, async (req: Request, res: Response) => {
   try {
-    const user = req.user!; // User exists due to requireAuth middleware
+    const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const { category, sourceFolderId } = req.body;
 
     if (!category || !CATEGORY_POSITIONS[category]) {
@@ -568,7 +550,6 @@ router.post('/api/resumes/sync-from-drive', requireAuth, requireHROrManager, asy
           stage: 'Application Review',
           appliedDate: new Date(),
           parsedResumeData: JSON.stringify(parsedData),
-          source: 'Google Drive Sync',
           notes: `Synced from Google Drive. Original file: ${file.name}. Skills: ${(parsedData.skills || []).join(', ')}`
         });
 
@@ -610,9 +591,9 @@ router.post('/api/resumes/sync-from-drive', requireAuth, requireHROrManager, asy
 /**
  * Get recent candidates by source and position for the Resume Uploader UI
  */
-router.get('/api/resumes/recent', requireAuth, requireHROrManager, async (req, res) => {
+router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any, async (req: Request, res: Response) => {
   try {
-    const user = req.user!; // User exists due to requireAuth middleware
+    const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const { category, limit = 20 } = req.query;
 
     const allCandidates = await storage.getAllCandidates();

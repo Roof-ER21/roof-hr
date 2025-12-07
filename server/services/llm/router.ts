@@ -98,7 +98,7 @@ export class LLMRouter {
     }
 
     // Fallback: try any available provider
-    for (const [name, provider] of this.providers) {
+    for (const [name, provider] of Array.from(this.providers)) {
       if (await provider.isAvailable()) {
         console.log(`[LLM Router] Fallback to ${name}`);
         return provider;
@@ -209,8 +209,8 @@ export class LLMRouter {
 
   async getStatus(): Promise<LLMProviderStatus[]> {
     const statuses: LLMProviderStatus[] = [];
-    
-    for (const [name, provider] of this.providers) {
+
+    for (const [name, provider] of Array.from(this.providers)) {
       const stats = this.providerStats.get(name);
       const avgLatency = stats && stats.successCount > 0 
         ? Math.round(stats.totalLatency / stats.successCount)
@@ -233,8 +233,8 @@ export class LLMRouter {
     status: 'healthy' | 'degraded' | 'down';
   }> {
     const available: string[] = [];
-    
-    for (const [name, provider] of this.providers) {
+
+    for (const [name, provider] of Array.from(this.providers)) {
       if (await provider.isAvailable()) {
         available.push(name);
       }

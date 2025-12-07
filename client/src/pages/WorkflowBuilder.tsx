@@ -175,6 +175,15 @@ export default function WorkflowBuilder() {
   // Fetch workflows
   const { data: workflows = [] } = useQuery<Workflow[]>({
     queryKey: ['/api/workflows'],
+    queryFn: async () => {
+      const response = await fetch('/api/workflows', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch workflows');
+      return response.json();
+    }
   });
 
   // Create workflow

@@ -218,7 +218,7 @@ export default function CoiDocuments() {
     }
   });
 
-  const sendAlertsMutation = useMutation<{ alertsSent: number }>({
+  const sendAlertsMutation = useMutation<{ alertsSent: number }, Error>({
     mutationFn: async () => {
       const response = await apiRequest('/api/coi-documents/send-alerts', {
         method: 'POST',
@@ -241,7 +241,7 @@ export default function CoiDocuments() {
   });
 
   // Sync from Google Drive mutation
-  const syncFromDriveMutation = useMutation<{ totalDocuments: number }>({
+  const syncFromDriveMutation = useMutation<{ totalDocuments: number }, Error>({
     mutationFn: async () => {
       const response = await apiRequest('/api/coi-documents/sync-from-drive', {
         method: 'POST',

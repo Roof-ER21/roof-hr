@@ -129,7 +129,7 @@ app.use((req, res, next) => {
   });
 
   process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
     process.exit(1);
   });
 
@@ -244,8 +244,8 @@ app.use((req, res, next) => {
       
       // Initialize HR agents in production
       if (process.env.NODE_ENV === 'production' && config.agents.enabled) {
-        const { initializeAgents } = await import('./agents/agent-manager');
-        await initializeAgents();
+        const { agentManager } = await import('./agents/agent-manager');
+        await agentManager.initialize();
       }
       
       // Initialize enhanced Google synchronization

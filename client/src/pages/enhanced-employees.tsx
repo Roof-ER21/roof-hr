@@ -95,7 +95,7 @@ function EnhancedEmployees() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: employees = [], isLoading } = useQuery({
+  const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ['/api/users'],
     queryFn: async () => {
       const response = await fetch('/api/users', {

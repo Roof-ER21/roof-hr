@@ -820,7 +820,6 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
         if (createPtoPolicies) {
           try {
             await storage.createPtoPolicy({
-              id: uuidv4(),
               employeeId: newUser.id,
               policyLevel: 'COMPANY',
               vacationDays: 10,
@@ -1697,7 +1696,6 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
     // Create default PTO policy
     try {
       await storage.createPtoPolicy({
-        id: uuidv4(),
         employeeId: newEmployee.id,
         policyLevel: 'INDIVIDUAL',
         totalDays: 18,

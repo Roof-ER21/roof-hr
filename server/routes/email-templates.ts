@@ -62,11 +62,12 @@ router.get('/api/email-templates/:id', requireAuth, async (req, res) => {
 // Create new email template
 router.post('/api/email-templates', requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     const data = createEmailTemplateSchema.parse(req.body);
     const template = await storage.createEmailTemplate({
       ...data,
       type: data.category || 'GENERAL', // Add type field for compatibility
-      createdBy: req.user.id,
+      createdBy: user.id,
     });
     res.json(template);
   } catch (error) {
@@ -81,10 +82,11 @@ router.post('/api/email-templates', requireManager, async (req, res) => {
 // Update email template
 router.patch('/api/email-templates/:id', requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     const data = updateEmailTemplateSchema.parse(req.body);
     const template = await storage.updateEmailTemplate(req.params.id, {
       ...data,
-      updatedBy: req.user.id,
+      updatedBy: user.id,
       updatedAt: new Date().toISOString(),
     });
     if (!template) {
@@ -179,6 +181,7 @@ router.post('/api/email-templates/:id/send', requireAuth, async (req, res) => {
 
     if (success) {
       // Log email sent
+      const user = req.user!;
       await storage.createEmailLog({
         templateId: template.id,
         recipientEmail: to,
@@ -186,7 +189,7 @@ router.post('/api/email-templates/:id/send', requireAuth, async (req, res) => {
         body,
         status: 'SENT',
         sentAt: new Date().toISOString(),
-        sentBy: req.user.id,
+        sentBy: user.id,
       });
 
       res.json({

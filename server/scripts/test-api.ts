@@ -16,6 +16,26 @@ interface TestResult {
   error?: string;
 }
 
+interface LoginResponse {
+  token?: string;
+  user?: {
+    firstName: string;
+    lastName: string;
+    role: string;
+    mustChangePassword: boolean;
+  };
+  error?: string;
+}
+
+interface ValidateResponse {
+  error?: string;
+}
+
+interface ApiResponse {
+  error?: string;
+  [key: string]: unknown;
+}
+
 async function testAPI() {
   const results: TestResult[] = [];
   let token = '';
@@ -30,16 +50,16 @@ async function testAPI() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(adminCredentials)
     });
-    
-    const loginData = await loginResponse.json();
-    
+
+    const loginData = await loginResponse.json() as LoginResponse;
+
     if (loginResponse.ok && loginData.token) {
       token = loginData.token;
       console.log('✓ Login successful');
-      console.log(`  User: ${loginData.user.firstName} ${loginData.user.lastName}`);
-      console.log(`  Role: ${loginData.user.role}`);
-      console.log(`  Must change password: ${loginData.user.mustChangePassword}`);
-      
+      console.log(`  User: ${loginData.user?.firstName} ${loginData.user?.lastName}`);
+      console.log(`  Role: ${loginData.user?.role}`);
+      console.log(`  Must change password: ${loginData.user?.mustChangePassword}`);
+
       results.push({
         endpoint: '/api/auth/login',
         method: 'POST',
@@ -57,13 +77,14 @@ async function testAPI() {
       });
     }
   } catch (error) {
-    console.log('✗ Login error:', error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.log('✗ Login error:', errorMessage);
     results.push({
       endpoint: '/api/auth/login',
       method: 'POST',
       status: 0,
       success: false,
-      error: error.message
+      error: errorMessage
     });
   }
   
@@ -78,9 +99,9 @@ async function testAPI() {
     const validateResponse = await fetch(`${BASE_URL}/api/auth/validate`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    
-    const validateData = await validateResponse.json();
-    
+
+    const validateData = await validateResponse.json() as ValidateResponse;
+
     if (validateResponse.ok) {
       console.log('✓ Token validation successful');
       results.push({
@@ -100,7 +121,8 @@ async function testAPI() {
       });
     }
   } catch (error) {
-    console.log('✗ Token validation error:', error.message);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.log('✗ Token validation error:', errorMessage);
   }
   
   // 3. Test protected endpoints
@@ -121,9 +143,9 @@ async function testAPI() {
         method: endpoint.method,
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
-      const data = await response.json();
-      
+
+      const data = await response.json() as ApiResponse;
+
       if (response.ok) {
         console.log(`✓ ${endpoint.description}: ${response.status} OK`);
         if (Array.isArray(data)) {
@@ -146,13 +168,14 @@ async function testAPI() {
         });
       }
     } catch (error) {
-      console.log(`✗ ${endpoint.description}: Error - ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.log(`✗ ${endpoint.description}: Error - ${errorMessage}`);
       results.push({
         endpoint: endpoint.path,
         method: endpoint.method,
         status: 0,
         success: false,
-        error: error.message
+        error: errorMessage
       });
     }
   }

@@ -186,7 +186,14 @@ export class SusanEmployeeManager {
 
       // Send password reset email
       await this.emailService.initialize();
-      await this.emailService.sendPasswordResetEmail(employee, temporaryPassword);
+      await this.emailService.sendEmail({
+        to: employee.email,
+        subject: 'Password Reset - Roof HR',
+        html: `<p>Hello ${employee.firstName},</p>
+               <p>Your password has been reset. Your temporary password is: <strong>${temporaryPassword}</strong></p>
+               <p>Please log in and change your password immediately.</p>
+               <p>Best regards,<br>HR Team</p>`
+      });
 
       return { success: true, temporaryPassword };
     } catch (error) {
@@ -243,7 +250,7 @@ export class SusanEmployeeManager {
         conditions.push(eq(users.department, filter.department));
       }
       if (filter.role) {
-        conditions.push(eq(users.role, filter.role));
+        conditions.push(eq(users.role, filter.role as typeof users.role.$type));
       }
       if (filter.isActive !== undefined) {
         conditions.push(eq(users.isActive, filter.isActive));
@@ -258,7 +265,7 @@ export class SusanEmployeeManager {
         })
         .where(whereClause);
 
-      return { success: true, count: result.rowCount };
+      return { success: true, count: result.rowCount ?? undefined };
     } catch (error) {
       console.error('[SUSAN-EMPLOYEE] Error in bulk update:', error);
       return { success: false, error: 'Failed to bulk update employees' };

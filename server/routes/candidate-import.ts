@@ -53,12 +53,11 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
 
     // Create import log
     await storage.createJobImportLog({
-      source,
-      jobPostingId,
-      totalCandidates: candidates.length,
-      successfulImports: 0,
-      failedImports: 0,
-      importedBy: req.user.id,
+      source: source as 'INDEED' | 'GOOGLE_JOBS' | 'LINKEDIN' | 'CSV' | 'MANUAL',
+      jobTitle: jobPostingId || 'Imported Position',
+      candidatesFound: candidates.length,
+      candidatesImported: 0,
+      status: 'PARTIAL' as const,
     });
     
     // Process each candidate
@@ -69,24 +68,21 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
           firstName: candidateData.firstName,
           lastName: candidateData.lastName,
           email: candidateData.email,
-          phone: candidateData.phone,
-          position: candidateData.position || jobPostingId,
-          department: candidateData.department || 'General',
+          phone: candidateData.phone || '',
+          position: candidateData.position || jobPostingId || 'General',
           resumeUrl: candidateData.resumeUrl,
           status: 'SCREENING',
-          skills: candidateData.skills || [],
-          experience: candidateData.experience || '',
-          source: source,
+          stage: 'SCREENING',
           appliedDate: candidateData.appliedDate || new Date(),
+          notes: candidateData.notes || null,
         });
         
         // Create source record
         await storage.createCandidateSource({
           candidateId: candidate.id,
-          source,
+          source: source as 'INDEED' | 'LINKEDIN' | 'GOOGLE_JOBS' | 'WEBSITE' | 'REFERRAL' | 'OTHER',
           sourceUrl: candidateData.sourceUrl,
           importBatchId: batchId,
-          metadata: JSON.stringify(candidateData.metadata || {}),
         });
         
         importResults.successful++;
@@ -99,12 +95,11 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
     
     // Update import log with results
     await storage.createJobImportLog({
-      source,
-      jobPostingId,
-      totalCandidates: candidates.length,
-      successfulImports: importResults.successful,
-      failedImports: importResults.failed,
-      importedBy: req.user!.id,
+      source: source as 'INDEED' | 'GOOGLE_JOBS' | 'LINKEDIN' | 'CSV' | 'MANUAL',
+      jobTitle: jobPostingId || 'Imported Position',
+      candidatesFound: candidates.length,
+      candidatesImported: importResults.successful,
+      status: importResults.failed === 0 ? 'SUCCESS' : importResults.successful === 0 ? 'FAILED' : 'PARTIAL',
     });
 
     res.json(importResults);
@@ -191,17 +186,22 @@ router.post('/api/candidates/import-indeed', requireManager, async (req: AuthReq
     for (const candidateData of mockCandidates) {
       try {
         const candidate = await storage.createCandidate({
-          ...candidateData,
-          source: 'Indeed',
+          firstName: candidateData.firstName,
+          lastName: candidateData.lastName,
+          email: candidateData.email,
+          phone: candidateData.phone,
+          position: candidateData.position,
           status: 'SCREENING',
+          stage: 'SCREENING',
+          appliedDate: candidateData.appliedDate,
+          notes: null,
         });
-        
+
         await storage.createCandidateSource({
           candidateId: candidate.id,
-          source: 'Indeed',
+          source: 'INDEED',
           sourceUrl: candidateData.sourceUrl,
           importBatchId: batchId,
-          metadata: JSON.stringify({ jobPostingId }),
         });
         
         importResults.successful++;
@@ -213,12 +213,11 @@ router.post('/api/candidates/import-indeed', requireManager, async (req: AuthReq
     }
     
     await storage.createJobImportLog({
-      source: 'Indeed',
-      jobPostingId,
-      totalCandidates: mockCandidates.length,
-      successfulImports: importResults.successful,
-      failedImports: importResults.failed,
-      importedBy: req.user!.id,
+      source: 'INDEED',
+      jobTitle: jobPostingId || 'Indeed Import',
+      candidatesFound: mockCandidates.length,
+      candidatesImported: importResults.successful,
+      status: importResults.failed === 0 ? 'SUCCESS' : importResults.successful === 0 ? 'FAILED' : 'PARTIAL',
     });
 
     res.json(importResults);

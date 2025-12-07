@@ -4,12 +4,24 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Play, CheckCircle, XCircle, Clock, User, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
+interface WorkflowExecution {
+  id: string;
+  status: string;
+  triggerSource: string;
+  startedAt?: string;
+  completedAt?: string;
+  triggeredBy?: string;
+  context?: string | object;
+  error?: string;
+  stepsCompleted?: number;
+}
+
 interface WorkflowExecutionHistoryProps {
   workflowId: string;
 }
 
 export function WorkflowExecutionHistory({ workflowId }: WorkflowExecutionHistoryProps) {
-  const { data: executions = [], isLoading } = useQuery({
+  const { data: executions = [], isLoading } = useQuery<WorkflowExecution[]>({
     queryKey: [`/api/workflows/${workflowId}/executions`],
   });
 
@@ -81,7 +93,7 @@ export function WorkflowExecutionHistory({ workflowId }: WorkflowExecutionHistor
           </p>
         </div>
         
-        {executions.map((execution: any) => (
+        {executions.map((execution) => (
           <div key={execution.id} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors">
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-2">

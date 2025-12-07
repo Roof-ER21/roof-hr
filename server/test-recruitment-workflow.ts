@@ -1,11 +1,10 @@
 import { db } from './db';
-import { 
-  candidates, 
-  interviews, 
+import {
+  candidates,
+  interviews,
   users,
   toolAssignments,
-  toolInventory,
-  notifications
+  toolInventory
 } from '../shared/schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import { googleServicesManager } from './services/google-services-manager';
@@ -71,16 +70,12 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
       lastName: 'WorkflowTest_' + Date.now(),
       email: `test.workflow.${Date.now()}@example.com`,
       phone: '555-' + Math.floor(1000 + Math.random() * 9000),
-      source: 'direct' as const,
       position: 'Sales Representative',
-      experience: '2-3 years',
       status: 'APPLIED' as const,
-      stage: 'APPLIED' as const,
-      territory: 'North',
+      stage: 'APPLIED',
       availability: 'Immediate',
       notes: 'Comprehensive workflow test - ' + new Date().toISOString(),
-      appliedDate: new Date(),
-      createdBy: 'fc51fba0-9f18-4db4-8c6a-a8aba2a5fd37'
+      appliedDate: new Date()
     };
 
     const [newCandidate] = await db.insert(candidates).values(testCandidate).returning();
@@ -127,7 +122,8 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
       results.successfulSteps++;
       console.log('✅ Welcome email processed');
     } catch (error) {
-      results.errors.push(`Welcome email error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      results.errors.push(`Welcome email error: ${errorMessage}`);
       console.error('❌ Welcome email failed:', error);
     }
 
@@ -174,16 +170,13 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
       email: newCandidate.email,
       firstName: newCandidate.firstName,
       lastName: newCandidate.lastName,
-      phoneNumber: newCandidate.phone,
+      phone: newCandidate.phone,
       role: 'EMPLOYEE',
       department: 'Sales',
       position: newCandidate.position,
-      territory: newCandidate.territory,
-      employmentType: 'FULL_TIME',
-      hireDate: new Date(),
-      status: 'active',
+      employmentType: 'W2',
+      hireDate: new Date().toISOString(),
       passwordHash: 'hashed_test_password', // Temporary password hash
-      createdBy: 'fc51fba0-9f18-4db4-8c6a-a8aba2a5fd37'
     }).returning();
     
     results.employeeOnboarded = true;
@@ -209,12 +202,13 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
         if (inventoryItem && inventoryItem.availableQuantity >= tool.quantity) {
           // Create assignment
           await db.insert(toolAssignments).values({
+            id: `assignment-${tool.toolId}-${Date.now()}`,
             toolId: tool.toolId,
             employeeId: newEmployee.id,
-            quantity: tool.quantity,
             assignedDate: new Date(),
             assignedBy: 'fc51fba0-9f18-4db4-8c6a-a8aba2a5fd37',
-            status: 'assigned' as const,
+            status: 'ASSIGNED',
+            condition: 'NEW',
             notes: 'Assigned during workflow test'
           });
 
@@ -229,7 +223,8 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
           console.log(`  ✅ Assigned: ${inventoryItem.name}`);
         }
       } catch (error) {
-        results.errors.push(`Tool assignment error: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        results.errors.push(`Tool assignment error: ${errorMessage}`);
       }
     }
     
@@ -250,7 +245,8 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
       results.successfulSteps++;
       console.log('✅ Google Drive folder created successfully');
     } catch (error) {
-      results.errors.push(`Drive folder error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      results.errors.push(`Drive folder error: ${errorMessage}`);
       console.error('❌ Drive folder creation failed:', error);
     }
 
@@ -280,7 +276,6 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
         <li>Name: ${newCandidate.firstName} ${newCandidate.lastName}</li>
         <li>Email: ${newCandidate.email}</li>
         <li>Position: ${newCandidate.position}</li>
-        <li>Territory: ${newCandidate.territory}</li>
       </ul>
       
       <h3>Workflow Steps:</h3>
@@ -355,7 +350,8 @@ export async function runComprehensiveWorkflowTest(): Promise<WorkflowTestResult
 
   } catch (error) {
     console.error('❌ Test failed:', error);
-    results.errors.push(`Critical error: ${error.message}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    results.errors.push(`Critical error: ${errorMessage}`);
     return results;
   }
 }

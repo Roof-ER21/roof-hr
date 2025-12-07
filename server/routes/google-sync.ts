@@ -1,19 +1,20 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { googleSyncOrchestrator } from '../services/google-sync-orchestrator';
 import { googleServicesManager } from '../services/google-services-manager';
 
 const router = express.Router();
 
 // Middleware for admin authentication
-function requireAdmin(req: any, res: any, next: any) {
-  if (!req.user) {
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  if (!user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
-  if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+
+  if (!['ADMIN', 'MANAGER'].includes(user.role)) {
     return res.status(403).json({ error: 'Admin or Manager access required' });
   }
-  
+
   next();
 }
 
