@@ -129,7 +129,7 @@ export class PerformanceReviewAgent extends BaseAgent {
             reviewPeriod,
             reviewType: 'QUARTERLY',
             status: 'DRAFT',
-            dueDate: dueDate.toISOString().split('T')[0],
+            dueDate: dueDate,
             goals: `Performance review for ${reviewPeriod}`,
           });
 
@@ -435,7 +435,7 @@ export async function runAgent(agentName: string, testMode = false): Promise<any
   const config = await storage.getHrAgentConfigByName(agentName);
   if (config) {
     await storage.updateHrAgentConfig(config.id, {
-      lastRun: new Date().toISOString(),
+      lastRun: new Date(),
       lastStatus: result.success ? 'SUCCESS' : 'FAILED',
       lastError: result.errors?.[0] || null
     });

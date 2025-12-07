@@ -14,6 +14,7 @@ export interface AgentConfig {
 export interface AgentContext {
   userId?: string;
   companyId?: string;
+  testMode?: boolean;
   metadata?: Record<string, any>;
 }
 

@@ -127,10 +127,9 @@ export default function SusanAI() {
     queryKey: ['/api/hr-agents'],
     enabled: isAdmin,
     queryFn: async () => {
-      const response = await apiRequest('/api/hr-agents', {
+      return await apiRequest<Agent[]>('/api/hr-agents', {
         method: 'GET'
       });
-      return await response.json();
     }
   });
 
@@ -145,10 +144,9 @@ export default function SusanAI() {
     queryKey: ['/api/susan-ai/analytics', analyticsTimeframe],
     enabled: isAdmin,
     queryFn: async () => {
-      const response = await apiRequest(`/api/susan-ai/analytics?timeframe=${analyticsTimeframe}`, {
+      return await apiRequest<Analytics>(`/api/susan-ai/analytics?timeframe=${analyticsTimeframe}`, {
         method: 'GET'
       });
-      return await response.json();
     },
     refetchInterval: 30000 // Refresh every 30 seconds
   });
@@ -156,11 +154,10 @@ export default function SusanAI() {
   // Chat mutation
   const chatMutation = useMutation({
     mutationFn: async ({ message }: { message: string }) => {
-      const response = await apiRequest('/api/susan-ai/chat', {
+      return await apiRequest<any>('/api/susan-ai/chat', {
         method: 'POST',
         body: JSON.stringify({ message })
       });
-      return await response.json();
     },
     onSuccess: (data) => {
       // Check if this requires user confirmation
@@ -207,11 +204,10 @@ export default function SusanAI() {
   // Confirmation mutation - executes the confirmed action
   const confirmActionMutation = useMutation({
     mutationFn: async ({ confirmationType, confirmationData }: { confirmationType: string; confirmationData: any }) => {
-      const response = await apiRequest('/api/susan/confirm-action', {
+      return await apiRequest<any>('/api/susan/confirm-action', {
         method: 'POST',
         body: JSON.stringify({ confirmationType, confirmationData })
       });
-      return await response.json();
     },
     onSuccess: (data) => {
       setMessages(prev => [...prev, {
@@ -268,11 +264,10 @@ export default function SusanAI() {
   // Agent control mutations
   const toggleAgentMutation = useMutation({
     mutationFn: async ({ agentId, isActive }: { agentId: string; isActive: boolean }) => {
-      const response = await apiRequest(`/api/agents/${agentId}/toggle`, {
+      return await apiRequest<any>(`/api/agents/${agentId}/toggle`, {
         method: 'POST',
         body: JSON.stringify({ isActive })
       });
-      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/hr-agents'] });
@@ -281,11 +276,10 @@ export default function SusanAI() {
 
   const runAgentMutation = useMutation({
     mutationFn: async (agentId: string) => {
-      const response = await apiRequest(`/api/agents/${agentId}/run`, {
+      return await apiRequest<any>(`/api/agents/${agentId}/run`, {
         method: 'POST',
         body: JSON.stringify({})
       });
-      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/hr-agents'] });

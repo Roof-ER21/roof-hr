@@ -81,19 +81,23 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   });
 
   // Fetch interviewer availability
-  const { data: availability } = useQuery<{ available: boolean; slots: Array<{ start: string; end: string }> }>({
+  const { data: availability } = useQuery<Array<{ dayOfWeek: number; startTime: string; endTime: string }>>({
     queryKey: [`/api/interview-availability/${selectedInterviewer}`],
     enabled: !!selectedInterviewer && isOpen,
   });
 
   // Check for conflicts when date/time/interviewer changes
-  const checkConflictsMutation = useMutation({
-    mutationFn: async (data: {
+  const checkConflictsMutation = useMutation<
+    { conflicts?: any[]; warnings?: string[]; suggestedTimes?: string[] },
+    Error,
+    {
       candidateId: string;
       interviewerId: string;
       scheduledDate: string;
       duration: number;
-    }) => {
+    }
+  >({
+    mutationFn: async (data) => {
       return await apiRequest('/api/interviews/check-conflicts', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -103,7 +107,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       setConflicts(data.conflicts || []);
       setWarnings(data.warnings || []);
       setSuggestedTimes(data.suggestedTimes?.map((t: string) => new Date(t)) || []);
-      
+
       // If there are hard conflicts, show override option
       const hardConflicts = data.conflicts?.filter((c: any) => c.severity === 'hard') || [];
       if (hardConflicts.length > 0) {
@@ -136,13 +140,17 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     }
   }, [selectedDate, selectedTime, selectedInterviewer, duration]);
 
-  const scheduleMutation = useMutation({
+  const scheduleMutation = useMutation<
+    any,
+    any,
+    any
+  >({
     mutationFn: async (data: any) => {
-      const response = await apiRequest('/api/interviews', {
+      const response: any = await apiRequest('/api/interviews', {
         method: 'POST',
         body: JSON.stringify(data),
       });
-      
+
       // Add additional interviewers (panel members) for any interview type
       if (panelMembers.length > 0) {
         await Promise.all(panelMembers.map(memberId =>
@@ -156,7 +164,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
           })
         ));
       }
-      
+
       return response;
     },
     onSuccess: () => {
@@ -194,7 +202,10 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     },
   });
 
-  const generateMeetingLinkMutation = useMutation({
+  const generateMeetingLinkMutation = useMutation<
+    { meetingLink?: string },
+    any
+  >({
     mutationFn: () => {
       // Calculate interview datetime if date/time are selected
       let interviewDate: string | undefined;
@@ -302,27 +313,27 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   };
 
   const getAvailableTimeSlots = () => {
-    if (!selectedDate || !availability) return [];
-    
+    if (!selectedDate || !availability || !Array.isArray(availability)) return [];
+
     const dayOfWeek = selectedDate.getDay();
-    const dayAvailability = availability.filter((slot: any) => slot.dayOfWeek === dayOfWeek);
-    
+    const dayAvailability = availability.filter(slot => slot.dayOfWeek === dayOfWeek);
+
     const timeSlots = [];
     for (const slot of dayAvailability) {
       const [startHour, startMin] = slot.startTime.split(':').map(Number);
       const [endHour, endMin] = slot.endTime.split(':').map(Number);
-      
+
       for (let hour = startHour; hour < endHour; hour++) {
         for (let min = 0; min < 60; min += 30) {
           if (hour === startHour && min < startMin) continue;
           if (hour === endHour - 1 && min + 30 > endMin) continue;
-          
+
           const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
           timeSlots.push(time);
         }
       }
     }
-    
+
     return timeSlots;
   };
 

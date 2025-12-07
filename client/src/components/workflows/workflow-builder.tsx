@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import type { Workflow, WorkflowStep } from '@/../../shared/schema';
 
 const stepTypeIcons = {
   ACTION: <Zap className="h-4 w-4" />,
@@ -57,13 +58,13 @@ export function WorkflowBuilder() {
   });
 
   // Fetch workflows
-  const { data: workflows = [], isLoading } = useQuery({
+  const { data: workflows = [], isLoading } = useQuery<Workflow[]>({
     queryKey: ['/api/workflows'],
   });
 
   // Fetch workflow steps
-  const { data: workflowSteps = [] } = useQuery({
-    queryKey: selectedWorkflow ? [`/api/workflows/${selectedWorkflow.id}/steps`] : null,
+  const { data: workflowSteps = [] } = useQuery<WorkflowStep[]>({
+    queryKey: selectedWorkflow ? [`/api/workflows/${selectedWorkflow.id}/steps`] : ['/api/workflows/steps-disabled'],
     enabled: !!selectedWorkflow,
   });
 
