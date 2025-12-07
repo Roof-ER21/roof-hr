@@ -113,8 +113,14 @@ export class AttendanceManager {
   async searchAttendee(name: string) {
     try {
       // Search for an attendee across all sessions
-      const allCheckIns = await storage.getAllAttendanceCheckIns();
-      const matches = allCheckIns.filter(checkIn => 
+      // Get all sessions first, then get all check-ins
+      const allSessions = await storage.getAllAttendanceSessions();
+      const allCheckInsArrays = await Promise.all(
+        allSessions.map(session => storage.getCheckInsBySessionId(session.id))
+      );
+      const allCheckIns = allCheckInsArrays.flat();
+
+      const matches = allCheckIns.filter((checkIn: AttendanceCheckIn) =>
         checkIn.name.toLowerCase().includes(name.toLowerCase())
       );
 
@@ -124,7 +130,7 @@ export class AttendanceManager {
 
       // Get session details for each check-in
       const attendanceHistory = await Promise.all(
-        matches.map(async (checkIn) => {
+        matches.map(async (checkIn: AttendanceCheckIn) => {
           const session = await storage.getAttendanceSessionById(checkIn.sessionId);
           return {
             sessionName: session?.name || 'Unknown Session',
@@ -217,7 +223,11 @@ export class AttendanceManager {
   async analyzeAttendancePatterns() {
     try {
       const sessions = await storage.getAllAttendanceSessions();
-      const allCheckIns = await storage.getAllAttendanceCheckIns();
+      // Get all check-ins by getting them for each session
+      const allCheckInsArrays = await Promise.all(
+        sessions.map(session => storage.getCheckInsBySessionId(session.id))
+      );
+      const allCheckIns = allCheckInsArrays.flat();
 
       // Analyze patterns
       const patterns = {

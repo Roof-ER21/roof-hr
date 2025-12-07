@@ -100,9 +100,9 @@ export default function Contracts() {
     }
   });
 
-  const { data: templates = [], isLoading: templatesLoading } = useQuery<ContractTemplate[]>({
+  const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['/api/contract-templates'],
-    queryFn: async () => {
+    queryFn: async (): Promise<ContractTemplate[]> => {
       const response = await fetch('/api/contract-templates', {
         credentials: 'include'
       });
@@ -115,20 +115,56 @@ export default function Contracts() {
     }
   });
 
-  const { data: contracts = [], isLoading: contractsLoading } = useQuery<EmployeeContract[]>({
+  const { data: contracts = [], isLoading: contractsLoading } = useQuery({
     queryKey: ['/api/employee-contracts'],
+    queryFn: async (): Promise<EmployeeContract[]> => {
+      const response = await fetch('/api/employee-contracts', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch contracts');
+      }
+      return response.json();
+    }
   });
 
-  const { data: users = [] } = useQuery<User[]>({
+  const { data: users = [] } = useQuery({
     queryKey: ['/api/users'],
+    queryFn: async (): Promise<User[]> => {
+      const response = await fetch('/api/users', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+      return response.json();
+    }
   });
 
-  const { data: candidates = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; email: string }>>({
+  const { data: candidates = [] } = useQuery({
     queryKey: ['/api/candidates'],
+    queryFn: async (): Promise<Array<{ id: string; firstName: string; lastName: string; email: string; status: string; position: string }>> => {
+      const response = await fetch('/api/candidates', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch candidates');
+      }
+      return response.json();
+    }
   });
 
-  const { data: territories = [] } = useQuery<Array<{ id: string; name: string; code: string }>>({
+  const { data: territories = [] } = useQuery({
     queryKey: ['/api/territories'],
+    queryFn: async (): Promise<Array<{ id: string; name: string; code: string }>> => {
+      const response = await fetch('/api/territories', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch territories');
+      }
+      return response.json();
+    }
   });
 
   const createTemplateMutation = useMutation({
@@ -1022,7 +1058,7 @@ export default function Contracts() {
                                 onClick={() => {
                                   // Pre-fill form with template data for editing
                                   templateForm.setValue('name', template.name);
-                                  templateForm.setValue('type', template.type as any);
+                                  templateForm.setValue('type', template.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER' | 'RETAIL');
                                   templateForm.setValue('territory', template.territory || '');
                                   templateForm.setValue('content', template.content);
                                   templateForm.setValue('variables', template.variables || []);

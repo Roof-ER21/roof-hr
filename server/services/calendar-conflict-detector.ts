@@ -123,7 +123,7 @@ export class CalendarConflictDetector {
       if (!user) return conflicts;
 
       // Get approved PTO requests for this user
-      const ptoRequests = await this.storage.getPTORequestsByUserId(user.id);
+      const ptoRequests = await this.storage.getPtoRequestsByEmployee(user.id);
       
       for (const pto of ptoRequests) {
         if (pto.status !== 'APPROVED') continue;
@@ -170,16 +170,16 @@ export class CalendarConflictDetector {
 
       // Get interviews where this user is an interviewer
       const allInterviews = await this.storage.getAllInterviews();
-      const userInterviews = allInterviews.filter(interview => 
-        interview.interviewerIds?.includes(user.id) &&
+      const userInterviews = allInterviews.filter(interview =>
+        interview.interviewerId === user.id &&
         interview.status === 'SCHEDULED' &&
         interview.id !== excludeEventId
       );
 
       for (const interview of userInterviews) {
-        if (!interview.scheduledAt) continue;
+        if (!interview.scheduledDate) continue;
 
-        const interviewStart = parseISO(interview.scheduledAt);
+        const interviewStart = new Date(interview.scheduledDate);
         const interviewEnd = addMinutes(interviewStart, interview.duration || 60);
 
         // Check if times overlap

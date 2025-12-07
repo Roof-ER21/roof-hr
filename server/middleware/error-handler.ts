@@ -86,41 +86,46 @@ export function errorHandler(error: Error, req: Request, res: Response, next: Ne
   // Handle different error types
   if (error instanceof ZodError) {
     const validationError = handleZodError(error);
-    return res.status(validationError.statusCode).json({
+    res.status(validationError.statusCode).json({
       error: validationError.message,
       code: validationError.code,
       details: validationError.details
     });
+    return;
   }
 
   if (error instanceof AppErrorClass) {
-    return res.status(error.statusCode).json({
+    res.status(error.statusCode).json({
       error: error.message,
       code: error.code
     });
+    return;
   }
 
   // Handle database errors
   if (error.message.includes('duplicate key') || error.message.includes('unique constraint')) {
-    return res.status(409).json({
+    res.status(409).json({
       error: 'Resource already exists',
       code: 'DUPLICATE_RESOURCE'
     });
+    return;
   }
 
   if (error.message.includes('foreign key constraint')) {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Invalid reference to related resource',
       code: 'FOREIGN_KEY_ERROR'
     });
+    return;
   }
 
   // Handle connection errors
   if (error.message.includes('ECONNREFUSED') || error.message.includes('connection')) {
-    return res.status(503).json({
+    res.status(503).json({
       error: 'Service temporarily unavailable',
       code: 'SERVICE_UNAVAILABLE'
     });
+    return;
   }
 
   // Default error response
