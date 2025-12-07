@@ -307,30 +307,20 @@ export interface IStorage {
 
   // Department PTO Settings Management - NEW
   getDepartmentPtoSettings(): Promise<DepartmentPtoSetting[]>;
+  getAllDepartmentPtoSettings(): Promise<DepartmentPtoSetting[]>;
   getDepartmentPtoSettingByDepartment(department: string): Promise<DepartmentPtoSetting | null>;
   createDepartmentPtoSetting(data: InsertDepartmentPtoSetting): Promise<DepartmentPtoSetting>;
   updateDepartmentPtoSetting(id: string, data: Partial<InsertDepartmentPtoSetting>): Promise<DepartmentPtoSetting>;
   deleteDepartmentPtoSetting(id: string): Promise<void>;
 
   // Individual PTO Policy Management - NEW
-  getPtoPolicyByEmployee(employeeId: string): Promise<PtoPolicy | null>;
-  getAllPtoPolicies(): Promise<PtoPolicy[]>;
   createPtoPolicy(data: InsertPtoPolicy): Promise<PtoPolicy>;
+  getPtoPolicyByEmployee(employeeId: string): Promise<PtoPolicy | null>;
+  getPtoPolicyByEmployeeId(employeeId: string): Promise<PtoPolicy | null>;
+  getAllPtoPolicies(): Promise<PtoPolicy[]>;
   updatePtoPolicy(id: string, data: Partial<InsertPtoPolicy>): Promise<PtoPolicy>;
   deletePtoPolicy(id: string): Promise<void>;
   getTerritoryBySalesManager(managerId: string): Promise<Territory | null>;
-  
-  // PTO Policy Management - NEW
-  createPtoPolicy(data: InsertPtoPolicy): Promise<PtoPolicy>;
-  getPtoPolicyByEmployeeId(employeeId: string): Promise<PtoPolicy | null>;
-  getAllPtoPolicies(): Promise<PtoPolicy[]>;
-  updatePtoPolicy(employeeId: string, data: Partial<InsertPtoPolicy>): Promise<PtoPolicy>;
-  
-  // Department PTO Settings - NEW
-  createDepartmentPtoSetting(data: InsertDepartmentPtoSetting): Promise<DepartmentPtoSetting>;
-  getDepartmentPtoSettingByDepartment(department: string): Promise<DepartmentPtoSetting | null>;
-  getAllDepartmentPtoSettings(): Promise<DepartmentPtoSetting[]>;
-  updateDepartmentPtoSetting(department: string, data: Partial<InsertDepartmentPtoSetting>): Promise<DepartmentPtoSetting>;
   
   // COI Document Management - NEW
   createCoiDocument(data: InsertCoiDocument): Promise<CoiDocument>;
@@ -710,7 +700,7 @@ class DrizzleStorage implements IStorage {
   // Interview Feedback methods
   async createInterviewFeedback(data: InsertInterviewFeedback): Promise<InterviewFeedback> {
     const id = uuidv4();
-    const [feedback] = await db.insert(interviewFeedback).values({ id, ...data }).returning();
+    const [feedback] = await db.insert(interviewFeedback).values({ ...data, id } as any).returning();
     return feedback;
   }
 
@@ -721,7 +711,7 @@ class DrizzleStorage implements IStorage {
   // Interview Reminder methods
   async createInterviewReminder(data: InsertInterviewReminder): Promise<InterviewReminder> {
     const id = uuidv4();
-    const [reminder] = await db.insert(interviewReminders).values({ id, ...data }).returning();
+    const [reminder] = await db.insert(interviewReminders).values({ ...data, id } as any).returning();
     return reminder;
   }
 
@@ -752,11 +742,6 @@ class DrizzleStorage implements IStorage {
 
   async getDocumentById(id: string): Promise<Document | null> {
     const [document] = await db.select().from(documents).where(eq(documents.id, id));
-    return document || null;
-  }
-
-  async getDocumentByDriveId(driveFileId: string): Promise<Document | null> {
-    const [document] = await db.select().from(documents).where(eq(documents.driveFileId, driveFileId));
     return document || null;
   }
 
@@ -928,7 +913,7 @@ class DrizzleStorage implements IStorage {
   // HR Agent Management methods
   async createHrAgentConfig(data: InsertHrAgentConfig): Promise<HrAgentConfig> {
     const id = uuidv4();
-    const [config] = await db.insert(hrAgentConfigs).values({ ...data, id }).returning();
+    const [config] = await db.insert(hrAgentConfigs).values({ ...data, id } as any).returning();
     return config;
   }
 
@@ -942,14 +927,14 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateHrAgentConfig(id: string, data: Partial<InsertHrAgentConfig>): Promise<HrAgentConfig> {
-    const [config] = await db.update(hrAgentConfigs).set(data).where(eq(hrAgentConfigs.id, id)).returning();
+    const [config] = await db.update(hrAgentConfigs).set(data as any).where(eq(hrAgentConfigs.id, id)).returning();
     return config;
   }
 
   // HR Agent Logs methods
   async createHrAgentLog(data: InsertHrAgentLog): Promise<HrAgentLog> {
     const id = uuidv4();
-    const [log] = await db.insert(hrAgentLogs).values({ ...data, id }).returning();
+    const [log] = await db.insert(hrAgentLogs).values({ ...data, id } as any).returning();
     return log;
   }
 
@@ -971,7 +956,7 @@ class DrizzleStorage implements IStorage {
   // Job Posting methods
   async createJobPosting(data: InsertJobPosting): Promise<JobPosting> {
     const id = uuidv4();
-    const [posting] = await db.insert(jobPostings).values({ ...data, id }).returning();
+    const [posting] = await db.insert(jobPostings).values({ ...data, id } as any).returning();
     return posting;
   }
 
@@ -985,7 +970,7 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateJobPosting(id: string, data: Partial<InsertJobPosting>): Promise<JobPosting> {
-    const [posting] = await db.update(jobPostings).set(data).where(eq(jobPostings.id, id)).returning();
+    const [posting] = await db.update(jobPostings).set(data as any).where(eq(jobPostings.id, id)).returning();
     return posting;
   }
 
@@ -996,7 +981,7 @@ class DrizzleStorage implements IStorage {
   // Candidate Source methods
   async createCandidateSource(data: InsertCandidateSource): Promise<CandidateSource> {
     const id = uuidv4();
-    const [source] = await db.insert(candidateSources).values({ ...data, id }).returning();
+    const [source] = await db.insert(candidateSources).values({ ...data, id } as any).returning();
     return source;
   }
 
@@ -1011,7 +996,7 @@ class DrizzleStorage implements IStorage {
   // Job Import Log methods
   async createJobImportLog(data: InsertJobImportLog): Promise<JobImportLog> {
     const id = uuidv4();
-    const [log] = await db.insert(jobImportLogs).values({ ...data, id }).returning();
+    const [log] = await db.insert(jobImportLogs).values({ ...data, id } as any).returning();
     return log;
   }
 
@@ -1053,7 +1038,7 @@ class DrizzleStorage implements IStorage {
   // Interview Panel Members methods
   async createInterviewPanelMember(data: InsertInterviewPanelMember): Promise<InterviewPanelMember> {
     const id = uuidv4();
-    const [member] = await db.insert(interviewPanelMembers).values({ ...data, id }).returning();
+    const [member] = await db.insert(interviewPanelMembers).values({ ...data, id } as any).returning();
     return member;
   }
 
@@ -1065,7 +1050,7 @@ class DrizzleStorage implements IStorage {
 
   async updateInterviewPanelMember(id: string, data: Partial<InsertInterviewPanelMember>): Promise<InterviewPanelMember> {
     const [member] = await db.update(interviewPanelMembers)
-      .set(data)
+      .set(data as any)
       .where(eq(interviewPanelMembers.id, id))
       .returning();
     return member;
@@ -1078,7 +1063,7 @@ class DrizzleStorage implements IStorage {
   // Phase 3: Email Campaign Management
   async createEmailCampaign(data: InsertEmailCampaign): Promise<EmailCampaign> {
     const id = uuidv4();
-    const [campaign] = await db.insert(emailCampaigns).values({ ...data, id }).returning();
+    const [campaign] = await db.insert(emailCampaigns).values({ ...data, id } as any).returning();
     return campaign;
   }
 
@@ -1092,7 +1077,7 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateEmailCampaign(id: string, data: Partial<InsertEmailCampaign>): Promise<EmailCampaign> {
-    const [campaign] = await db.update(emailCampaigns).set(data).where(eq(emailCampaigns.id, id)).returning();
+    const [campaign] = await db.update(emailCampaigns).set(data as any).where(eq(emailCampaigns.id, id)).returning();
     return campaign;
   }
 
@@ -1103,7 +1088,7 @@ class DrizzleStorage implements IStorage {
   // Campaign Steps
   async createCampaignStep(data: InsertCampaignStep): Promise<CampaignStep> {
     const id = uuidv4();
-    const [step] = await db.insert(campaignSteps).values({ ...data, id }).returning();
+    const [step] = await db.insert(campaignSteps).values({ ...data, id } as any).returning();
     return step;
   }
 
@@ -1112,7 +1097,7 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateCampaignStep(id: string, data: Partial<InsertCampaignStep>): Promise<CampaignStep> {
-    const [step] = await db.update(campaignSteps).set(data).where(eq(campaignSteps.id, id)).returning();
+    const [step] = await db.update(campaignSteps).set(data as any).where(eq(campaignSteps.id, id)).returning();
     return step;
   }
 
@@ -1123,7 +1108,7 @@ class DrizzleStorage implements IStorage {
   // Campaign Recipients
   async createCampaignRecipient(data: InsertCampaignRecipient): Promise<CampaignRecipient> {
     const id = uuidv4();
-    const [recipient] = await db.insert(campaignRecipients).values({ ...data, id }).returning();
+    const [recipient] = await db.insert(campaignRecipients).values({ ...data, id } as any).returning();
     return recipient;
   }
 
@@ -1132,14 +1117,14 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateCampaignRecipient(id: string, data: Partial<InsertCampaignRecipient>): Promise<CampaignRecipient> {
-    const [recipient] = await db.update(campaignRecipients).set(data).where(eq(campaignRecipients.id, id)).returning();
+    const [recipient] = await db.update(campaignRecipients).set(data as any).where(eq(campaignRecipients.id, id)).returning();
     return recipient;
   }
 
   // Email Tracking
   async createEmailTracking(data: InsertEmailTracking): Promise<EmailTracking> {
     const id = uuidv4();
-    const [tracking] = await db.insert(emailTracking).values({ ...data, id }).returning();
+    const [tracking] = await db.insert(emailTracking).values({ ...data, id } as any).returning();
     return tracking;
   }
 
@@ -1149,14 +1134,14 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateEmailTracking(id: string, data: Partial<InsertEmailTracking>): Promise<EmailTracking> {
-    const [tracking] = await db.update(emailTracking).set(data).where(eq(emailTracking.id, id)).returning();
+    const [tracking] = await db.update(emailTracking).set(data as any).where(eq(emailTracking.id, id)).returning();
     return tracking;
   }
 
   // SMS Messages
   async createSmsMessage(data: InsertSmsMessage): Promise<SmsMessage> {
     const id = uuidv4();
-    const [message] = await db.insert(smsMessages).values({ ...data, id }).returning();
+    const [message] = await db.insert(smsMessages).values({ ...data, id } as any).returning();
     return message;
   }
 
@@ -1170,14 +1155,14 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateSmsMessage(id: string, data: Partial<InsertSmsMessage>): Promise<SmsMessage> {
-    const [message] = await db.update(smsMessages).set(data).where(eq(smsMessages.id, id)).returning();
+    const [message] = await db.update(smsMessages).set(data as any).where(eq(smsMessages.id, id)).returning();
     return message;
   }
 
   // Communication Preferences
   async createCommunicationPreference(data: InsertCommunicationPreference): Promise<CommunicationPreference> {
     const id = uuidv4();
-    const [pref] = await db.insert(communicationPreferences).values({ ...data, id }).returning();
+    const [pref] = await db.insert(communicationPreferences).values({ ...data, id } as any).returning();
     return pref;
   }
 
@@ -1191,14 +1176,14 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateCommunicationPreference(id: string, data: Partial<InsertCommunicationPreference>): Promise<CommunicationPreference> {
-    const [pref] = await db.update(communicationPreferences).set(data).where(eq(communicationPreferences.id, id)).returning();
+    const [pref] = await db.update(communicationPreferences).set(data as any).where(eq(communicationPreferences.id, id)).returning();
     return pref;
   }
 
   // AI Email Generations
   async createAiEmailGeneration(data: InsertAiEmailGeneration): Promise<AiEmailGeneration> {
     const id = uuidv4();
-    const [generation] = await db.insert(aiEmailGenerations).values({ ...data, id }).returning();
+    const [generation] = await db.insert(aiEmailGenerations).values({ ...data, id } as any).returning();
     return generation;
   }
 
@@ -1207,7 +1192,7 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateAiEmailGeneration(id: string, data: Partial<InsertAiEmailGeneration>): Promise<AiEmailGeneration> {
-    const [generation] = await db.update(aiEmailGenerations).set(data).where(eq(aiEmailGenerations.id, id)).returning();
+    const [generation] = await db.update(aiEmailGenerations).set(data as any).where(eq(aiEmailGenerations.id, id)).returning();
     return generation;
   }
 
@@ -1216,6 +1201,11 @@ class DrizzleStorage implements IStorage {
     const id = uuidv4();
     const [execution] = await db.insert(workflowExecutions).values({ ...data, id }).returning();
     return execution;
+  }
+
+  async getWorkflowExecutionById(id: string): Promise<any | null> {
+    const [execution] = await db.select().from(workflowExecutions).where(eq(workflowExecutions.id, id));
+    return execution || null;
   }
 
   async getWorkflowExecutions(workflowId: string): Promise<any[]> {
@@ -1238,8 +1228,10 @@ class DrizzleStorage implements IStorage {
 
   async getActiveWorkflowsByType(type: string): Promise<any[]> {
     return await db.select().from(workflows)
-      .where(eq(workflows.type, type))
-      .where(eq(workflows.status, 'ACTIVE'));
+      .where(and(
+        eq(workflows.type, type as any),
+        eq(workflows.status, 'ACTIVE' as any)
+      ));
   }
 
   async updateWorkflowExecutionCount(id: string): Promise<void> {
@@ -1257,7 +1249,7 @@ class DrizzleStorage implements IStorage {
 
   async updateWorkflowStatus(id: string, status: string): Promise<any> {
     const [workflow] = await db.update(workflows)
-      .set({ status, updatedAt: new Date().toISOString() })
+      .set({ status: status as any, updatedAt: new Date() })
       .where(eq(workflows.id, id))
       .returning();
     return workflow;
@@ -1291,13 +1283,13 @@ class DrizzleStorage implements IStorage {
   // Phase 5: AI Enhancement Implementation Methods
   async createAiModelPerformance(data: any): Promise<AiModelPerformance> {
     const id = uuidv4();
-    const [performance] = await db.insert(aiModelPerformance).values({ ...data, id }).returning();
+    const [performance] = await db.insert(aiModelPerformance).values({ ...data, id } as any).returning();
     return performance;
   }
 
   async getAiModelPerformance(metricType: string): Promise<AiModelPerformance[]> {
     return await db.select().from(aiModelPerformance)
-      .where(eq(aiModelPerformance.metricType, metricType));
+      .where(eq(aiModelPerformance.metricType, metricType as any));
   }
 
   async createSalaryBenchmark(data: any): Promise<SalaryBenchmark> {
@@ -1334,14 +1326,16 @@ class DrizzleStorage implements IStorage {
   }
 
   async getInterviewQuestionsByPosition(position: string, category?: string): Promise<InterviewQuestionBank[]> {
-    let query = db.select().from(interviewQuestionBank)
-      .where(eq(interviewQuestionBank.position, position));
-    
     if (category) {
-      query = query.where(eq(interviewQuestionBank.category, category));
+      return await db.select().from(interviewQuestionBank)
+        .where(and(
+          eq(interviewQuestionBank.position, position),
+          eq(interviewQuestionBank.category, category as any)
+        ));
     }
-    
-    return await query;
+
+    return await db.select().from(interviewQuestionBank)
+      .where(eq(interviewQuestionBank.position, position));
   }
 
   async updateInterviewQuestionUsage(id: string): Promise<void> {
@@ -1894,13 +1888,13 @@ class DrizzleStorage implements IStorage {
         and(
           eq(ptoRequests.employeeId, employeeId),
           eq(ptoRequests.status, 'APPROVED'),
-          gte(ptoRequests.startDate, startOfYear),
-          lte(ptoRequests.endDate, endOfYear)
+          gte(ptoRequests.startDate, startOfYear.toISOString()),
+          lte(ptoRequests.endDate, endOfYear.toISOString())
         )
       );
 
     const usedDays = approvedRequests.reduce((total, request) => total + (request.days || 0), 0);
-    const totalAllowance = policy.allowanceDays || 0;
+    const totalAllowance = policy.totalDays || 0;
     const available = Math.max(0, totalAllowance - usedDays);
 
     return { available, used: usedDays, total: totalAllowance };
@@ -1911,7 +1905,7 @@ class DrizzleStorage implements IStorage {
       employeeId,
       status: 'PENDING',
       ...requestData
-    } as InsertPtoRequest);
+    } as InsertPtoRequest & { employeeId: string });
   }
   
   // Google Sync Helper Methods
@@ -1980,7 +1974,7 @@ class DrizzleStorage implements IStorage {
   
   async createTool(data: Partial<ToolInventory>): Promise<ToolInventory> {
     const id = uuidv4();
-    const [tool] = await db.insert(toolInventory).values({ ...data, id }).returning();
+    const [tool] = await db.insert(toolInventory).values({ ...data, id } as any).returning();
     return tool;
   }
   
@@ -2098,13 +2092,13 @@ class DrizzleStorage implements IStorage {
         if (
           employee.firstName?.toLowerCase().includes(searchTerm) ||
           employee.lastName?.toLowerCase().includes(searchTerm) ||
-          pto.type?.toLowerCase().includes(searchTerm)
+          pto.reason?.toLowerCase().includes(searchTerm)
         ) {
           results.push({
             id: pto.id,
             type: 'pto',
             title: `PTO Request - ${employee.firstName} ${employee.lastName}`,
-            subtitle: `${pto.type} - ${pto.status}`,
+            subtitle: `${pto.reason} - ${pto.status}`,
             link: `/pto`
           });
         }
@@ -2259,7 +2253,7 @@ class DrizzleStorage implements IStorage {
   // Equipment Checklist Management Methods
   async createEquipmentChecklist(data: InsertEquipmentChecklist): Promise<any> {
     const id = uuidv4();
-    const [checklist] = await db.insert(equipmentChecklists).values({ ...data, id }).returning();
+    const [checklist] = await db.insert(equipmentChecklists).values({ ...data, id } as any).returning();
     return checklist;
   }
 
@@ -2285,8 +2279,9 @@ class DrizzleStorage implements IStorage {
   }
 
   async updateEquipmentChecklist(id: string, data: Partial<InsertEquipmentChecklist>): Promise<any> {
+    const updateData = { ...data, updatedAt: new Date() };
     const [checklist] = await db.update(equipmentChecklists)
-      .set({ ...data, updatedAt: new Date() })
+      .set(updateData as any)
       .where(eq(equipmentChecklists.id, id))
       .returning();
     return checklist;

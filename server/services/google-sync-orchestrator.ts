@@ -113,9 +113,9 @@ class GoogleSyncOrchestrator extends EventEmitter {
       ];
       
       for (const subfolder of subfolders) {
-        const existing = await driveService.findFolderByName(subfolder, this.hrFolderId);
+        const existing = await driveService.findFolderByName(subfolder, this.hrFolderId || undefined);
         if (!existing) {
-          await driveService.createFolder(subfolder, this.hrFolderId);
+          await driveService.createFolder(subfolder, this.hrFolderId || undefined);
           console.log(`[Google Sync] Created subfolder: ${subfolder}`);
         }
       }
@@ -128,7 +128,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
   }
 
   private async startAllSyncTasks() {
-    for (const [name, config] of this.syncConfigs.entries()) {
+    for (const [name, config] of Array.from(this.syncConfigs.entries())) {
       if (config.enabled) {
         this.startSyncTask(name, config);
       }
@@ -339,17 +339,17 @@ class GoogleSyncOrchestrator extends EventEmitter {
       try {
         await calendarService.getEvent(calendarId, eventId);
         // Event exists, update it
-        await calendarService.updateEvent(calendarId, eventId, {
-          summary: `${employee.firstName} ${employee.lastName} - ${request.type} Leave`,
+        await calendarService.updateEventWithId(calendarId, eventId, {
+          summary: `${employee.firstName} ${employee.lastName} - Leave`,
           description: request.reason || 'PTO Request',
           start: { date: request.startDate },
           end: { date: request.endDate },
         });
       } catch (error) {
         // Event doesn't exist, create it
-        await calendarService.createEvent(calendarId, {
+        await calendarService.createEventWithId(calendarId, {
           id: eventId,
-          summary: `${employee.firstName} ${employee.lastName} - ${request.type} Leave`,
+          summary: `${employee.firstName} ${employee.lastName} - Leave`,
           description: request.reason || 'PTO Request',
           start: { date: request.startDate },
           end: { date: request.endDate },
@@ -380,19 +380,19 @@ class GoogleSyncOrchestrator extends EventEmitter {
       const eventData = {
         summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ${candidate.position}`,
         description: `Interview Type: ${interview.type}\nNotes: ${interview.notes || 'N/A'}`,
-        start: { dateTime: interview.scheduledAt },
-        end: { dateTime: new Date(new Date(interview.scheduledAt).getTime() + 60 * 60 * 1000).toISOString() },
-        attendees: interview.interviewerIds ? 
-          await this.getAttendeeEmails(interview.interviewerIds) : []
+        start: { dateTime: interview.scheduledDate.toISOString() },
+        end: { dateTime: new Date(interview.scheduledDate.getTime() + 60 * 60 * 1000).toISOString() },
+        attendees: interview.interviewerId ?
+          await this.getAttendeeEmails([interview.interviewerId]) : []
       };
-      
+
       try {
         await calendarService.getEvent(calendarId, eventId);
         // Update existing event
-        await calendarService.updateEvent(calendarId, eventId, eventData);
+        await calendarService.updateEventWithId(calendarId, eventId, eventData);
       } catch (error) {
         // Create new event
-        await calendarService.createEvent(calendarId, {
+        await calendarService.createEventWithId(calendarId, {
           id: eventId,
           ...eventData
         });
@@ -406,9 +406,9 @@ class GoogleSyncOrchestrator extends EventEmitter {
     const driveService = googleServicesManager.getDriveService();
     
     // Get COI folder
-    const coiFolders = await driveService.searchFolders('COI Documents', this.hrFolderId);
+    const coiFolders = await driveService.searchFolders('COI Documents', this.hrFolderId || undefined);
     if (!coiFolders || coiFolders.length === 0) return;
-    
+
     const coiFolderId = coiFolders[0].id;
     
     // List all COI documents
@@ -488,9 +488,9 @@ class GoogleSyncOrchestrator extends EventEmitter {
     
     // List all calendars
     const calendars = await calendarService.listCalendars();
-    
+
     // Find existing calendar
-    const existing = calendars.find(cal => cal.summary === name);
+    const existing = calendars.find((cal: any) => cal.summary === name);
     if (existing) {
       return existing.id;
     }
@@ -538,13 +538,13 @@ class GoogleSyncOrchestrator extends EventEmitter {
       await gmailService.sendEmail({
         to: recipients.join(','),
         subject: `COI Document Expiring - ${employee.firstName} ${employee.lastName}`,
-        body: `
+        text: `
           The COI document for ${employee.firstName} ${employee.lastName} has expired or is expiring soon.
-          
+
           Document Type: ${doc.type}
           Employee: ${employee.firstName} ${employee.lastName}
           Expiration Date: ${doc.expirationDate}
-          
+
           Please ensure the employee provides updated documentation.
         `
       });
@@ -557,7 +557,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
 
   async forceSyncAll() {
     console.log('[Google Sync] Forcing sync of all services...');
-    for (const name of this.syncConfigs.keys()) {
+    for (const name of Array.from(this.syncConfigs.keys())) {
       await this.executeSyncTask(name);
     }
   }
@@ -569,7 +569,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
   }
 
   stopAllSyncTasks() {
-    for (const [name, task] of this.syncTasks.entries()) {
+    for (const [name, task] of Array.from(this.syncTasks.entries())) {
       task.stop();
       console.log(`[Google Sync] Stopped sync task: ${name}`);
     }

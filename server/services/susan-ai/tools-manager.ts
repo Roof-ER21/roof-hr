@@ -43,7 +43,8 @@ export class SusanToolsManager {
       await db.insert(tools).values({
         id: toolId,
         name: data.name,
-        category: data.category,
+        category: data.category as any,
+        description: '',
         serialNumber: data.serialNumber || `SN-${Date.now()}`,
         model: data.model || '',
         quantity: data.quantity,
@@ -54,8 +55,7 @@ export class SusanToolsManager {
         purchasePrice: data.purchasePrice || 0,
         notes: data.notes || '',
         isActive: true,
-        createdBy: 'susan-ai',
-        createdAt: new Date()
+        createdBy: 'susan-ai'
       });
 
       console.log(`[SUSAN-TOOLS] Added tool: ${data.name} (${toolId})`);
@@ -78,6 +78,7 @@ export class SusanToolsManager {
       location: string;
       notes: string;
       isActive: boolean;
+      availableQuantity: number;
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
@@ -87,7 +88,7 @@ export class SusanToolsManager {
           .from(tools)
           .where(eq(tools.id, toolId))
           .limit(1);
-        
+
         if (tool) {
           const assigned = tool.quantity - tool.availableQuantity;
           updates.availableQuantity = Math.max(0, updates.quantity - assigned);
@@ -95,7 +96,7 @@ export class SusanToolsManager {
       }
 
       await db.update(tools)
-        .set(updates)
+        .set(updates as any)
         .where(eq(tools.id, toolId));
 
       console.log(`[SUSAN-TOOLS] Updated tool ${toolId}`);
@@ -166,12 +167,14 @@ export class SusanToolsManager {
         return { success: false, error: 'Assignment not found or already returned' };
       }
 
-      // Update assignment
+      // Update assignment - map DAMAGED to POOR as it's not a valid condition in schema
+      const mappedCondition = condition === 'DAMAGED' ? 'POOR' : (condition || 'GOOD');
+
       await db.update(toolAssignments)
         .set({
-          returnedAt: new Date(),
+          returnDate: new Date(),
           status: 'RETURNED',
-          returnCondition: condition || 'GOOD',
+          condition: mappedCondition,
           notes: sql`${toolAssignments.notes} || E'\\n[RETURNED] ${notes || 'No issues'}'`
         })
         .where(eq(toolAssignments.id, assignmentId));
@@ -183,9 +186,10 @@ export class SusanToolsManager {
         .limit(1);
 
       if (tool) {
+        // Note: toolAssignments doesn't have quantity field, using 1 as default
         await db.update(tools)
           .set({
-            availableQuantity: tool.availableQuantity + assignment.quantity,
+            availableQuantity: tool.availableQuantity + 1,
             condition: condition === 'DAMAGED' ? 'POOR' : tool.condition
           })
           .where(eq(tools.id, assignment.toolId));
@@ -294,13 +298,16 @@ export class SusanToolsManager {
     condition: 'POOR' | 'DAMAGED'
   ): Promise<{ success: boolean; retiredCount?: number; error?: string }> {
     try {
+      // DAMAGED is not a valid condition in the schema, map to POOR
+      const targetCondition = condition === 'DAMAGED' ? 'POOR' : condition;
+
       const result = await db.update(tools)
         .set({
           isActive: false,
           notes: sql`${tools.notes} || E'\\n[RETIRED] Due to ${condition} condition'`
         })
         .where(and(
-          eq(tools.condition, condition),
+          eq(tools.condition, targetCondition),
           eq(tools.isActive, true)
         ));
 
@@ -328,7 +335,7 @@ export class SusanToolsManager {
         totalQuantity: allTools.reduce((sum, t) => sum + t.quantity, 0),
         availableQuantity: allTools.reduce((sum, t) => sum + t.availableQuantity, 0),
         assignedQuantity: allTools.reduce((sum, t) => sum + (t.quantity - t.availableQuantity), 0),
-        byCategory: {},
+        byCategory: {} as Record<string, { count: number; quantity: number }>,
         byCondition: {
           new: allTools.filter(t => t.condition === 'NEW').length,
           good: allTools.filter(t => t.condition === 'GOOD').length,
@@ -372,17 +379,19 @@ export class SusanToolsManager {
 
       if (!employee || !employee.email) return;
 
-      const subject = type === 'assigned' ? 
-        `Tool Assigned: ${toolName}` : 
+      const subject = type === 'assigned' ?
+        `Tool Assigned: ${toolName}` :
         `Reminder: Please Return ${toolName}`;
 
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
+
       const html = type === 'assigned' ? `
-        <p>Dear ${employee.name},</p>
+        <p>Dear ${employeeName},</p>
         <p>You have been assigned the following tool: ${toolName}</p>
         <p>Please take good care of it and return it when no longer needed.</p>
         <p>Best regards,<br>Equipment Management</p>
       ` : `
-        <p>Dear ${employee.name},</p>
+        <p>Dear ${employeeName},</p>
         <p>This is a reminder to return the ${toolName} that was assigned to you.</p>
         <p>Please return it as soon as possible.</p>
         <p>Best regards,<br>Equipment Management</p>

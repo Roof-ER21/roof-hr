@@ -26,7 +26,7 @@ export class SusanPTOManager {
    * Approve PTO request with optional override
    */
   async approvePTORequest(
-    requestId: string, 
+    requestId: string,
     overrideConflicts: boolean = false,
     approverNotes?: string
   ): Promise<{ success: boolean; error?: string }> {
@@ -54,9 +54,9 @@ export class SusanPTOManager {
         );
 
         if (conflicts.length > 0) {
-          return { 
-            success: false, 
-            error: `Conflicts detected: ${conflicts.join(', ')}. Use override to approve anyway.` 
+          return {
+            success: false,
+            error: `Conflicts detected: ${conflicts.join(', ')}. Use override to approve anyway.`
           };
         }
       }
@@ -72,8 +72,8 @@ export class SusanPTOManager {
         })
         .where(eq(ptoRequests.id, requestId));
 
-      // Update PTO balance
-      await this.updatePTOBalance(request.employeeId, request.type, -request.days);
+      // Update PTO balance (no type parameter since schema doesn't have type field)
+      await this.updatePTOBalance(request.employeeId, 'VACATION', -request.days);
 
       // Send approval email
       const [employee] = await db.select()
@@ -156,8 +156,7 @@ export class SusanPTOManager {
         .from(ptoRequests)
         .where(and(
           eq(ptoRequests.employeeId, employeeId),
-          eq(ptoRequests.status, 'APPROVED'),
-          eq(ptoRequests.type, type)
+          eq(ptoRequests.status, 'APPROVED')
         ));
 
       const usedDays = approvedRequests
@@ -167,7 +166,7 @@ export class SusanPTOManager {
       // Get policy for total days available
       const [policy] = await db.select()
         .from(ptoPolicies)
-        .where(eq(ptoPolicies.level, 'COMPANY'))
+        .where(eq(ptoPolicies.policyLevel, 'COMPANY'))
         .limit(1);
 
       const totalDays = policy?.totalDays || 20; // Default to 20 if no policy
@@ -201,10 +200,10 @@ export class SusanPTOManager {
 
       const wasApproved = request.status === 'APPROVED';
 
-      // Update request status
+      // Update request status to DENIED (schema doesn't support CANCELLED)
       await db.update(ptoRequests)
         .set({
-          status: 'CANCELLED',
+          status: 'DENIED',
           reviewedBy: 'Susan AI',
           reviewedAt: new Date(),
           reviewNotes: `Cancelled: ${reason}`,
@@ -214,7 +213,7 @@ export class SusanPTOManager {
 
       // If it was approved, restore the balance
       if (wasApproved) {
-        await this.updatePTOBalance(request.employeeId, request.type, request.days);
+        await this.updatePTOBalance(request.employeeId, 'VACATION', request.days);
       }
 
       // Send cancellation email
@@ -225,7 +224,7 @@ export class SusanPTOManager {
 
       if (employee) {
         await this.emailService.initialize();
-        await this.sendPTOStatusEmail(employee, request, 'CANCELLED', reason);
+        await this.sendPTOStatusEmail(employee, request, 'DENIED', reason);
       }
 
       return { success: true };
@@ -257,12 +256,13 @@ export class SusanPTOManager {
       }
 
       if (filter.dateRange) {
-        conditions.push(
-          and(
-            gte(ptoRequests.startDate, filter.dateRange.start),
-            lte(ptoRequests.startDate, filter.dateRange.end)
-          )
+        const dateCondition = and(
+          gte(ptoRequests.startDate, filter.dateRange.start),
+          lte(ptoRequests.startDate, filter.dateRange.end)
         );
+        if (dateCondition) {
+          conditions.push(dateCondition);
+        }
       }
 
       // Get all matching requests
@@ -371,30 +371,14 @@ export class SusanPTOManager {
         .where(eq(users.id, employeeId))
         .limit(1);
 
-      if (employee?.department) {
-        const policies = await db.select()
-          .from(ptoPolicies)
-          .where(or(
-            eq(ptoPolicies.level, 'COMPANY'),
-            and(
-              eq(ptoPolicies.level, 'DEPARTMENT'),
-              eq(ptoPolicies.targetId, employee.department)
-            )
-          ));
-
-        for (const policy of policies) {
-          if (policy.blackoutDates && Array.isArray(policy.blackoutDates)) {
-            for (const blackout of policy.blackoutDates) {
-              if (
-                (startDate >= blackout.start && startDate <= blackout.end) ||
-                (endDate >= blackout.start && endDate <= blackout.end)
-              ) {
-                conflicts.push(`Blackout period: ${blackout.reason || 'Company policy'}`);
-              }
-            }
-          }
-        }
-      }
+      // Note: Blackout dates feature is not in current schema
+      // This section is commented out as ptoPolicies doesn't have level, targetId, or blackoutDates fields
+      // if (employee?.department) {
+      //   const policies = await db.select()
+      //     .from(ptoPolicies)
+      //     .where(eq(ptoPolicies.policyLevel, 'COMPANY'));
+      //   // Blackout dates logic would go here
+      // }
 
       return conflicts;
     } catch (error) {
@@ -437,7 +421,6 @@ export class SusanPTOManager {
         <p>Your PTO request has been ${status.toLowerCase()}.</p>
         <h3>Request Details:</h3>
         <ul>
-          <li>Type: ${request.type}</li>
           <li>Start Date: ${request.startDate}</li>
           <li>End Date: ${request.endDate}</li>
           <li>Days: ${request.days}</li>
@@ -520,7 +503,7 @@ export class SusanPTOManager {
     employeeId: string;
     startDate: Date;
     endDate: Date;
-    type: 'VACATION' | 'SICK' | 'PERSONAL';
+    type?: 'VACATION' | 'SICK' | 'PERSONAL'; // Optional, not used in schema
     reason: string;
     status?: string;
   }): Promise<{ success: boolean; requestId?: string; error?: string }> {
@@ -543,7 +526,6 @@ export class SusanPTOManager {
         startDate: data.startDate.toISOString().split('T')[0],
         endDate: data.endDate.toISOString().split('T')[0],
         days: days,
-        type: data.type,
         reason: data.reason || 'PTO Request',
         status: 'PENDING',
         createdAt: new Date(),
@@ -571,7 +553,6 @@ export class SusanPTOManager {
               <p>Your PTO request has been submitted and is pending approval.</p>
               <h3>Request Details:</h3>
               <ul>
-                <li>Type: ${data.type}</li>
                 <li>Start Date: ${data.startDate.toLocaleDateString()}</li>
                 <li>End Date: ${data.endDate.toLocaleDateString()}</li>
                 <li>Days: ${days}</li>
@@ -606,7 +587,10 @@ export class SusanPTOManager {
     try {
       // Get employee's PTO policy
       const policy = await this.storage.getPtoPolicyByEmployee(employeeId);
-      const totalDays = policy?.totalDays || 20; // Default 20 days
+      const vacationDays = policy?.vacationDays || 10;
+      const sickDays = policy?.sickDays || 5;
+      const personalDays = policy?.personalDays || 3;
+      const totalDays = policy?.totalDays || 20;
 
       // Get current year's approved PTO requests
       const currentYear = new Date().getFullYear();
@@ -617,28 +601,24 @@ export class SusanPTOManager {
           eq(ptoRequests.status, 'APPROVED')
         ));
 
-      // Calculate used days by type
-      const usedVacation = approvedRequests
-        .filter(r => r.type === 'VACATION' && new Date(r.startDate).getFullYear() === currentYear)
+      // Calculate total used days (schema doesn't have type field, so we calculate total)
+      const totalUsed = approvedRequests
+        .filter(r => new Date(r.startDate).getFullYear() === currentYear)
         .reduce((sum, r) => sum + r.days, 0);
 
-      const usedSick = approvedRequests
-        .filter(r => r.type === 'SICK' && new Date(r.startDate).getFullYear() === currentYear)
-        .reduce((sum, r) => sum + r.days, 0);
-
-      const usedPersonal = approvedRequests
-        .filter(r => r.type === 'PERSONAL' && new Date(r.startDate).getFullYear() === currentYear)
-        .reduce((sum, r) => sum + r.days, 0);
-
-      const totalUsed = usedVacation + usedSick + usedPersonal;
+      // Since schema doesn't have type field, we can't separate by type
+      // We'll show all used days under vacation for now
+      const usedVacation = totalUsed;
+      const usedSick = 0;
+      const usedPersonal = 0;
 
       return {
-        vacation: totalDays - usedVacation,
-        sick: 5 - usedSick, // Default 5 sick days
-        personal: 3 - usedPersonal, // Default 3 personal days
+        vacation: totalDays - totalUsed,
+        sick: sickDays,
+        personal: personalDays,
         used: { vacation: usedVacation, sick: usedSick, personal: usedPersonal },
-        total: totalDays + 5 + 3,
-        remaining: totalDays + 5 + 3 - totalUsed
+        total: totalDays,
+        remaining: totalDays - totalUsed
       };
     } catch (error) {
       console.error('[SUSAN-PTO] Error getting balance:', error);

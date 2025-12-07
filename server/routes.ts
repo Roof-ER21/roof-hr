@@ -709,7 +709,6 @@ router.post('/api/users/import', requireAuth, requireManager, async (req, res) =
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
         
         await storage.createUser({
-          id: uuidv4(),
           email: row.email,
           firstName: row.firstName || row['First Name'],
           lastName: row.lastName || row['Last Name'],
@@ -793,7 +792,6 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
 
         // Create user
         const newUser = await storage.createUser({
-          id: uuidv4(),
           email: emp.email.toLowerCase(),
           firstName: emp.firstName,
           lastName: emp.lastName,
@@ -1020,8 +1018,9 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     
     // Create the PTO request with calculated days
     const user = req.user!;
+    const { status: _, ...ptoData } = data as any;
     const ptoRequest = await storage.createPtoRequest({
-      ...data,
+      ...ptoData,
       employeeId: user.id,
       status: 'PENDING' as const,
     });
@@ -1151,6 +1150,7 @@ router.post('/api/candidates', requireAuth, requireManager, async (req, res) => 
 
 router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     // Get the current candidate to check for status changes
     const currentCandidate = await storage.getCandidateById(req.params.id);
     const previousStatus = currentCandidate?.status;
@@ -1160,7 +1160,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
     if ('hasDriversLicense' in updateData || 'hasReliableVehicle' in updateData ||
         'canGetOnRoof' in updateData || 'isOutgoing' in updateData || 'availability' in updateData) {
       updateData.questionnaireCompleted = true;
-      updateData.questionnaireCompletedBy = req.user.id;
+      updateData.questionnaireCompletedBy = user.id;
       updateData.questionnaireCompletedAt = new Date().toISOString();
     }
 
@@ -1172,7 +1172,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
     const candidate = await storage.updateCandidate(req.params.id, updateData);
 
     // Trigger workflows if the status has changed
-    if (updateData.status && updateData.status !== previousStatus) {
+    if (updateData.status && updateData.status !== previousStatus && previousStatus) {
       const { workflowExecutor } = await import('./services/workflow-executor');
       await workflowExecutor.onCandidateStageChange(
         req.params.id,
@@ -1195,7 +1195,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
 
             const newUser = await storage.createUser({
               email: candidate.email,
-              password: hashedPassword,
+              passwordHash: hashedPassword,
               firstName: candidate.firstName,
               lastName: candidate.lastName,
               role: 'REP', // New hires start as REP
@@ -1222,7 +1222,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
                 position: candidate.position || 'Sales Representative',
               },
               tempPassword,
-              req.user?.email,
+              user.email,
               {
                 includeAttachments: true,
                 includeEquipmentChecklist: true,
@@ -1276,10 +1276,11 @@ router.get('/api/candidates/:candidateId/notes', requireAuth, async (req, res) =
 
 router.post('/api/candidates/:candidateId/notes', requireAuth, async (req: any, res) => {
   try {
+    const user = req.user!;
     const { content, type = 'GENERAL' } = req.body;
     const note = await storage.createCandidateNote({
       candidateId: req.params.candidateId,
-      authorId: req.user.id,
+      authorId: user.id,
       content,
       type
     });
@@ -1385,10 +1386,11 @@ router.get('/api/employees/:employeeId/notes', requireAuth, async (req, res) => 
 
 router.post('/api/employees/:employeeId/notes', requireAuth, async (req: any, res) => {
   try {
+    const user = req.user!;
     const { content, type = 'GENERAL' } = req.body;
     const note = await storage.createEmployeeNote({
       employeeId: req.params.employeeId,
-      authorId: req.user.id,
+      authorId: user.id,
       content,
       type
     });
@@ -1423,7 +1425,7 @@ router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) 
     if (candidateId) {
       await storage.createCandidateNote({
         candidateId,
-        authorId: req.user.id,
+        authorId: user.id,
         content: `Interview Screening Alert: Failed requirements - ${failedRequirements.join(', ')}${notes ? `. Notes: ${notes}` : ''}`,
         type: 'SCREENING_ALERT'
       });
@@ -1582,8 +1584,14 @@ router.post('/api/candidates/parse-resume', requireAuth, upload.single('resume')
 
     let parsedData;
     try {
-      const response = await llmRouter.generateJSON(prompt);
-      parsedData = response;
+      const taskContext = {
+        taskType: 'extraction' as const,
+        priority: 'medium' as const,
+        requiresPrivacy: false,
+        expectedResponseTime: 'normal' as const
+      };
+      const response = await llmRouter.generateJSON(prompt, taskContext);
+      parsedData = response.data;
     } catch (error) {
       console.error('[Resume Parsing] AI parsing failed:', error);
       // Fallback to basic parsing if AI fails
@@ -1601,9 +1609,9 @@ router.post('/api/candidates/parse-resume', requireAuth, upload.single('resume')
     }
 
     // Add the resume URL to the parsed data
-    parsedData.resumeUrl = resumeUrl;
+    const result = { ...parsedData, resumeUrl };
 
-    res.json(parsedData);
+    res.json(result);
   } catch (error: any) {
     console.error('[Resume Parsing] Error:', error);
     res.status(500).json({ error: error.message || 'Failed to parse resume' });
@@ -1626,8 +1634,9 @@ function extractPhone(text: string): string {
 // Direct hire endpoint - bypass candidate process and directly create employee
 router.post('/api/employees/direct-hire', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     const { firstName, lastName, email, phone, position, department, startDate, salary, reportingTo, shirtSize, welcomePackageId, toolIds, notes } = req.body;
-    
+
     // Validate required fields (salary is now optional)
     if (!firstName || !lastName || !email || !phone || !position || !department || !startDate || !shirtSize) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -1662,7 +1671,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
       role: 'EMPLOYEE',
       department,
       position,
-      hireDate: new Date(startDate),
+      hireDate: startDate,
       isActive: true,
       mustChangePassword: true,
       employmentType: 'FULL_TIME',
@@ -1687,15 +1696,18 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
     
     // Create default PTO policy
     try {
-      await storage.createIndividualPtoPolicy({
+      await storage.createPtoPolicy({
+        id: uuidv4(),
         employeeId: newEmployee.id,
+        policyLevel: 'INDIVIDUAL',
         totalDays: 18,
+        baseDays: 18,
         vacationDays: 10,
         sickDays: 5,
         personalDays: 3,
+        additionalDays: 0,
         usedDays: 0,
         remainingDays: 18,
-        year: new Date().getFullYear(),
         notes: 'Initial PTO allocation'
       });
       console.log(`[Direct Hire] PTO balance created for ${firstName} ${lastName}`);
@@ -1719,9 +1731,9 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
           id: assignmentId,
           bundleId: welcomePackageId,
           employeeId: newEmployee.id,
-          assignedBy: req.user.id,
+          assignedBy: user.id,
           assignedDate: new Date(),
-          status: 'DELIVERED'
+          status: 'FULFILLED' as const
         });
         
         // Create assignment items with size selections and update inventory
@@ -1743,7 +1755,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
               .where(
                 and(
                   eq(toolInventory.name, item.itemName),
-                  eq(toolInventory.category, 'CLOTHING')
+                  eq(toolInventory.category, 'POLO' as const)
                 )
               );
             
@@ -1783,7 +1795,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
               id: uuidv4(),
               toolId: tool.id,
               employeeId: newEmployee.id,
-              assignedBy: req.user.id,
+              assignedBy: user.id,
               assignedDate: new Date(),
               status: 'ASSIGNED',
               condition: tool.condition,
@@ -1833,7 +1845,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
                 position,
                 startDate: new Date(startDate),
                 items: assignedToolDetails,
-                createdBy: req.user.id
+                createdBy: user.id
               });
               console.log(`[Direct Hire] Equipment receipt created for ${firstName} ${lastName}`);
             }
@@ -1849,7 +1861,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
     // Send welcome email with credentials (from logged-in user's email)
     const emailService = new EmailService();
     await emailService.initialize();
-    const emailSuccess = await emailService.sendWelcomeEmail(newEmployee, tempPassword, req.user?.email);
+    const emailSuccess = await emailService.sendWelcomeEmail(newEmployee, tempPassword, user.email);
 
     // Create onboarding tasks
     const onboardingTasks = [
@@ -1901,7 +1913,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
     for (const task of onboardingTasks) {
       await storage.createTask({
         ...task,
-        assignedBy: req.user.id,
+        assignedBy: user.id,
         assignedTo: newEmployee.id,
         priority: 'MEDIUM',
         category: 'ONBOARDING', // Add required category field
@@ -1974,6 +1986,7 @@ Company Representative                  Date
 
       // Create the employee contract
       const contract = await storage.createEmployeeContract({
+        id: uuidv4(),
         employeeId: newEmployee.id,
         templateId: employmentTemplate?.id || null,
         recipientName: `${firstName} ${lastName}`,
@@ -1981,7 +1994,7 @@ Company Representative                  Date
         title: `Employment Agreement - ${firstName} ${lastName}`,
         content: contractContent,
         status: 'DRAFT',
-        createdBy: req.user.id,
+        createdBy: user.id,
       });
 
       contractGenerated = true;
@@ -2059,10 +2072,11 @@ router.get('/api/reviews', requireAuth, async (req: any, res) => {
 
 router.post('/api/reviews', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     const data = insertEmployeeReviewSchema.parse(req.body);
     const review = await storage.createEmployeeReview({
       ...data,
-      reviewerId: req.user.id,
+      reviewerId: user.id,
       status: 'DRAFT',
     });
     res.json(review);
@@ -2093,6 +2107,7 @@ router.get('/api/documents', requireAuth, async (req, res) => {
 
 router.post('/api/documents', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     // Map the incoming fields to match schema expectations
     const mappedData = {
       name: req.body.name || req.body.title || 'Untitled Document',
@@ -2104,16 +2119,13 @@ router.post('/api/documents', requireAuth, requireManager, async (req: any, res)
       fileSize: req.body.fileSize || 0,
       visibility: req.body.visibility || 'EMPLOYEE',
       status: req.body.status || 'DRAFT',
-      createdBy: req.user.id,
+      createdBy: user.id,
       version: '1.0',
       tags: req.body.tags || []
     };
-    
+
     const data = insertDocumentSchema.parse(mappedData);
-    const document = await storage.createDocument({
-      ...data,
-      uploadedBy: req.user.id,
-    });
+    const document = await storage.createDocument(data);
     res.json(document);
   } catch (error: any) {
     console.error('Document creation error:', error);
@@ -2342,7 +2354,7 @@ export function registerRoutes(app: express.Application) {
                 <h3>Interview Screening Alert</h3>
                 <p>Candidate <strong>${candidateName}</strong> for the <strong>${position}</strong> position has not met all screening requirements:</p>
                 <ul>
-                  ${failedRequirements.map(req => `<li>${req}</li>`).join('')}
+                  ${failedRequirements.map((req: string) => `<li>${req}</li>`).join('')}
                 </ul>
                 <p><strong>Notes from Screener:</strong> ${notes}</p>
                 <p>Despite not meeting all requirements, the screener has chosen to proceed with the interview.</p>
@@ -2492,10 +2504,11 @@ export function registerRoutes(app: express.Application) {
       const parsedStartDate = startDate ? new Date(startDate) : undefined;
 
       // Send the new hire welcome email with CC support
+      const user = req.user!;
       const success = await emailService.sendWelcomeEmail(
         testUser,
         'TRD2025!', // Placeholder password since this is a test
-        req.user?.email, // From user email
+        user.email, // From user email
         {
           startDate: parsedStartDate,
           includeAttachments: true,
