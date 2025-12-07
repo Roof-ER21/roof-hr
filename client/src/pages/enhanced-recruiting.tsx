@@ -262,7 +262,7 @@ export default function EnhancedRecruiting() {
     }
   });
 
-  const newHireForm = useForm({
+  const newHireForm = useForm<z.infer<typeof newHireFormSchema>>({
     resolver: zodResolver(newHireFormSchema),
     defaultValues: {
       firstName: '',
@@ -499,7 +499,13 @@ export default function EnhancedRecruiting() {
   const createNewHireMutation = useMutation({
     mutationFn: async (data: z.infer<typeof newHireFormSchema>) => {
       console.log('📤 Submitting direct hire form:', data);
-      const result = await apiRequest('/api/employees/direct-hire', 'POST', data);
+      const result = await apiRequest<{
+        employee?: { name: string };
+        firstName?: string;
+        lastName?: string;
+        onboarding?: { emailSent?: boolean; toolsAssigned?: number; welcomePackageAssigned?: boolean };
+        emailSent?: boolean;
+      }>('/api/employees/direct-hire', 'POST', data);
       console.log('✅ Direct hire response:', result);
       return result;
     },
