@@ -860,6 +860,7 @@ router.get('/alerts', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'])
 // Create or update inventory alert
 router.post('/alerts', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']), async (req, res) => {
   try {
+    const user = req.user!;
     const { toolId, thresholdQuantity, alertRecipients } = req.body;
 
     // Check if alert already exists for this tool
@@ -892,7 +893,7 @@ router.post('/alerts', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']
           thresholdQuantity,
           alertRecipients,
           alertEnabled: true,
-          createdBy: req.user.id
+          createdBy: user.id
         })
         .returning();
 
@@ -1046,6 +1047,7 @@ router.get('/bundles', requireAuth, async (req, res) => {
 // Create bundle
 router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']), async (req, res) => {
   try {
+    const user = req.user!;
     const { name, description, items } = req.body;
 
     // Create bundle
@@ -1055,7 +1057,7 @@ router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'
         id: uuidv4(),
         name,
         description,
-        createdBy: req.user.id
+        createdBy: user.id
       })
       .returning();
 
@@ -1086,6 +1088,7 @@ router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'
 // Assign bundle to employee
 router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']), async (req, res) => {
   try {
+    const user = req.user!;
     const { bundleId, employeeId, itemSelections } = req.body;
 
     // Get employee details including shirt size
@@ -1106,7 +1109,7 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
         id: uuidv4(),
         bundleId,
         employeeId,
-        assignedBy: req.user.id,
+        assignedBy: user.id,
         status: 'PENDING'
       })
       .returning();
@@ -1213,7 +1216,7 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
           id: uuidv4(),
           toolId: update.id,
           employeeId,
-          assignedBy: req.user.id,
+          assignedBy: user.id,
           condition: 'NEW',
           notes: `Assigned as part of bundle: ${bundleId}`
         });
