@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { users } from '../../../shared/schema';
+import { users, territories } from '../../../shared/schema';
 import { eq, and, or, sql, desc, inArray, like } from 'drizzle-orm';
 import { EmailService } from '../../email-service';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,22 +28,30 @@ export class SusanTerritoryManager {
   async createTerritory(data: {
     name: string;
     region: string;
-    managerId?: string;
+    salesManagerId?: string;
     description?: string;
-    zipCodes?: string[];
-    targetRevenue?: number;
   }): Promise<{ success: boolean; territoryId?: string; error?: string }> {
     try {
       const territoryId = uuidv4();
-      
-      // In a real system, this would create a territory record
-      // For now, we just log and send notifications
+
+      // Create territory record
+      await db.insert(territories).values({
+        id: territoryId,
+        name: data.name,
+        region: data.region,
+        salesManagerId: data.salesManagerId,
+        description: data.description,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
       console.log(`[SUSAN-TERRITORY] Creating territory: ${data.name} (${territoryId})`);
       console.log(`[SUSAN-TERRITORY] Territory details:`, data);
 
       // Notify manager if assigned
-      if (data.managerId) {
-        await this.sendTerritoryNotification(data.managerId, data.name, 'assigned');
+      if (data.salesManagerId) {
+        await this.sendTerritoryNotification(data.salesManagerId, territoryId, 'assigned');
       }
 
       return { success: true, territoryId };
@@ -61,24 +69,22 @@ export class SusanTerritoryManager {
     updates: Partial<{
       name: string;
       region: string;
-      managerId: string;
+      salesManagerId: string;
       description: string;
-      zipCodes: string[];
-      targetRevenue: number;
       isActive: boolean;
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
       // If manager changed, notify both old and new
-      if (updates.managerId) {
+      if (updates.salesManagerId) {
         const [territory] = await db.select()
           .from(territories)
           .where(eq(territories.id, territoryId))
           .limit(1);
-        
-        if (territory && territory.managerId && territory.managerId !== updates.managerId) {
-          await this.sendTerritoryNotification(territory.managerId, territoryId, 'removed');
-          await this.sendTerritoryNotification(updates.managerId, territoryId, 'assigned');
+
+        if (territory && territory.salesManagerId && territory.salesManagerId !== updates.salesManagerId) {
+          await this.sendTerritoryNotification(territory.salesManagerId, territoryId, 'removed');
+          await this.sendTerritoryNotification(updates.salesManagerId, territoryId, 'assigned');
         }
       }
 
@@ -102,7 +108,7 @@ export class SusanTerritoryManager {
    */
   async assignManager(
     territoryId: string,
-    managerId: string
+    salesManagerId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const [territory] = await db.select()
@@ -115,21 +121,21 @@ export class SusanTerritoryManager {
       }
 
       // Remove old manager if exists
-      if (territory.managerId) {
-        await this.sendTerritoryNotification(territory.managerId, territoryId, 'removed');
+      if (territory.salesManagerId) {
+        await this.sendTerritoryNotification(territory.salesManagerId, territoryId, 'removed');
       }
 
       await db.update(territories)
         .set({
-          managerId,
+          salesManagerId,
           updatedAt: new Date()
         })
         .where(eq(territories.id, territoryId));
 
       // Notify new manager
-      await this.sendTerritoryNotification(managerId, territoryId, 'assigned');
+      await this.sendTerritoryNotification(salesManagerId, territoryId, 'assigned');
 
-      console.log(`[SUSAN-TERRITORY] Assigned manager ${managerId} to territory ${territoryId}`);
+      console.log(`[SUSAN-TERRITORY] Assigned manager ${salesManagerId} to territory ${territoryId}`);
       return { success: true };
     } catch (error) {
       console.error('[SUSAN-TERRITORY] Error assigning manager:', error);
@@ -159,23 +165,25 @@ export class SusanTerritoryManager {
             inArray(users.id, employeeIds),
             eq(users.territoryId, fromTerritoryId)
           ));
-        
+
         transferredCount = employeeIds.length;
       } else {
-        // Transfer all employees
-        const result = await db.update(users)
-          .set({
-            territoryId: toTerritoryId,
-            updatedAt: new Date()
-          })
+        // Transfer all employees - first count them
+        const employeesToTransfer = await db.select()
+          .from(users)
           .where(eq(users.territoryId, fromTerritoryId));
-        
-        // Count would come from result in real implementation
-        transferredCount = 0; // Placeholder
-      }
 
-      // Update employee counts
-      await this.updateEmployeeCounts([fromTerritoryId, toTerritoryId]);
+        transferredCount = employeesToTransfer.length;
+
+        if (transferredCount > 0) {
+          await db.update(users)
+            .set({
+              territoryId: toTerritoryId,
+              updatedAt: new Date()
+            })
+            .where(eq(users.territoryId, fromTerritoryId));
+        }
+      }
 
       console.log(`[SUSAN-TERRITORY] Transferred ${transferredCount} employees from ${fromTerritoryId} to ${toTerritoryId}`);
       return { success: true, transferredCount };
@@ -195,28 +203,24 @@ export class SusanTerritoryManager {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       // Get all territories
-      const territories = await db.select()
+      const allTerritories = await db.select()
         .from(territories)
         .where(inArray(territories.id, [...sourceIds, targetId]));
 
-      const target = territories.find(t => t.id === targetId);
+      const target = allTerritories.find(t => t.id === targetId);
       if (!target) {
         return { success: false, error: 'Target territory not found' };
       }
 
-      // Combine zip codes
-      const allZipCodes = territories.reduce((acc, t) => {
-        return [...acc, ...(t.zipCodes || [])];
-      }, [] as string[]);
-
-      // Update target territory
-      await db.update(territories)
-        .set({
-          name: newName || target.name,
-          zipCodes: [...new Set(allZipCodes)], // Remove duplicates
-          updatedAt: new Date()
-        })
-        .where(eq(territories.id, targetId));
+      // Update target territory if new name provided
+      if (newName) {
+        await db.update(territories)
+          .set({
+            name: newName,
+            updatedAt: new Date()
+          })
+          .where(eq(territories.id, targetId));
+      }
 
       // Transfer all employees to target
       for (const sourceId of sourceIds) {
@@ -247,8 +251,8 @@ export class SusanTerritoryManager {
     newTerritories: Array<{
       name: string;
       region: string;
-      zipCodes: string[];
-      managerId?: string;
+      salesManagerId?: string;
+      description?: string;
     }>
   ): Promise<{ success: boolean; createdIds?: string[]; error?: string }> {
     try {

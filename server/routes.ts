@@ -751,8 +751,8 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
       return res.status(400).json({ error: 'Invalid employees data' });
     }
 
-    // Role mapping function
-    function mapRoleToSystem(position: string): string {
+    // Role mapping helper
+    const mapRoleToSystem = (position: string): string => {
       const posLower = position.toLowerCase();
       if (posLower === 'admin') return 'ADMIN';
       if (posLower === 'sales manager') return 'TERRITORY_SALES_MANAGER';
@@ -760,7 +760,7 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
       if (posLower === 'sales rep') return 'SALES_REP';
       if (posLower === 'field tech') return 'FIELD_TECH';
       return 'EMPLOYEE';
-    }
+    };
 
     const results = {
       success: 0,
@@ -822,6 +822,7 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
         if (createPtoPolicies) {
           try {
             await storage.createPtoPolicy({
+              id: uuidv4(),
               employeeId: newUser.id,
               policyLevel: 'COMPANY',
               vacationDays: 10,
@@ -1018,10 +1019,11 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     const data = insertPtoRequestSchema.parse(dataWithDays);
     
     // Create the PTO request with calculated days
+    const user = req.user!;
     const ptoRequest = await storage.createPtoRequest({
       ...data,
-      employeeId: req.user.id,
-      status: 'PENDING',
+      employeeId: user.id,
+      status: 'PENDING' as const,
     });
     res.json(ptoRequest);
   } catch (error: any) {
@@ -1043,20 +1045,21 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
 
 router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     const { status, reviewNotes } = req.body;
-    
+
     // Get the current PTO request to know which employee and how many days
     const currentRequest = await storage.getPtoRequestById(req.params.id);
     if (!currentRequest) {
       return res.status(404).json({ error: 'PTO request not found' });
     }
-    
+
     // Update the PTO request status
     const ptoRequest = await storage.updatePtoRequest(req.params.id, {
       status,
       reviewNotes,
-      reviewedBy: req.user.id,
-      reviewedAt: new Date().toISOString(),
+      reviewedBy: user.id,
+      reviewedAt: new Date(),
     });
     
     // If the request is approved, update the employee's PTO policy

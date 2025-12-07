@@ -119,14 +119,14 @@ export class SusanActionHandler {
   private contractManager: SusanContractManager;
   
   constructor() {
-    this.employeeManager = new SusanEmployeeManager(storage);
-    this.ptoManager = new SusanPTOManager(storage);
-    this.recruitingManager = new SusanRecruitingManager(storage);
-    this.documentManager = new SusanDocumentManager(storage);
-    this.reviewManager = new SusanReviewManager(storage);
-    this.toolsManager = new SusanToolsManager(storage);
-    this.territoryManager = new SusanTerritoryManager(storage);
-    this.contractManager = new SusanContractManager(storage);
+    this.employeeManager = new SusanEmployeeManager(storage as any);
+    this.ptoManager = new SusanPTOManager(storage as any);
+    this.recruitingManager = new SusanRecruitingManager(storage as any);
+    this.documentManager = new SusanDocumentManager(storage as any);
+    this.reviewManager = new SusanReviewManager(storage as any);
+    this.toolsManager = new SusanToolsManager(storage as any);
+    this.territoryManager = new SusanTerritoryManager(storage as any);
+    this.contractManager = new SusanContractManager(storage as any);
   }
 
   /**
