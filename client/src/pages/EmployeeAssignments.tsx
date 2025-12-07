@@ -146,7 +146,7 @@ export default function EmployeeAssignments() {
     return !primaryAssignment;
   });
 
-  const isManager = ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN'].includes(currentUser?.role);
+  const isManager = currentUser?.role ? ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN'].includes(currentUser.role) : false;
 
   if (assignmentsLoading) {
     return <div className="flex items-center justify-center h-64">Loading assignments...</div>;
@@ -440,7 +440,7 @@ export default function EmployeeAssignments() {
                               </Badge>
                             </TableCell>
                             <TableCell className="max-w-xs">
-                              {assignment.responsibilities?.length > 0 ? (
+                              {assignment.responsibilities && assignment.responsibilities.length > 0 ? (
                                 <div className="flex flex-wrap gap-1">
                                   {assignment.responsibilities.slice(0, 2).map((resp, idx) => (
                                     <Badge key={idx} variant="outline" className="text-xs">

@@ -802,7 +802,7 @@ export class SusanAI {
     // Managers see their team
     if (context.userRole === 'MANAGER' && scope === 'team') {
       return await db.select().from(users)
-        .where(eq(users.managerId, context.userId))
+        .where(eq(users.primaryManagerId, context.userId))
         .orderBy(desc(users.createdAt))
         .limit(50);
     }
@@ -830,7 +830,7 @@ export class SusanAI {
     if (context.userRole === 'MANAGER' && scope === 'team') {
       // Get team members first
       const teamMembers = await db.select({ id: users.id }).from(users)
-        .where(eq(users.managerId, context.userId));
+        .where(eq(users.primaryManagerId, context.userId));
       
       const teamIds = teamMembers.map(m => m.id);
       if (teamIds.length > 0) {
@@ -858,10 +858,11 @@ export class SusanAI {
       return [];
     }
     
-    // Managers might only see candidates for their department positions
-    if (context.userRole === 'MANAGER' && context.department) {
+    // Managers might only see candidates they're assigned to or all candidates
+    // Note: candidates table doesn't have a department field
+    if (context.userRole === 'MANAGER') {
       return await db.select().from(candidates)
-        .where(eq(candidates.department, context.department))
+        .where(eq(candidates.assignedTo, context.userId))
         .orderBy(desc(candidates.createdAt))
         .limit(50);
     }
@@ -894,7 +895,7 @@ export class SusanAI {
     // Managers see territories they manage
     if (context.userRole === 'MANAGER') {
       return await db.select().from(territories)
-        .where(eq(territories.managerId, context.userId))
+        .where(eq(territories.salesManagerId, context.userId))
         .orderBy(asc(territories.name))
         .limit(20);
     }
@@ -921,7 +922,7 @@ export class SusanAI {
     // Managers see their team's reviews
     if (context.userRole === 'MANAGER' && scope === 'team') {
       const teamMembers = await db.select({ id: users.id }).from(users)
-        .where(eq(users.managerId, context.userId));
+        .where(eq(users.primaryManagerId, context.userId));
       return teamMembers;
     }
     

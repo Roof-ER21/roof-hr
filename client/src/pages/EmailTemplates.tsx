@@ -66,7 +66,7 @@ export default function EmailTemplates() {
     variables: {} as Record<string, string>,
   });
 
-  const canEdit = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
+  const canEdit = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   // Fetch templates
   const { data: templates = [] } = useQuery<EmailTemplate[]>({
@@ -97,7 +97,7 @@ export default function EmailTemplates() {
   // AI generation mutation
   const aiGenerateMutation = useMutation({
     mutationFn: (data: any) => apiRequest('/api/email-templates/ai-generate', 'POST', data),
-    onSuccess: (response) => {
+    onSuccess: (response: any) => {
       setFormData({
         ...formData,
         subject: response.subject || formData.subject,
@@ -241,7 +241,7 @@ export default function EmailTemplates() {
   const extractVariables = (text: string): string[] => {
     const regex = /{{(\w+)}}/g;
     const matches = text.match(regex) || [];
-    return [...new Set(matches.map(m => m.replace(/[{}]/g, '')))];
+    return Array.from(new Set(matches.map(m => m.replace(/[{}]/g, ''))));
   };
 
   const replaceVariables = (text: string, variables: Record<string, string>): string => {
@@ -396,7 +396,7 @@ export default function EmailTemplates() {
                 placeholder="e.g., Interview Invitation for {{position}} at ROOF-ER"
               />
               <p className="text-sm text-gray-500 mt-1">
-                Use {{variableName}} for dynamic content
+                Use {'{{'} variableName {'}}'}  for dynamic content
               </p>
             </div>
             <div>

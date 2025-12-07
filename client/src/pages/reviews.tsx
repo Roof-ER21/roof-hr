@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Star, FileText, Calendar, User, Clock, Plus, ChevronRight, Zap, Settings, Bell, Play, Pause } from 'lucide-react';
+import { Star, FileText, Calendar, User, Clock, Plus, ChevronRight, Zap, Settings, Bell, Play, Pause, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -302,7 +302,7 @@ export default function Reviews() {
                           <SelectContent>
                             {users.filter((u: any) => u.id !== user?.id).map((u: any) => (
                               <SelectItem key={u.id} value={u.id}>
-                                {u.firstName} {u.lastName} - {u.position}
+                                {u.firstName} {u.lastName} - {u.role}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -508,7 +508,7 @@ export default function Reviews() {
                           {reviewee?.firstName} {reviewee?.lastName}
                         </CardTitle>
                         <p className="text-sm text-secondary-600 mt-1">
-                          {reviewee?.position} • {getTypeLabel(review.reviewType)} • {review.reviewPeriod}
+                          {reviewee?.role} • {getTypeLabel(review.reviewType)} • {review.reviewPeriod}
                         </p>
                       </div>
                       <div className="flex items-center space-x-2">
