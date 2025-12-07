@@ -133,12 +133,12 @@ export default function AttendanceDashboard() {
   }, [socket, selectedSession, queryClient]);
 
   // Fetch active sessions
-  const { data: sessions = [], isLoading: sessionsLoading } = useQuery({
+  const { data: sessions = [], isLoading: sessionsLoading } = useQuery<AttendanceSession[]>({
     queryKey: ['/api/attendance/sessions?active=true'],
   });
 
   // Fetch selected session details
-  const { data: sessionDetails } = useQuery({
+  const { data: sessionDetails } = useQuery<AttendanceSession>({
     queryKey: selectedSession?.id ? [`/api/attendance/sessions/${selectedSession.id}`] : ['no-session'],
     enabled: !!selectedSession?.id,
     refetchInterval: selectedSession?.status === 'ACTIVE' ? 5000 : false, // Auto-refresh every 5 seconds for active sessions
@@ -147,11 +147,11 @@ export default function AttendanceDashboard() {
   // Create session mutation
   const createSessionMutation = useMutation({
     mutationFn: (data: { name: string; location: string; startsAt: string; expiresAt: string }) =>
-      apiRequest('/api/attendance/sessions', {
+      apiRequest<AttendanceSession>('/api/attendance/sessions', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    onSuccess: (newSession) => {
+    onSuccess: (newSession: AttendanceSession) => {
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/sessions'] });
       // Ensure the new session includes the qrUrl from the backend response
       setSelectedSession(newSession);
@@ -194,10 +194,10 @@ export default function AttendanceDashboard() {
   // Rotate token mutation
   const rotateTokenMutation = useMutation({
     mutationFn: () =>
-      apiRequest(`/api/attendance/sessions/${selectedSession?.id}/rotate-token`, {
+      apiRequest<AttendanceSession>(`/api/attendance/sessions/${selectedSession?.id}/rotate-token`, {
         method: 'POST',
       }),
-    onSuccess: (updatedSession) => {
+    onSuccess: (updatedSession: AttendanceSession) => {
       queryClient.invalidateQueries({ queryKey: [`/api/attendance/sessions/${selectedSession?.id}`] });
       setSelectedSession(updatedSession);
       toast({

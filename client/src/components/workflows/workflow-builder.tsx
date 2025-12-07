@@ -70,8 +70,7 @@ export function WorkflowBuilder() {
   // Create workflow mutation
   const createWorkflow = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest('/api/workflows', 'POST', data);
-      return res.json();
+      return await apiRequest('/api/workflows', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
@@ -100,8 +99,7 @@ export function WorkflowBuilder() {
   // Update workflow status
   const updateWorkflowStatus = useMutation({
     mutationFn: async ({ id, status }: any) => {
-      const res = await apiRequest(`/api/workflows/${id}/status`, 'PATCH', { status });
-      return res.json();
+      return await apiRequest(`/api/workflows/${id}/status`, 'PATCH', { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
@@ -115,8 +113,7 @@ export function WorkflowBuilder() {
   // Create workflow step
   const createStep = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest('/api/workflow-steps', 'POST', data);
-      return res.json();
+      return await apiRequest('/api/workflow-steps', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/workflows/${selectedWorkflow?.id}/steps`] });
@@ -140,8 +137,7 @@ export function WorkflowBuilder() {
   // Delete workflow step
   const deleteStep = useMutation({
     mutationFn: async (id: string) => {
-      const res = await apiRequest(`/api/workflow-steps/${id}`, 'DELETE');
-      return res.json();
+      return await apiRequest(`/api/workflow-steps/${id}`, 'DELETE');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/workflows/${selectedWorkflow?.id}/steps`] });
@@ -155,8 +151,7 @@ export function WorkflowBuilder() {
   // Execute workflow
   const executeWorkflow = useMutation({
     mutationFn: async (id: string) => {
-      const res = await apiRequest(`/api/workflows/${id}/execute`, 'POST', {});
-      return res.json();
+      return await apiRequest(`/api/workflows/${id}/execute`, 'POST', {});
     },
     onSuccess: () => {
       toast({

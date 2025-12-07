@@ -69,19 +69,19 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   };
 
   // Fetch available interviewers
-  const { data: interviewers } = useQuery({
+  const { data: interviewers } = useQuery<Array<{ id: string; firstName: string; lastName: string; role: string }>>({
     queryKey: ['/api/users'],
     enabled: isOpen,
   });
 
   // Fetch existing interviews for the candidate
-  const { data: existingInterviews } = useQuery({
+  const { data: existingInterviews } = useQuery<Array<{ id: string; candidateId: string; scheduledDate: string; status: string }>>({
     queryKey: [`/api/interviews/candidate/${candidateId}`],
     enabled: isOpen,
   });
 
   // Fetch interviewer availability
-  const { data: availability } = useQuery({
+  const { data: availability } = useQuery<{ available: boolean; slots: Array<{ start: string; end: string }> }>({
     queryKey: [`/api/interview-availability/${selectedInterviewer}`],
     enabled: !!selectedInterviewer && isOpen,
   });

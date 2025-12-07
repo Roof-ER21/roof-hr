@@ -100,7 +100,7 @@ export default function Contracts() {
     }
   });
 
-  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+  const { data: templates = [], isLoading: templatesLoading } = useQuery<ContractTemplate[]>({
     queryKey: ['/api/contract-templates'],
     queryFn: async () => {
       const response = await fetch('/api/contract-templates', {
@@ -115,19 +115,19 @@ export default function Contracts() {
     }
   });
 
-  const { data: contracts = [], isLoading: contractsLoading } = useQuery({
+  const { data: contracts = [], isLoading: contractsLoading } = useQuery<EmployeeContract[]>({
     queryKey: ['/api/employee-contracts'],
   });
 
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ['/api/users'],
   });
 
-  const { data: candidates = [] } = useQuery({
+  const { data: candidates = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; email: string }>>({
     queryKey: ['/api/candidates'],
   });
 
-  const { data: territories = [] } = useQuery({
+  const { data: territories = [] } = useQuery<Array<{ id: string; name: string; code: string }>>({
     queryKey: ['/api/territories'],
   });
 

@@ -55,7 +55,7 @@ export function SmsMessaging() {
   });
 
   // Fetch candidates
-  const { data: candidates = [] } = useQuery({
+  const { data: candidates = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; phone?: string }>>({
     queryKey: ['/api/candidates'],
   });
 

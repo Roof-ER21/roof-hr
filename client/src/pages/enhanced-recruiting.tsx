@@ -370,7 +370,7 @@ export default function EnhancedRecruiting() {
   });
 
   // Fetch available employees for assignment
-  const { data: availableEmployees = [] } = useQuery({
+  const { data: availableEmployees = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; role: string; isActive: boolean }>>({
     queryKey: ['/api/users'],
     queryFn: async () => {
       const response = await fetch('/api/users', {
@@ -381,7 +381,7 @@ export default function EnhancedRecruiting() {
       if (!response.ok) throw new Error('Failed to fetch users');
       const users = await response.json();
       // Filter to only show active employees/managers/admins
-      return users.filter((u: any) => u.isActive && ['EMPLOYEE', 'MANAGER', 'ADMIN'].includes(u.role));
+      return users.filter((u: { isActive: boolean; role: string }) => u.isActive && ['EMPLOYEE', 'MANAGER', 'ADMIN'].includes(u.role));
     }
   });
 

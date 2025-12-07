@@ -49,32 +49,32 @@ export default function PtoPolicies() {
   const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<PtoPolicy | null>(null);
 
-  const { data: currentUser } = useQuery({
+  const { data: currentUser } = useQuery<User>({
     queryKey: ['/api/auth/me'],
   });
 
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ['/api/users'],
   });
 
   // Fetch from correct endpoints
-  const { data: companyPolicy } = useQuery({
+  const { data: companyPolicy } = useQuery<{ vacationDays: number; sickDays: number; personalDays: number }>({
     queryKey: ['/api/pto/company-policy'],
   });
 
-  const { data: departmentSettings = [] } = useQuery({
+  const { data: departmentSettings = [] } = useQuery<DepartmentPtoSetting[]>({
     queryKey: ['/api/pto/department-settings'],
   });
 
-  const { data: individualPolicies = [] } = useQuery({
+  const { data: individualPolicies = [] } = useQuery<PtoPolicy[]>({
     queryKey: ['/api/pto/individual-policies'],
   });
 
-  const { data: policies = individualPolicies, isLoading: policiesLoading } = useQuery({
+  const { data: policies = individualPolicies, isLoading: policiesLoading } = useQuery<PtoPolicy[]>({
     queryKey: ['/api/pto/individual-policies'],
   });
 
-  const { data: ptoRequests = [] } = useQuery({
+  const { data: ptoRequests = [] } = useQuery<Array<{ id: string; employeeId: string; type: string; status: string }>>({
     queryKey: ['/api/pto'],
   });
 

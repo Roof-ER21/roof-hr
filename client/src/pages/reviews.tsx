@@ -81,21 +81,21 @@ export default function Reviews() {
     queryKey: ['/api/reviews'],
   });
 
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; role: string }>>({
     queryKey: ['/api/users'],
   });
 
-  const { data: templates = [] } = useQuery({
+  const { data: templates = [] } = useQuery<Array<{ id: string; name: string; type: string; criteria: string[] }>>({
     queryKey: ['/api/performance-templates'],
     enabled: activeTab === 'templates' && (user?.role === 'ADMIN' || user?.role === 'MANAGER'),
   });
 
-  const { data: automatedReviews = [] } = useQuery({
+  const { data: automatedReviews = [] } = useQuery<Array<{ id: string; revieweeId: string; status: string; scheduledFor: string }>>({
     queryKey: ['/api/automated-reviews'],
     enabled: activeTab === 'automation' && (user?.role === 'ADMIN' || user?.role === 'MANAGER'),
   });
 
-  const { data: aiCriteria = [] } = useQuery({
+  const { data: aiCriteria = [] } = useQuery<Array<{ id: string; name: string; weight: number; category: string }>>({
     queryKey: ['/api/ai-criteria'],
     enabled: activeTab === 'automation' && (user?.role === 'ADMIN' || user?.role === 'MANAGER'),
   });

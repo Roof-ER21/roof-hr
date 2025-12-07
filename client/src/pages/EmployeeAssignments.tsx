@@ -51,11 +51,11 @@ export default function EmployeeAssignments() {
     }
   });
 
-  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery({
+  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<EmployeeAssignment[]>({
     queryKey: ['/api/employee-assignments'],
   });
 
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ['/api/users'],
   });
 

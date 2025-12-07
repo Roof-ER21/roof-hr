@@ -28,13 +28,13 @@ export function NotificationDropdown() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  const { data: notifications = [], isLoading } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['/api/notifications'],
-    queryFn: () => apiRequest('/api/notifications'),
+    queryFn: () => apiRequest<Notification[]>('/api/notifications', 'GET'),
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const unreadCount = notifications.filter((n: Notification) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const markAsReadMutation = useMutation({
     mutationFn: (id: string) => 
@@ -131,7 +131,7 @@ export function NotificationDropdown() {
           </div>
         ) : (
           <ScrollArea className="h-[400px]">
-            {notifications.map((notification: Notification) => (
+            {notifications.map((notification) => (
               <DropdownMenuItem
                 key={notification.id}
                 className={`p-3 cursor-pointer ${!notification.read ? 'bg-blue-50' : ''}`}
