@@ -52,11 +52,12 @@ router.get('/api/pto/company-policy', requireAuth, async (req, res) => {
 // Update company-wide PTO policy
 router.put('/api/pto/company-policy', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     // Only Ford Barsi, Ahmed Admin, or Support Admin can update company policy
-    if (req.user.email !== 'ford.barsi@theroofdocs.com' && 
-        req.user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
-        req.user.email !== 'support@theroofdocs.com' &&
-        req.user.role !== 'ADMIN') {
+    if (user.email !== 'ford.barsi@theroofdocs.com' &&
+        user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
+        user.email !== 'support@theroofdocs.com' &&
+        user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Only Ford Barsi, Ahmed Admin, or Support Admin can update company PTO policy' });
     }
 
@@ -82,11 +83,12 @@ router.get('/api/pto/department-settings', requireAuth, async (req, res) => {
 // Create department PTO settings
 router.post('/api/pto/department-settings', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     // Only Ford Barsi, Ahmed Admin, or Support Admin can create department settings
-    if (req.user.email !== 'ford.barsi@theroofdocs.com' && 
-        req.user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
-        req.user.email !== 'support@theroofdocs.com' &&
-        req.user.role !== 'ADMIN') {
+    if (user.email !== 'ford.barsi@theroofdocs.com' &&
+        user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
+        user.email !== 'support@theroofdocs.com' &&
+        user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Only Ford Barsi, Ahmed Admin, or Support Admin can create department PTO settings' });
     }
 
@@ -94,7 +96,7 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
     const vacationDays = parseInt(req.body.vacationDays) || 10;
     const sickDays = parseInt(req.body.sickDays) || 5;
     const personalDays = parseInt(req.body.personalDays) || 3;
-    
+
     const settingsData = {
       department: req.body.department,
       vacationDays,
@@ -102,8 +104,8 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
       personalDays,
       totalDays: vacationDays + sickDays + personalDays,
       overridesCompany: req.body.overridesCompany !== false,
-      createdBy: req.user.id,
-      lastUpdatedBy: req.user.id
+      createdBy: user.id,
+      lastUpdatedBy: user.id
     };
 
     const newSettings = await storage.createDepartmentPtoSetting(settingsData);
@@ -117,11 +119,12 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
 // Update department PTO settings
 router.put('/api/pto/department-settings/:id', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     // Only Ford Barsi, Ahmed Admin, or Support Admin can update department settings
-    if (req.user.email !== 'ford.barsi@theroofdocs.com' && 
-        req.user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
-        req.user.email !== 'support@theroofdocs.com' &&
-        req.user.role !== 'ADMIN') {
+    if (user.email !== 'ford.barsi@theroofdocs.com' &&
+        user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
+        user.email !== 'support@theroofdocs.com' &&
+        user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Only Ford Barsi, Ahmed Admin, or Support Admin can update department PTO settings' });
     }
 
@@ -137,7 +140,7 @@ router.put('/api/pto/department-settings/:id', requireAuth, requireManager, asyn
       sickDays,
       personalDays,
       totalDays,
-      lastUpdatedBy: req.user.id
+      lastUpdatedBy: user.id
     });
     res.json(updatedSettings);
   } catch (error) {
@@ -160,11 +163,12 @@ router.get('/api/pto/individual-policies', requireAuth, async (req, res) => {
 // Create individual PTO policy
 router.post('/api/pto/individual-policies', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     // Only Ford Barsi, Ahmed Admin, or Support Admin can create individual policies
-    if (req.user.email !== 'ford.barsi@theroofdocs.com' && 
-        req.user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
-        req.user.email !== 'support@theroofdocs.com' &&
-        req.user.role !== 'ADMIN') {
+    if (user.email !== 'ford.barsi@theroofdocs.com' &&
+        user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
+        user.email !== 'support@theroofdocs.com' &&
+        user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Only Ford Barsi, Ahmed Admin, or Support Admin can create individual PTO policies' });
     }
 
@@ -173,7 +177,7 @@ router.post('/api/pto/individual-policies', requireAuth, requireManager, async (
     const sickDays = parseInt(req.body.sickDays) || 0;
     const personalDays = parseInt(req.body.personalDays) || 0;
     const totalDays = vacationDays + sickDays + personalDays;
-    
+
     const policyData = {
       ...req.body,
       vacationDays,
@@ -185,7 +189,7 @@ router.post('/api/pto/individual-policies', requireAuth, requireManager, async (
       usedDays: req.body.usedDays || 0,
       remainingDays: totalDays,
       policyLevel: 'INDIVIDUAL' as const,
-      customizedBy: req.user.id,
+      customizedBy: user.id,
       customizationDate: new Date()
     };
 
@@ -200,11 +204,12 @@ router.post('/api/pto/individual-policies', requireAuth, requireManager, async (
 // Update individual PTO policy
 router.put('/api/pto/individual-policies/:id', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     // Only Ford Barsi, Ahmed Admin, or Support Admin can update individual policies
-    if (req.user.email !== 'ford.barsi@theroofdocs.com' && 
-        req.user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
-        req.user.email !== 'support@theroofdocs.com' &&
-        req.user.role !== 'ADMIN') {
+    if (user.email !== 'ford.barsi@theroofdocs.com' &&
+        user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
+        user.email !== 'support@theroofdocs.com' &&
+        user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Only Ford Barsi, Ahmed Admin, or Support Admin can update individual PTO policies' });
     }
 
@@ -229,7 +234,7 @@ router.put('/api/pto/individual-policies/:id', requireAuth, requireManager, asyn
       additionalDays: req.body.additionalDays ?? policy.additionalDays ?? 0,
       usedDays,
       remainingDays: totalDays - usedDays,
-      customizedBy: req.user.id,
+      customizedBy: user.id,
       customizationDate: new Date()
     };
 
@@ -255,9 +260,10 @@ router.get('/api/pto-policies', requireAuth, requireManager, async (req, res) =>
 // Get PTO policy for specific employee
 router.get('/api/pto-policies/employee/:employeeId', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     // Users can view their own policy, managers can view any
-    if (req.user.id !== req.params.employeeId && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role)) {
+    if (user.id !== req.params.employeeId &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Can only view your own PTO policy' });
     }
     
@@ -295,28 +301,29 @@ router.get('/api/pto-policies/employee/:employeeId', requireAuth, async (req, re
 // Create or update PTO policy for employee
 router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) => {
   try {
+    const currentUser = req.user!;
     const { employeeId, additionalDays, notes } = req.body;
-    
+
     if (!employeeId) {
       return res.status(400).json({ error: 'Employee ID required' });
     }
-    
-    const user = await storage.getUserById(employeeId);
-    if (!user) {
+
+    const employee = await storage.getUserById(employeeId);
+    if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
-    
+
     // Get department base days
-    const deptSetting = await storage.getDepartmentPtoSettingByDepartment(user.department);
-    const baseDays = deptSetting?.baseDays || 10;
-    
+    const deptSetting = await storage.getDepartmentPtoSettingByDepartment(employee.department);
+    const baseDays = deptSetting?.totalDays || 10;
+
     // Check if policy exists
     const existingPolicy = await storage.getPtoPolicyByEmployeeId(employeeId);
-    
+
     const totalDays = baseDays + (additionalDays || 0);
     const usedDays = existingPolicy?.usedDays || 0;
     const remainingDays = totalDays - usedDays;
-    
+
     if (existingPolicy) {
       // Update existing policy
       const updatedPolicy = await storage.updatePtoPolicy(employeeId, {
@@ -324,7 +331,7 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
         additionalDays: additionalDays || 0,
         totalDays,
         remainingDays,
-        customizedBy: req.user.id,
+        customizedBy: currentUser.id,
         customizationDate: new Date(),
         notes
       });
@@ -338,7 +345,7 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
         totalDays,
         usedDays: 0,
         remainingDays: totalDays,
-        customizedBy: additionalDays ? req.user.id : null,
+        customizedBy: additionalDays ? currentUser.id : null,
         customizationDate: additionalDays ? new Date() : null,
         notes
       });
