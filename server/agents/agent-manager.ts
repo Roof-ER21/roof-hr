@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import * as cron from 'node-cron';
-import * as cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import * as fs from 'fs';
 import * as path from 'path';
 import { BaseAgent, AgentResult } from './base-agent';
@@ -75,11 +75,11 @@ export class AgentManager extends EventEmitter {
   private savePersistedState(): void {
     try {
       const stateData: Record<string, any> = {};
-      
-      for (const [agentId, state] of this.agentStates.entries()) {
+
+      for (const [agentId, state] of Array.from(this.agentStates.entries())) {
         stateData[agentId] = state;
       }
-      
+
       fs.writeFileSync(this.stateFile, JSON.stringify(stateData, null, 2));
       this.log('debug', 'Persisted agent states to disk');
     } catch (error) {
@@ -107,14 +107,18 @@ export class AgentManager extends EventEmitter {
       // Apply persisted state if available
       const savedState = this.agentStates.get(agentName);
       if (savedState) {
-        agent.isActive = savedState.isActive;
+        if (savedState.isActive) {
+          agent.enable();
+        } else {
+          agent.disable();
+        }
         if (savedState.lastRun) {
           this.agentLastRun.set(agentName, savedState.lastRun);
         }
       } else {
         // Save initial state
         this.agentStates.set(agentName, {
-          isActive: agent.isActive,
+          isActive: agent.isEnabled(),
           lastStatus: undefined
         });
       }
@@ -196,8 +200,6 @@ export class AgentManager extends EventEmitter {
 
     const task = cron.schedule(schedule, async () => {
       await this.runAgent(agentName);
-    }, {
-      scheduled: false // Don't start immediately
     });
 
     this.scheduledJobs.set(agentName, task);
@@ -294,8 +296,8 @@ export class AgentManager extends EventEmitter {
 
   async runAllAgents(): Promise<{ [agentName: string]: AgentResult }> {
     const results: { [agentName: string]: AgentResult } = {};
-    
-    for (const [agentName, agent] of this.agents.entries()) {
+
+    for (const [agentName, agent] of Array.from(this.agents.entries())) {
       if (agent.isEnabled()) {
         try {
           results[agentName] = await this.runAgent(agentName);
@@ -308,7 +310,7 @@ export class AgentManager extends EventEmitter {
         }
       }
     }
-    
+
     return results;
   }
 
@@ -328,7 +330,7 @@ export class AgentManager extends EventEmitter {
     let nextRun = null;
     if (config.schedule && config.enabled) {
       try {
-        const interval = cronParser.parseExpression(config.schedule);
+        const interval = CronExpressionParser.parse(config.schedule);
         nextRun = interval.next().toISOString();
       } catch (err) {
         // If cron parsing fails, set nextRun to null
@@ -405,9 +407,9 @@ export class AgentManager extends EventEmitter {
 
   startScheduler(): void {
     this.config.enabled = true;
-    
+
     // Start all scheduled jobs
-    for (const [agentName, task] of this.scheduledJobs.entries()) {
+    for (const [agentName, task] of Array.from(this.scheduledJobs.entries())) {
       const agent = this.agents.get(agentName);
       if (agent?.isEnabled()) {
         task.start();
@@ -419,9 +421,9 @@ export class AgentManager extends EventEmitter {
 
   stopScheduler(): void {
     this.config.enabled = false;
-    
+
     // Stop all scheduled jobs
-    for (const task of this.scheduledJobs.values()) {
+    for (const task of Array.from(this.scheduledJobs.values())) {
       task.stop();
     }
 
@@ -449,9 +451,9 @@ export class AgentManager extends EventEmitter {
 
   shutdown(): void {
     this.log('info', 'Shutting down agent manager');
-    
+
     // Stop all scheduled jobs
-    for (const [name, task] of this.scheduledJobs.entries()) {
+    for (const [name, task] of Array.from(this.scheduledJobs.entries())) {
       task.destroy();
       this.log('info', `Stopped scheduled job for agent: ${name}`);
     }
@@ -459,9 +461,9 @@ export class AgentManager extends EventEmitter {
     this.scheduledJobs.clear();
     this.agents.clear();
     this.runningExecutions.clear();
-    
+
     this.removeAllListeners();
-    
+
     this.log('info', 'Agent manager shutdown complete');
   }
 }

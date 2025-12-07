@@ -15,26 +15,15 @@ interface CandidateData {
 
 class JobImportService {
   async importFromIndeed(jobTitle: string, location: string = ''): Promise<number> {
-    const importLogId = uuidv4();
     let candidatesFound = 0;
     let candidatesImported = 0;
 
     try {
       console.log(`Starting Indeed import for: ${jobTitle}`);
-      
-      // Create import log
-      await storage.createJobImportLog({
-        id: importLogId,
-        source: 'INDEED',
-        jobTitle,
-        status: 'SUCCESS',
-        candidatesFound: 0,
-        candidatesImported: 0,
-      });
 
       // Note: In a real implementation, you would need Indeed's API access
       // For demo purposes, we'll simulate the import process
-      
+
       // Simulated candidate data that would come from Indeed API
       const mockCandidates: Partial<CandidateData>[] = [
         {
@@ -70,12 +59,12 @@ class JobImportService {
 
       for (const candidateData of mockCandidates) {
         try {
-          // Check if candidate already exists
-          const existingCandidate = await storage.getCandidateByEmail(candidateData.email!);
-          
+          // Check if candidate already exists by searching all candidates
+          const allCandidates = await storage.getAllCandidates();
+          const existingCandidate = allCandidates.find(c => c.email === candidateData.email);
+
           if (!existingCandidate) {
             await storage.createCandidate({
-              id: uuidv4(),
               firstName: candidateData.firstName!,
               lastName: candidateData.lastName!,
               email: candidateData.email!,
@@ -83,7 +72,7 @@ class JobImportService {
               position: candidateData.position!,
               status: 'APPLIED',
               stage: 'Application Review',
-              appliedDate: new Date().toISOString(),
+              appliedDate: new Date(),
               notes: candidateData.notes,
             });
             candidatesImported++;
@@ -93,8 +82,10 @@ class JobImportService {
         }
       }
 
-      // Update import log
-      await storage.updateJobImportLog(importLogId, {
+      // Create import log with final results
+      await storage.createJobImportLog({
+        source: 'INDEED',
+        jobTitle,
         candidatesFound,
         candidatesImported,
         status: candidatesImported > 0 ? 'SUCCESS' : 'FAILED',
@@ -105,40 +96,31 @@ class JobImportService {
 
     } catch (error) {
       console.error('Indeed import failed:', error);
-      
-      await storage.updateJobImportLog(importLogId, {
+
+      await storage.createJobImportLog({
+        source: 'INDEED',
+        jobTitle,
         candidatesFound,
         candidatesImported,
         status: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
-      
+
       return 0;
     }
   }
 
   async importFromGoogleJobs(jobTitle: string, location: string = ''): Promise<number> {
-    const importLogId = uuidv4();
     let candidatesFound = 0;
     let candidatesImported = 0;
 
     try {
       console.log(`Starting Google Jobs import for: ${jobTitle}`);
-      
-      // Create import log
-      await storage.createJobImportLog({
-        id: importLogId,
-        source: 'GOOGLE_JOBS',
-        jobTitle,
-        status: 'SUCCESS',
-        candidatesFound: 0,
-        candidatesImported: 0,
-      });
 
       // Note: Google Jobs doesn't provide direct candidate access
       // This would typically integrate with Google for Jobs posting and then
       // candidates would apply through your system
-      
+
       // Simulated candidate data for demo
       const mockCandidates: Partial<CandidateData>[] = [
         {
@@ -165,12 +147,12 @@ class JobImportService {
 
       for (const candidateData of mockCandidates) {
         try {
-          // Check if candidate already exists
-          const existingCandidate = await storage.getCandidateByEmail(candidateData.email!);
-          
+          // Check if candidate already exists by searching all candidates
+          const allCandidates = await storage.getAllCandidates();
+          const existingCandidate = allCandidates.find(c => c.email === candidateData.email);
+
           if (!existingCandidate) {
             await storage.createCandidate({
-              id: uuidv4(),
               firstName: candidateData.firstName!,
               lastName: candidateData.lastName!,
               email: candidateData.email!,
@@ -178,7 +160,7 @@ class JobImportService {
               position: candidateData.position!,
               status: 'APPLIED',
               stage: 'Application Review',
-              appliedDate: new Date().toISOString(),
+              appliedDate: new Date(),
               notes: candidateData.notes,
             });
             candidatesImported++;
@@ -188,8 +170,10 @@ class JobImportService {
         }
       }
 
-      // Update import log
-      await storage.updateJobImportLog(importLogId, {
+      // Create import log with final results
+      await storage.createJobImportLog({
+        source: 'GOOGLE_JOBS',
+        jobTitle,
         candidatesFound,
         candidatesImported,
         status: candidatesImported > 0 ? 'SUCCESS' : 'FAILED',
@@ -200,21 +184,23 @@ class JobImportService {
 
     } catch (error) {
       console.error('Google Jobs import failed:', error);
-      
-      await storage.updateJobImportLog(importLogId, {
+
+      await storage.createJobImportLog({
+        source: 'GOOGLE_JOBS',
+        jobTitle,
         candidatesFound,
         candidatesImported,
         status: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
-      
+
       return 0;
     }
   }
 
   async getImportHistory() {
     try {
-      return await storage.getAllJobImportLogs();
+      return await storage.getJobImportLogs();
     } catch (error) {
       console.error('Failed to get import history:', error);
       return [];
@@ -224,7 +210,7 @@ class JobImportService {
   async scheduleAutomaticImport(jobTitle: string, interval: 'daily' | 'weekly' = 'daily') {
     // This would be implemented with a cron job
     console.log(`Scheduling automatic import for ${jobTitle} every ${interval}`);
-    
+
     // For now, just log the intent
     // In production, you would set up cron jobs to run the import functions
     return true;

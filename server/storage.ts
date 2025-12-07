@@ -334,7 +334,7 @@ export interface IStorage {
   clearAllToolAssignments(): Promise<number>;
 
   // Employee Assignment Management - NEW
-  createEmployeeAssignment(data: InsertEmployeeAssignment): Promise<EmployeeAssignment>;
+  createEmployeeAssignment(data: Omit<InsertEmployeeAssignment, 'id' | 'createdAt' | 'updatedAt'>): Promise<EmployeeAssignment>;
   getEmployeeAssignmentById(id: string): Promise<EmployeeAssignment | null>;
   getEmployeeAssignmentsByEmployeeId(employeeId: string): Promise<EmployeeAssignment[]>;
   getEmployeeAssignmentsByAssignedToId(assignedToId: string): Promise<EmployeeAssignment[]>;
@@ -1717,7 +1717,7 @@ class DrizzleStorage implements IStorage {
   }
 
   // Employee Assignment Management Implementation - NEW
-  async createEmployeeAssignment(data: InsertEmployeeAssignment): Promise<EmployeeAssignment> {
+  async createEmployeeAssignment(data: Omit<InsertEmployeeAssignment, 'id' | 'createdAt' | 'updatedAt'>): Promise<EmployeeAssignment> {
     const id = uuidv4();
     const [assignment] = await db.insert(employeeAssignments).values({ ...data, id }).returning();
     return assignment;

@@ -68,33 +68,36 @@ router.get('/:id', requireAuth, async (req, res) => {
  */
 router.post('/', requireManager, async (req, res) => {
   try {
+    // Ensure user is authenticated (TypeScript check)
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
     // Transform the array criteria to JSON string if needed
     const requestData = {
       ...req.body,
-      criteria: Array.isArray(req.body.criteria) 
-        ? JSON.stringify(req.body.criteria) 
+      criteria: Array.isArray(req.body.criteria)
+        ? JSON.stringify(req.body.criteria)
         : req.body.criteria,
       createdBy: req.user.id // Add the user ID from session
     };
-    
+
     // Validate the request body using the insert schema
-    const validatedData = insertAiCriteriaSchema
-      .omit({ id: true, createdAt: true, updatedAt: true })
-      .parse(requestData);
-    
+    const validatedData = insertAiCriteriaSchema.parse(requestData);
+
     const criteria = await storage.createAiCriteria(validatedData);
     res.status(201).json(criteria);
   } catch (error) {
     console.error('Failed to create AI criteria:', error);
-    
+
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: 'Validation error',
         details: error.errors
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Failed to create AI criteria',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
@@ -106,44 +109,46 @@ router.post('/', requireManager, async (req, res) => {
  */
 router.put('/:id', requireManager, async (req, res) => {
   try {
+    // Ensure user is authenticated (TypeScript check)
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
     const { id } = req.params;
-    
+
     // Check if criteria exists
     const existingCriteria = await storage.getAiCriteriaById(id);
     if (!existingCriteria) {
       return res.status(404).json({ error: 'AI criteria not found' });
     }
-    
+
     // Transform the array criteria to JSON string if needed
     const requestData = {
       ...req.body,
       criteria: req.body.criteria !== undefined
-        ? (Array.isArray(req.body.criteria) 
-          ? JSON.stringify(req.body.criteria) 
+        ? (Array.isArray(req.body.criteria)
+          ? JSON.stringify(req.body.criteria)
           : req.body.criteria)
         : undefined,
       createdBy: req.user.id // Keep the createdBy field updated
     };
-    
+
     // Validate the request body
-    const validatedData = insertAiCriteriaSchema
-      .omit({ id: true, createdAt: true, updatedAt: true })
-      .partial()
-      .parse(requestData);
-    
+    const validatedData = insertAiCriteriaSchema.partial().parse(requestData);
+
     const updatedCriteria = await storage.updateAiCriteria(id, validatedData);
     res.json(updatedCriteria);
   } catch (error) {
     console.error('Failed to update AI criteria:', error);
-    
+
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: 'Validation error',
         details: error.errors
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Failed to update AI criteria',
       message: error instanceof Error ? error.message : 'Unknown error'
     });

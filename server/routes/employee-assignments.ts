@@ -48,12 +48,13 @@ router.get('/api/employee-assignments', requireAuth, requireManager, async (req,
 // Get assignments for specific employee
 router.get('/api/employee-assignments/employee/:employeeId', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     // Users can view their own assignments, managers can view any
-    if (req.user.id !== req.params.employeeId && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role)) {
+    if (user.id !== req.params.employeeId &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Can only view your own assignments' });
     }
-    
+
     const assignments = await storage.getEmployeeAssignmentsByEmployeeId(req.params.employeeId);
     res.json(assignments);
   } catch (error) {
@@ -65,12 +66,13 @@ router.get('/api/employee-assignments/employee/:employeeId', requireAuth, async 
 // Get employees assigned to a specific person
 router.get('/api/employee-assignments/assigned-to/:assignedToId', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     // Users can view employees assigned to them, managers can view any
-    if (req.user.id !== req.params.assignedToId && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role)) {
+    if (user.id !== req.params.assignedToId &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Can only view employees assigned to you' });
     }
-    
+
     const assignments = await storage.getEmployeeAssignmentsByAssignedToId(req.params.assignedToId);
     res.json(assignments);
   } catch (error) {
@@ -82,18 +84,19 @@ router.get('/api/employee-assignments/assigned-to/:assignedToId', requireAuth, a
 // Get assignment by ID
 router.get('/api/employee-assignments/:id', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const assignment = await storage.getEmployeeAssignmentById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ error: 'Assignment not found' });
     }
-    
+
     // Check access permissions
-    if (assignment.employeeId !== req.user.id && 
-        assignment.assignedToId !== req.user.id &&
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role)) {
+    if (assignment.employeeId !== user.id &&
+        assignment.assignedToId !== user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     res.json(assignment);
   } catch (error) {
     console.error('Error fetching assignment:', error);
@@ -104,9 +107,10 @@ router.get('/api/employee-assignments/:id', requireAuth, async (req, res) => {
 // Create new employee assignment
 router.post('/api/employee-assignments', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     const data = insertEmployeeAssignmentSchema.parse({
       ...req.body,
-      createdBy: req.user.id
+      createdBy: user.id
     });
     
     // Check if employee exists
@@ -127,8 +131,8 @@ router.post('/api/employee-assignments', requireAuth, requireManager, async (req
         primaryManagerId: data.assignedToId
       });
     }
-    
-    const assignment = await storage.createEmployeeAssignment(data);
+
+    const assignment = await storage.createEmployeeAssignment(data as any);
     
     // Share Google Drive folder with the newly assigned employee
     try {
