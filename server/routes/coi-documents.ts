@@ -62,12 +62,13 @@ router.get('/api/coi-documents', requireAuth, requireHROrManager, async (req, re
 // Get COI documents for specific employee
 router.get('/api/coi-documents/employee/:employeeId', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     // Users can view their own documents, HR/managers can view any
-    if (req.user.id !== req.params.employeeId && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+    if (user.id !== req.params.employeeId &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Can only view your own COI documents' });
     }
-    
+
     const documents = await storage.getCoiDocumentsByEmployeeId(req.params.employeeId);
     res.json(documents);
   } catch (error) {
@@ -95,17 +96,18 @@ router.get('/api/coi-documents/expiring/:days', requireAuth, requireHROrManager,
 // Get COI document by ID
 router.get('/api/coi-documents/:id', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const document = await storage.getCoiDocumentById(req.params.id);
     if (!document) {
       return res.status(404).json({ error: 'COI document not found' });
     }
-    
+
     // Check access permissions
-    if (document.employeeId !== req.user.id && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+    if (document.employeeId !== user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     res.json(document);
   } catch (error) {
     console.error('Error fetching COI document:', error);
@@ -116,8 +118,9 @@ router.get('/api/coi-documents/:id', requireAuth, async (req, res) => {
 // Create new COI document with file upload
 router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
   try {
+    const currentUser = req.user!;
     const { employeeId, type, issueDate, expirationDate, notes } = req.body;
-    
+
     console.log('[COI Upload] Starting upload for employee:', employeeId, 'Type:', type);
     
     if (!req.file) {
@@ -163,25 +166,23 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
       employeeId,
       type,
       documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
-      googleDriveId: driveFile.id,
-      filePath: driveFile.id, // Store Drive ID as reference
       issueDate,
       expirationDate,
       notes,
-      uploadedBy: req.user.id,
+      uploadedBy: currentUser.id,
       status: 'ACTIVE'
     });
-    
+
     console.log('[COI Upload] Creating database record with Google Drive link');
-    
+
     // Check expiration date to set initial status
     const expDate = new Date(expirationDate);
     const today = new Date();
     const daysUntilExpiration = Math.floor((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
-    let status = 'ACTIVE';
-    let alertFrequency = null;
-    
+
+    let status: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' = 'ACTIVE';
+    let alertFrequency: 'MONTH_BEFORE' | 'TWO_WEEKS' | 'ONE_WEEK' | 'DAILY' | null = null;
+
     if (daysUntilExpiration <= 0) {
       status = 'EXPIRED';
       alertFrequency = 'DAILY';
@@ -198,7 +199,7 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
       status = 'EXPIRING_SOON';
       alertFrequency = 'MONTH_BEFORE';
     }
-    
+
     const document = await storage.createCoiDocument({
       ...data,
       status,
@@ -240,20 +241,21 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
 // Create new COI document (without file - for backward compatibility)
 router.post('/api/coi-documents', requireAuth, requireHROrManager, async (req, res) => {
   try {
+    const user = req.user!;
     const data = insertCoiDocumentSchema.parse({
       ...req.body,
-      uploadedBy: req.user.id,
+      uploadedBy: user.id,
       status: 'ACTIVE' // New documents start as active
     });
-    
+
     // Check expiration date to set initial status
     const expirationDate = new Date(data.expirationDate);
     const today = new Date();
     const daysUntilExpiration = Math.floor((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
-    let status = 'ACTIVE';
-    let alertFrequency = null;
-    
+
+    let status: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' = 'ACTIVE';
+    let alertFrequency: 'MONTH_BEFORE' | 'TWO_WEEKS' | 'ONE_WEEK' | 'DAILY' | null = null;
+
     if (daysUntilExpiration <= 0) {
       status = 'EXPIRED';
       alertFrequency = 'DAILY'; // Daily alerts after expiration
@@ -270,7 +272,7 @@ router.post('/api/coi-documents', requireAuth, requireHROrManager, async (req, r
       status = 'EXPIRING_SOON';
       alertFrequency = 'MONTH_BEFORE'; // Alert at 1 month
     }
-    
+
     const document = await storage.createCoiDocument({
       ...data,
       status,
@@ -607,6 +609,7 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
 // Confirm smart upload assignment - saves the document with selected employee
 router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
   try {
+    const currentUser = req.user!;
     const { employeeId, type, issueDate, expirationDate, notes, policyNumber, insurerName } = req.body;
 
     console.log('[COI Confirm] Confirming assignment for employee:', employeeId);
@@ -659,8 +662,8 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
     const expDate = new Date(finalExpirationDate);
     const daysUntilExpiration = Math.floor((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-    let status = 'ACTIVE';
-    let alertFrequency = null;
+    let status: 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' = 'ACTIVE';
+    let alertFrequency: 'MONTH_BEFORE' | 'TWO_WEEKS' | 'ONE_WEEK' | 'DAILY' | null = null;
 
     if (daysUntilExpiration <= 0) {
       status = 'EXPIRED';
@@ -684,12 +687,10 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       employeeId,
       type: coiType as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
-      googleDriveId: driveFile.id,
-      filePath: driveFile.id,
       issueDate: finalIssueDate,
       expirationDate: finalExpirationDate,
       notes: notes || `Policy: ${policyNumber || 'Unknown'}. Insurer: ${insurerName || 'Unknown'}`,
-      uploadedBy: req.user.id,
+      uploadedBy: currentUser.id,
       status,
       alertFrequency
     });
@@ -718,19 +719,20 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
 // Download COI document from Google Drive
 router.get('/api/coi-documents/:id/download', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const document = await storage.getCoiDocumentById(req.params.id);
     if (!document) {
       return res.status(404).json({ error: 'COI document not found' });
     }
 
     // Check access permissions
-    if (document.employeeId !== req.user.id &&
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+    if (document.employeeId !== user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Get file from Google Drive
-    const googleDriveId = document.googleDriveId || document.filePath;
+    // Get file from Google Drive - use documentUrl to extract Drive ID
+    const googleDriveId = (document as any).googleDriveId || document.documentUrl?.match(/\/d\/([^/]+)/)?.[1];
     if (!googleDriveId) {
       return res.status(404).json({ error: 'Document file not found in storage' });
     }
@@ -757,19 +759,20 @@ router.get('/api/coi-documents/:id/download', requireAuth, async (req, res) => {
 // Get preview URL for COI document
 router.get('/api/coi-documents/:id/preview', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const document = await storage.getCoiDocumentById(req.params.id);
     if (!document) {
       return res.status(404).json({ error: 'COI document not found' });
     }
 
     // Check access permissions
-    if (document.employeeId !== req.user.id &&
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+    if (document.employeeId !== user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Return the Google Drive view URL
-    const googleDriveId = document.googleDriveId || document.filePath;
+    // Return the Google Drive view URL - extract Drive ID from documentUrl
+    const googleDriveId = (document as any).googleDriveId || document.documentUrl?.match(/\/d\/([^/]+)/)?.[1];
     let previewUrl = document.documentUrl;
 
     if (googleDriveId && !previewUrl) {
