@@ -1203,7 +1203,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
               department: 'Sales',
               position: candidate.position || 'Sales Representative',
               phone: candidate.phone || '',
-              hireDate: new Date(),
+              hireDate: new Date().toISOString().split('T')[0],
               mustChangePassword: true,
             });
 
@@ -1313,14 +1313,15 @@ router.post('/api/candidates/:candidateId/analyze', requireAuth, async (req, res
     const { aiEnhancementService } = await import('./services/ai-enhancement');
 
     // Prepare candidate data for analysis
+    const candidateAny = candidate as any;
     const candidateData = {
       name: `${candidate.firstName} ${candidate.lastName}`,
       position: candidate.position,
-      resumeText: candidate.resumeText || '',
-      skills: candidate.skills ? JSON.parse(candidate.skills) : [],
-      experience: candidate.yearsExperience || 0,
-      education: candidate.education || '',
-      parsedResumeData: candidate.parsedResumeData ? JSON.parse(candidate.parsedResumeData) : null,
+      resumeText: candidateAny.resumeText || '',
+      skills: candidateAny.skills ? JSON.parse(candidateAny.skills) : [],
+      experience: candidateAny.yearsExperience || 0,
+      education: candidateAny.education || '',
+      parsedResumeData: candidateAny.parsedResumeData ? JSON.parse(candidateAny.parsedResumeData) : null,
     };
 
     // Job requirements (basic for now)
@@ -1409,10 +1410,11 @@ router.delete('/api/employees/notes/:id', requireAuth, requireManager, async (re
 // Interview Screening Alert endpoint
 router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) => {
   try {
+    const user = req.user!;
     const { candidateId, candidateName, position, failedRequirements, notes, timestamp } = req.body;
 
     // Get all managers and admins to notify
-    const allUsers = await storage.getUsers();
+    const allUsers = await storage.getAllUsers();
     const managersAndAdmins = allUsers.filter((u: any) =>
       u.role === 'ADMIN' || u.role === 'MANAGER'
     );
@@ -1429,7 +1431,8 @@ router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) 
 
     // Send email notifications to managers (if email service is available)
     try {
-      const { emailService } = await import('./services/email');
+      const emailService = new EmailService();
+      await emailService.initialize();
 
       for (const manager of managersAndAdmins) {
         if (manager.email) {
@@ -1445,7 +1448,7 @@ router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) 
                 ${failedRequirements.map((req: string) => `<li style="color: red;">${req}: NO</li>`).join('')}
               </ul>
               ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
-              <p><strong>Screened By:</strong> ${req.user.firstName} ${req.user.lastName}</p>
+              <p><strong>Screened By:</strong> ${user.firstName} ${user.lastName}</p>
               <p><strong>Date:</strong> ${new Date(timestamp).toLocaleString()}</p>
               <hr>
               <p><em>This candidate is proceeding to an in-person interview despite not meeting all requirements.</em></p>

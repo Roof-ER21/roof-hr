@@ -320,43 +320,45 @@ export class SusanTerritoryManager {
         .from(territories)
         .where(eq(territories.isActive, true));
 
-      const report = {
+      // Get employee counts for each territory
+      const territoriesWithCounts = await Promise.all(
+        allTerritories.map(async (territory) => {
+          const employees = await db.select()
+            .from(users)
+            .where(eq(users.territoryId, territory.id));
+          return {
+            ...territory,
+            employeeCount: employees.length
+          };
+        })
+      );
+
+      const report: {
+        totalTerritories: number;
+        byRegion: Record<string, {
+          count: number;
+          employees: number;
+        }>;
+        totalEmployees: number;
+        generatedAt: Date;
+      } = {
         totalTerritories: allTerritories.length,
         byRegion: {},
-        totalTargetRevenue: allTerritories.reduce((sum, t) => sum + (t.targetRevenue || 0), 0),
-        totalActualRevenue: allTerritories.reduce((sum, t) => sum + (t.actualRevenue || 0), 0),
-        totalEmployees: allTerritories.reduce((sum, t) => sum + (t.employeeCount || 0), 0),
-        averagePerformance: 0,
-        topPerformers: [],
-        underperformers: [],
+        totalEmployees: territoriesWithCounts.reduce((sum, t) => sum + t.employeeCount, 0),
         generatedAt: new Date()
       };
 
       // Group by region
-      allTerritories.forEach(territory => {
+      territoriesWithCounts.forEach(territory => {
         if (!report.byRegion[territory.region]) {
           report.byRegion[territory.region] = {
             count: 0,
-            targetRevenue: 0,
-            actualRevenue: 0,
             employees: 0
           };
         }
         report.byRegion[territory.region].count++;
-        report.byRegion[territory.region].targetRevenue += territory.targetRevenue || 0;
-        report.byRegion[territory.region].actualRevenue += territory.actualRevenue || 0;
-        report.byRegion[territory.region].employees += territory.employeeCount || 0;
+        report.byRegion[territory.region].employees += territory.employeeCount;
       });
-
-      // Calculate performance
-      const performances = allTerritories.map(t => ({
-        ...t,
-        performance: t.targetRevenue ? (t.actualRevenue || 0) / t.targetRevenue * 100 : 0
-      }));
-
-      report.averagePerformance = performances.reduce((sum, t) => sum + t.performance, 0) / performances.length;
-      report.topPerformers = performances.sort((a, b) => b.performance - a.performance).slice(0, 5);
-      report.underperformers = performances.filter(t => t.performance < 80);
 
       console.log(`[SUSAN-TERRITORY] Generated territory report`);
       return { success: true, report };
@@ -366,27 +368,6 @@ export class SusanTerritoryManager {
     }
   }
 
-  /**
-   * Update employee counts for territories
-   */
-  private async updateEmployeeCounts(territoryIds: string[]): Promise<void> {
-    try {
-      for (const territoryId of territoryIds) {
-        const employees = await db.select()
-          .from(users)
-          .where(eq(users.territoryId, territoryId));
-
-        await db.update(territories)
-          .set({
-            employeeCount: employees.length,
-            updatedAt: new Date()
-          })
-          .where(eq(territories.id, territoryId));
-      }
-    } catch (error) {
-      console.error('[SUSAN-TERRITORY] Error updating employee counts:', error);
-    }
-  }
 
   /**
    * Send territory notification
@@ -409,19 +390,20 @@ export class SusanTerritoryManager {
 
       if (!manager || !territory || !manager.email) return;
 
-      const subject = type === 'assigned' ? 
-        `Territory Assignment: ${territory.name}` : 
+      const subject = type === 'assigned' ?
+        `Territory Assignment: ${territory.name}` :
         `Territory Removal: ${territory.name}`;
 
+      const managerName = `${manager.firstName} ${manager.lastName}`;
+
       const html = type === 'assigned' ? `
-        <p>Dear ${manager.name},</p>
+        <p>Dear ${managerName},</p>
         <p>You have been assigned as the manager of ${territory.name} territory.</p>
         <p>Region: ${territory.region}</p>
-        <p>Target Revenue: $${territory.targetRevenue?.toLocaleString() || 0}</p>
         <p>Please log in to view your territory details.</p>
         <p>Best regards,<br>Territory Management</p>
       ` : `
-        <p>Dear ${manager.name},</p>
+        <p>Dear ${managerName},</p>
         <p>You have been removed as the manager of ${territory.name} territory.</p>
         <p>A new manager will be assigned shortly.</p>
         <p>Best regards,<br>Territory Management</p>

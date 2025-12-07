@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { users } from '../../../shared/schema';
+import { users, employeeContracts, contractTemplates } from '../../../shared/schema';
 import { eq, and, or, sql, desc, inArray, like, gte } from 'drizzle-orm';
 import { EmailService } from '../../email-service';
 import { v4 as uuidv4 } from 'uuid';
@@ -51,8 +51,9 @@ export class SusanContractManager {
           .limit(1);
         
         if (employee) {
+          const employeeName = `${employee.firstName} ${employee.lastName}`;
           contractContent = contractContent
-            .replace(/{{EMPLOYEE_NAME}}/g, employee.name)
+            .replace(/{{EMPLOYEE_NAME}}/g, employeeName)
             .replace(/{{EMPLOYEE_EMAIL}}/g, employee.email)
             .replace(/{{START_DATE}}/g, data.startDate.toLocaleDateString());
         }
@@ -86,12 +87,12 @@ export class SusanContractManager {
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await db.update(contracts)
+      await db.update(employeeContracts)
         .set({
           ...updates,
           updatedAt: new Date()
         })
-        .where(eq(contracts.id, contractId));
+        .where(eq(employeeContracts.id, contractId));
 
       console.log(`[SUSAN-CONTRACTS] Updated contract ${contractId}`);
       return { success: true };
@@ -110,8 +111,8 @@ export class SusanContractManager {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const [contract] = await db.select()
-        .from(contracts)
-        .where(eq(contracts.id, contractId))
+        .from(employeeContracts)
+        .where(eq(employeeContracts.id, contractId))
         .limit(1);
 
       if (!contract) {
@@ -133,13 +134,13 @@ export class SusanContractManager {
       }
 
       // Update contract status
-      await db.update(contracts)
+      await db.update(employeeContracts)
         .set({
           status: 'SENT',
           sentAt: new Date(),
           updatedAt: new Date()
         })
-        .where(eq(contracts.id, contractId));
+        .where(eq(employeeContracts.id, contractId));
 
       // Send email
       await this.emailService.sendEmail({
@@ -177,7 +178,7 @@ export class SusanContractManager {
     signatureData?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await db.update(contracts)
+      await db.update(employeeContracts)
         .set({
           status: 'SIGNED',
           signedBy,
@@ -185,7 +186,7 @@ export class SusanContractManager {
           signatureData: signatureData || '',
           updatedAt: new Date()
         })
-        .where(eq(contracts.id, contractId));
+        .where(eq(employeeContracts.id, contractId));
 
       // Send confirmation
       await this.sendContractNotification(contractId, 'signed');
@@ -205,14 +206,14 @@ export class SusanContractManager {
     try {
       const today = new Date();
       
-      const result = await db.update(contracts)
+      const result = await db.update(employeeContracts)
         .set({
           status: 'EXPIRED',
           updatedAt: new Date()
         })
         .where(and(
-          sql`${contracts.endDate} < ${today}`,
-          inArray(contracts.status, ['SIGNED', 'ACTIVE'])
+          sql`${employeeContracts.endDate} < ${today}`,
+          inArray(employeeContracts.status, ['SIGNED', 'ACTIVE'])
         ));
 
       console.log(`[SUSAN-CONTRACTS] Expired contracts`);
@@ -236,8 +237,8 @@ export class SusanContractManager {
   ): Promise<{ success: boolean; newContractId?: string; error?: string }> {
     try {
       const [originalContract] = await db.select()
-        .from(contracts)
-        .where(eq(contracts.id, contractId))
+        .from(employeeContracts)
+        .where(eq(employeeContracts.id, contractId))
         .limit(1);
 
       if (!originalContract) {
@@ -247,7 +248,7 @@ export class SusanContractManager {
       // Create renewed contract
       const newContractId = uuidv4();
       
-      await db.insert(contracts).values({
+      await db.insert(employeeContracts).values({
         id: newContractId,
         employeeId: originalContract.employeeId,
         vendorId: originalContract.vendorId,
@@ -265,13 +266,13 @@ export class SusanContractManager {
       });
 
       // Mark original as renewed
-      await db.update(contracts)
+      await db.update(employeeContracts)
         .set({
           status: 'RENEWED',
           renewedTo: newContractId,
           updatedAt: new Date()
         })
-        .where(eq(contracts.id, contractId));
+        .where(eq(employeeContracts.id, contractId));
 
       console.log(`[SUSAN-CONTRACTS] Renewed contract ${contractId} as ${newContractId}`);
       return { success: true, newContractId };
@@ -290,14 +291,14 @@ export class SusanContractManager {
     effectiveDate?: Date
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await db.update(contracts)
+      await db.update(employeeContracts)
         .set({
           status: 'TERMINATED',
           terminationReason: reason,
           terminatedAt: effectiveDate || new Date(),
           updatedAt: new Date()
         })
-        .where(eq(contracts.id, contractId));
+        .where(eq(employeeContracts.id, contractId));
 
       // Send termination notice
       await this.sendContractNotification(contractId, 'terminated');
@@ -369,7 +370,7 @@ export class SusanContractManager {
    */
   async generateReport(): Promise<{ success: boolean; report?: any; error?: string }> {
     try {
-      const allContracts = await db.select().from(contracts);
+      const allContracts = await db.select().from(employeeContracts);
       
       const report = {
         totalContracts: allContracts.length,
@@ -422,8 +423,8 @@ export class SusanContractManager {
   ): Promise<void> {
     try {
       const [contract] = await db.select()
-        .from(contracts)
-        .where(eq(contracts.id, contractId))
+        .from(employeeContracts)
+        .where(eq(employeeContracts.id, contractId))
         .limit(1);
 
       if (!contract) return;
