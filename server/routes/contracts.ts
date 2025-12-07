@@ -89,11 +89,13 @@ router.get('/api/contract-templates/territory/:territory', requireAuth, requireM
 // Create new contract template
 router.post('/api/contract-templates', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     const data = insertContractTemplateSchema.parse({
       ...req.body,
-      createdBy: req.user.id
+      id: uuidv4(),
+      createdBy: user.id
     });
-    
+
     const template = await storage.createContractTemplate(data);
     res.json(template);
   } catch (error: any) {
@@ -134,6 +136,7 @@ router.post('/api/contract-templates/upload',
   upload.single('file'),
   async (req: any, res) => {
     try {
+      const currentUser = req.user!;
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
@@ -153,7 +156,7 @@ router.post('/api/contract-templates/upload',
       await contractPdfService.uploadTemplate(req.file.buffer, fileName);
 
       // Parse variables if provided as string
-      let variablesList = [];
+      let variablesList: string[] = [];
       if (variables) {
         try {
           variablesList = JSON.parse(variables);
@@ -164,18 +167,19 @@ router.post('/api/contract-templates/upload',
 
       // Create template record in database
       const template = await storage.createContractTemplate({
+        id: uuidv4(),
         name,
-        type,
+        type: type as 'CONTRACTOR' | 'OTHER' | 'EMPLOYMENT' | 'NDA',
         territory: territory || null,
         content: `PDF Template: ${name}`,
         fileUrl: `/contract-templates/${fileName}`,
         fileName,
         variables: variablesList,
         isActive: true,
-        createdBy: req.user.id,
+        createdBy: currentUser.id,
       });
 
-      console.log(`PDF template uploaded: ${name} by user ${req.user.id}`);
+      console.log(`PDF template uploaded: ${name} by user ${currentUser.id}`);
       res.status(201).json(template);
     } catch (error) {
       console.error('Error uploading PDF template:', error);
@@ -189,6 +193,7 @@ router.post('/api/contracts/generate-from-template',
   requireAuth,
   async (req: any, res) => {
     try {
+      const currentUser = req.user!;
       const { templateId, recipientType, employeeId, candidateId, fieldValues } = req.body;
 
       // Get the template
@@ -200,14 +205,14 @@ router.post('/api/contracts/generate-from-template',
       // Get recipient details
       let recipientName = '';
       let recipientEmail = '';
-      
+
       if (recipientType === 'EMPLOYEE' && employeeId) {
-        const user = await storage.getUserById(employeeId);
-        if (!user) {
+        const employee = await storage.getUserById(employeeId);
+        if (!employee) {
           return res.status(404).json({ error: 'Employee not found' });
         }
-        recipientName = `${user.firstName} ${user.lastName}`;
-        recipientEmail = user.email;
+        recipientName = `${employee.firstName} ${employee.lastName}`;
+        recipientEmail = employee.email;
       } else if (recipientType === 'CANDIDATE' && candidateId) {
         const candidate = await storage.getCandidateById(candidateId);
         if (!candidate) {
@@ -224,7 +229,7 @@ router.post('/api/contracts/generate-from-template',
       if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
         // Generate unique output filename
         const outputFileName = `contract_${recipientName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-        
+
         // Fill in the PDF fields
         const filledPdfPath = await contractPdfService.generateContract(
           template.fileName,
@@ -240,6 +245,7 @@ router.post('/api/contracts/generate-from-template',
 
       // Create the employee contract record
       const contract = await storage.createEmployeeContract({
+        id: uuidv4(),
         employeeId: employeeId || null,
         candidateId: candidateId || null,
         templateId: templateId,
@@ -249,7 +255,7 @@ router.post('/api/contracts/generate-from-template',
         content: template.content,
         fileUrl: generatedFileUrl,
         status: 'DRAFT',
-        createdBy: req.user.id,
+        createdBy: currentUser.id,
       });
 
       console.log(`Contract generated from template ${template.name} for ${recipientName}`);
@@ -266,12 +272,13 @@ router.post('/api/contracts/generate-from-template',
 // Get all contracts (generic endpoint for compatibility)
 router.get('/api/contracts', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     // If user is manager/admin, show all contracts. Otherwise show their own.
     let contracts;
-    if (['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'HR_MANAGER'].includes(req.user.role)) {
+    if (['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'HR_MANAGER'].includes(user.role)) {
       contracts = await storage.getAllEmployeeContracts();
     } else {
-      contracts = await storage.getEmployeeContractsByEmployeeId(req.user.id);
+      contracts = await storage.getEmployeeContractsByEmployeeId(user.id);
     }
     res.json(contracts || []);
   } catch (error) {
@@ -294,12 +301,13 @@ router.get('/api/employee-contracts', requireAuth, requireManager, async (req, r
 // Get employee contracts for specific employee
 router.get('/api/employee-contracts/employee/:employeeId', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     // Users can view their own contracts, managers can view any
-    if (req.user.id !== req.params.employeeId && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role)) {
+    if (user.id !== req.params.employeeId &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Can only view your own contracts' });
     }
-    
+
     const contracts = await storage.getEmployeeContractsByEmployeeId(req.params.employeeId);
     res.json(contracts);
   } catch (error) {
@@ -311,17 +319,18 @@ router.get('/api/employee-contracts/employee/:employeeId', requireAuth, async (r
 // Get employee contract by ID
 router.get('/api/employee-contracts/:id', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const contract = await storage.getEmployeeContractById(req.params.id);
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
-    
+
     // Check access permissions
-    if (contract.employeeId !== req.user.id && 
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role)) {
+    if (contract.employeeId !== user.id &&
+        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     res.json(contract);
   } catch (error) {
     console.error('Error fetching employee contract:', error);
@@ -332,12 +341,13 @@ router.get('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 // Create new employee contract
 router.post('/api/employee-contracts', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
     // Parse the request based on recipient type
     let recipientName = '';
     let recipientEmail = '';
     let recipientPosition = '';
     let recipientDepartment = '';
-    
+
     if (req.body.recipientType === 'CANDIDATE') {
       // Get candidate information
       const candidate = await storage.getCandidateById(req.body.candidateId);
@@ -359,12 +369,13 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       recipientPosition = employee.position;
       recipientDepartment = employee.department;
     }
-    
+
     const data = insertEmployeeContractSchema.parse({
       ...req.body,
+      id: uuidv4(),
       recipientName,
       recipientEmail,
-      createdBy: req.user.id,
+      createdBy: user.id,
       status: 'DRAFT'
     });
     
@@ -410,14 +421,15 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
 // Update employee contract
 router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const contract = await storage.getEmployeeContractById(req.params.id);
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
-    
+
     // Check permissions - employee can update some fields, managers can update all
-    const isEmployee = contract.employeeId === req.user.id;
-    const isManager = ['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(req.user.role);
+    const isEmployee = contract.employeeId === user.id;
+    const isManager = ['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role);
     
     if (!isEmployee && !isManager) {
       return res.status(403).json({ error: 'Access denied' });
@@ -505,19 +517,20 @@ router.delete('/api/employee-contracts/:id', requireAuth, requireManager, async 
 // Sign employee contract
 router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const { signature } = req.body;
-    
+
     if (!signature) {
       return res.status(400).json({ error: 'Signature required' });
     }
-    
+
     const contract = await storage.getEmployeeContractById(req.params.id);
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
-    
+
     // Check if user is the employee
-    if (contract.employeeId !== req.user.id) {
+    if (contract.employeeId !== user.id) {
       return res.status(403).json({ error: 'Only the employee can sign their contract' });
     }
     
@@ -545,19 +558,20 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
 // Reject employee contract
 router.post('/api/employee-contracts/:id/reject', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const { reason } = req.body;
-    
+
     if (!reason) {
       return res.status(400).json({ error: 'Rejection reason required' });
     }
-    
+
     const contract = await storage.getEmployeeContractById(req.params.id);
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
-    
+
     // Check if user is the employee
-    if (contract.employeeId !== req.user.id) {
+    if (contract.employeeId !== user.id) {
       return res.status(403).json({ error: 'Only the employee can reject their contract' });
     }
     
