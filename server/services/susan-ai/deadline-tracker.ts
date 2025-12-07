@@ -107,7 +107,7 @@ class DeadlineTracker extends EventEmitter {
             deadline: expirationDate,
             daysUntilDeadline: daysUntil,
             priority: daysUntil <= 7 ? 'HIGH' : daysUntil <= 30 ? 'MEDIUM' : 'LOW',
-            assignedTo: employee?.managerId,
+            assignedTo: employee?.primaryManagerId || undefined,
             message: `COI document ${doc.type} for ${employee?.firstName} ${employee?.lastName} expires in ${daysUntil} days`
           });
         }
@@ -121,36 +121,40 @@ class DeadlineTracker extends EventEmitter {
   
   private async checkContractExpirations(): Promise<DeadlineAlert[]> {
     const alerts: DeadlineAlert[] = [];
-    
+
     try {
-      const contracts = await storage.getAllContracts();
+      const contracts = await storage.getAllEmployeeContracts();
       const today = new Date();
-      
+
       for (const contract of contracts) {
-        if (!contract.expirationDate || contract.status !== 'SIGNED') continue;
-        
-        const expirationDate = new Date(contract.expirationDate);
-        const daysUntil = differenceInDays(expirationDate, today);
-        
-        if (this.alertThresholds.CONTRACT_EXPIRY.includes(daysUntil)) {
-          const employee = await storage.getUser(contract.recipientId);
-          
+        // Note: employeeContracts schema doesn't have expirationDate, so we check for SENT contracts pending signature
+        if (contract.status !== 'SENT') continue;
+
+        // Check if contract has been pending too long (7 days)
+        const sentDate = contract.sentDate ? new Date(contract.sentDate) : null;
+        if (!sentDate) continue;
+
+        const daysPending = differenceInDays(today, sentDate);
+
+        if (daysPending >= 7) {
+          const recipientName = contract.recipientName || 'Unknown';
+
           alerts.push({
             type: 'CONTRACT_EXPIRY',
             entityId: contract.id,
-            entityName: `${contract.title} - ${employee?.firstName} ${employee?.lastName}`,
-            deadline: expirationDate,
-            daysUntilDeadline: daysUntil,
-            priority: daysUntil <= 14 ? 'HIGH' : daysUntil <= 60 ? 'MEDIUM' : 'LOW',
+            entityName: `${contract.title} - ${recipientName}`,
+            deadline: sentDate,
+            daysUntilDeadline: -daysPending, // Negative since it's past due
+            priority: daysPending >= 14 ? 'HIGH' : daysPending >= 7 ? 'MEDIUM' : 'LOW',
             assignedTo: contract.createdBy,
-            message: `Contract "${contract.title}" for ${employee?.firstName} ${employee?.lastName} expires in ${daysUntil} days`
+            message: `Contract "${contract.title}" for ${recipientName} has been pending signature for ${daysPending} days`
           });
         }
       }
     } catch (error) {
       console.error('[Deadline Tracker] Error checking contract expirations:', error);
     }
-    
+
     return alerts;
   }
   
@@ -158,7 +162,7 @@ class DeadlineTracker extends EventEmitter {
     const alerts: DeadlineAlert[] = [];
     
     try {
-      const ptoRequests = await storage.getAllPTORequests();
+      const ptoRequests = await storage.getAllPtoRequests();
       const today = new Date();
       
       for (const request of ptoRequests) {
@@ -177,7 +181,7 @@ class DeadlineTracker extends EventEmitter {
             deadline: new Date(request.startDate),
             daysUntilDeadline: differenceInDays(new Date(request.startDate), today),
             priority: daysPending >= 3 ? 'HIGH' : 'MEDIUM',
-            assignedTo: employee?.managerId,
+            assignedTo: employee?.primaryManagerId || undefined,
             message: `PTO request from ${employee?.firstName} ${employee?.lastName} has been pending for ${daysPending} days`
           });
         }
@@ -191,20 +195,26 @@ class DeadlineTracker extends EventEmitter {
   
   private async checkUpcomingReviews(): Promise<DeadlineAlert[]> {
     const alerts: DeadlineAlert[] = [];
-    
+
     try {
       const employees = await storage.getAllUsers();
       const today = new Date();
-      
+
       for (const employee of employees) {
-        if (employee.status !== 'active' || !employee.lastReviewDate) continue;
-        
-        // Assume reviews are quarterly (every 3 months)
-        const lastReview = new Date(employee.lastReviewDate);
-        const nextReview = addDays(lastReview, 90);
+        // Skip inactive employees (check isActive flag)
+        if (!employee.isActive) continue;
+
+        // Skip employees without a hire date (can't calculate review schedule)
+        if (!employee.hireDate) continue;
+
+        // Calculate next review date based on hire date (quarterly reviews)
+        const hireDate = new Date(employee.hireDate);
+        const monthsSinceHire = Math.floor(differenceInDays(today, hireDate) / 30);
+        const nextReviewMonth = Math.ceil((monthsSinceHire + 1) / 3) * 3;
+        const nextReview = addDays(hireDate, nextReviewMonth * 30);
         const daysUntil = differenceInDays(nextReview, today);
-        
-        if (this.alertThresholds.PERFORMANCE_REVIEW.includes(daysUntil)) {
+
+        if (daysUntil > 0 && this.alertThresholds.PERFORMANCE_REVIEW.includes(daysUntil)) {
           alerts.push({
             type: 'PERFORMANCE_REVIEW',
             entityId: employee.id,
@@ -212,7 +222,7 @@ class DeadlineTracker extends EventEmitter {
             deadline: nextReview,
             daysUntilDeadline: daysUntil,
             priority: daysUntil <= 7 ? 'HIGH' : daysUntil <= 14 ? 'MEDIUM' : 'LOW',
-            assignedTo: employee.managerId,
+            assignedTo: employee.primaryManagerId || undefined,
             message: `Performance review for ${employee.firstName} ${employee.lastName} is due in ${daysUntil} days`
           });
         }
@@ -220,26 +230,32 @@ class DeadlineTracker extends EventEmitter {
     } catch (error) {
       console.error('[Deadline Tracker] Error checking performance reviews:', error);
     }
-    
+
     return alerts;
   }
   
   private async checkOnboardingDeadlines(): Promise<DeadlineAlert[]> {
     const alerts: DeadlineAlert[] = [];
-    
+
     try {
-      const recentHires = await storage.getRecentHires(30); // Get hires from last 30 days
+      // Get recent hires by filtering all users hired within last 30 days
+      const allUsers = await storage.getAllUsers();
       const today = new Date();
-      
+      const thirtyDaysAgo = addDays(today, -30);
+
+      const recentHires = allUsers.filter((user) => {
+        if (!user.hireDate || !user.isActive) return false;
+        const hireDate = new Date(user.hireDate);
+        return isAfter(hireDate, thirtyDaysAgo);
+      });
+
       for (const employee of recentHires) {
+        if (!employee.hireDate) continue;
         const hireDate = new Date(employee.hireDate);
         const onboardingDeadline = addDays(hireDate, 14); // 2 week onboarding period
         const daysUntil = differenceInDays(onboardingDeadline, today);
-        
+
         if (daysUntil > 0 && this.alertThresholds.ONBOARDING.includes(daysUntil)) {
-          // Check if assigned to HR member
-          const assignment = await storage.getHRAssignmentByEmployee(employee.id);
-          
           alerts.push({
             type: 'ONBOARDING',
             entityId: employee.id,
@@ -247,7 +263,7 @@ class DeadlineTracker extends EventEmitter {
             deadline: onboardingDeadline,
             daysUntilDeadline: daysUntil,
             priority: daysUntil <= 3 ? 'HIGH' : 'MEDIUM',
-            assignedTo: assignment?.hrMemberId || employee.managerId,
+            assignedTo: employee.primaryManagerId || undefined,
             message: `Onboarding for ${employee.firstName} ${employee.lastName} needs to be completed in ${daysUntil} days`
           });
         }
@@ -255,25 +271,32 @@ class DeadlineTracker extends EventEmitter {
     } catch (error) {
       console.error('[Deadline Tracker] Error checking onboarding deadlines:', error);
     }
-    
+
     return alerts;
   }
   
   private async checkUpcomingInterviews(): Promise<DeadlineAlert[]> {
     const alerts: DeadlineAlert[] = [];
-    
+
     try {
-      const interviews = await storage.getUpcomingInterviews();
+      // Get all interviews and filter for upcoming scheduled ones
+      const allInterviews = await storage.getAllInterviews();
       const today = new Date();
-      
-      for (const interview of interviews) {
+
+      const upcomingInterviews = allInterviews.filter((interview) => {
+        if (interview.status !== 'SCHEDULED') return false;
+        const scheduledDate = new Date(interview.scheduledDate);
+        return isAfter(scheduledDate, today);
+      });
+
+      for (const interview of upcomingInterviews) {
         const interviewDate = new Date(interview.scheduledDate);
         const daysUntil = differenceInDays(interviewDate, today);
         const hoursUntil = Math.ceil((interviewDate.getTime() - today.getTime()) / (1000 * 60 * 60));
-        
+
         if (this.alertThresholds.INTERVIEW.includes(daysUntil)) {
-          const candidate = await storage.getCandidate(interview.candidateId);
-          
+          const candidate = await storage.getCandidateById(interview.candidateId);
+
           alerts.push({
             type: 'INTERVIEW',
             entityId: interview.id,
@@ -281,8 +304,8 @@ class DeadlineTracker extends EventEmitter {
             deadline: interviewDate,
             daysUntilDeadline: daysUntil,
             priority: daysUntil === 0 ? 'HIGH' : daysUntil === 1 ? 'MEDIUM' : 'LOW',
-            assignedTo: interview.interviewerId,
-            message: daysUntil === 0 
+            assignedTo: interview.interviewerId || undefined,
+            message: daysUntil === 0
               ? `Interview with ${candidate?.firstName} ${candidate?.lastName} is TODAY in ${hoursUntil} hours`
               : `Interview with ${candidate?.firstName} ${candidate?.lastName} is in ${daysUntil} days`
           });
@@ -291,7 +314,7 @@ class DeadlineTracker extends EventEmitter {
     } catch (error) {
       console.error('[Deadline Tracker] Error checking upcoming interviews:', error);
     }
-    
+
     return alerts;
   }
   
