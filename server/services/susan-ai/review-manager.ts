@@ -1,14 +1,13 @@
 import { db } from '../../db';
 import { users, employeeReviews } from '../../../shared/schema';
-import { eq, and, or, sql, desc, inArray, like, gte } from 'drizzle-orm';
+import { eq, and, sql, lte } from 'drizzle-orm';
 import { EmailService } from '../../email-service';
 import { v4 as uuidv4 } from 'uuid';
 import type { IStorage } from '../../storage';
 
 export interface ReviewAction {
-  type: 'create_review' | 'update_review' | 'complete_review' | 'bulk_create' | 
-        'send_reminders' | 'generate_reports' | 'schedule_reviews' | 'archive_reviews' |
-        'create_template' | 'assign_reviewer';
+  type: 'create_review' | 'update_review' | 'submit_review' | 'bulk_create' |
+        'send_reminders' | 'generate_reports' | 'schedule_reviews';
   reviewId?: string;
   reviewIds?: string[];
   data?: any;
@@ -27,25 +26,28 @@ export class SusanReviewManager {
    * Create a performance review
    */
   async createReview(data: {
-    employeeId: string;
+    revieweeId: string;
     reviewerId: string;
-    reviewType: 'ANNUAL' | 'QUARTERLY' | 'PROBATION' | 'PROJECT';
-    period: string;
+    reviewType: 'ANNUAL' | 'QUARTERLY' | 'PROBATION' | 'PROJECT' | 'IMPROVEMENT';
+    reviewPeriod: string;
     dueDate: Date;
-    templateId?: string;
   }): Promise<{ success: boolean; reviewId?: string; error?: string }> {
     try {
       const reviewId = uuidv4();
-      
-      // In a real system, this would create a review record
-      // For now, we just log and send notification
-      console.log(`[SUSAN-REVIEWS] Creating review: ${reviewId} for employee ${data.employeeId}`);
-      console.log(`[SUSAN-REVIEWS] Review details:`, data);
 
-      // Send notification to reviewer (note: can only send once review is created in DB)
-      // For now, just log the intent since review isn't persisted yet
-      console.log(`[SUSAN-REVIEWS] Would send 'assigned' notification for review ${reviewId}`);
+      await db.insert(employeeReviews).values({
+        id: reviewId,
+        revieweeId: data.revieweeId,
+        reviewerId: data.reviewerId,
+        reviewType: data.reviewType,
+        reviewPeriod: data.reviewPeriod,
+        status: 'DRAFT',
+        dueDate: data.dueDate,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
 
+      console.log(`[SUSAN-REVIEWS] Created review: ${reviewId} for reviewee ${data.revieweeId}`);
       return { success: true, reviewId };
     } catch (error) {
       console.error('[SUSAN-REVIEWS] Error creating review:', error);
@@ -59,12 +61,16 @@ export class SusanReviewManager {
   async updateReview(
     reviewId: string,
     updates: Partial<{
-      rating: number;
+      overallRating: number;
+      performanceScore: number;
+      teamworkScore: number;
+      communicationScore: number;
+      technicalScore: number;
+      strengths: string;
+      areasForImprovement: string;
       goals: string;
-      achievements: string;
-      improvements: string;
-      feedback: string;
-      status: string;
+      comments: string;
+      status: 'DRAFT' | 'IN_PROGRESS' | 'SUBMITTED' | 'ACKNOWLEDGED';
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
@@ -84,36 +90,65 @@ export class SusanReviewManager {
   }
 
   /**
-   * Complete a review
+   * Submit a review
    */
-  async completeReview(
+  async submitReview(
     reviewId: string,
     finalData: {
-      rating: number;
+      overallRating: number;
+      performanceScore?: number;
+      teamworkScore?: number;
+      communicationScore?: number;
+      technicalScore?: number;
+      strengths?: string;
+      areasForImprovement?: string;
       goals?: string;
-      achievements?: string;
-      improvements?: string;
-      feedback?: string;
+      comments?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await db.update(employeeReviews)
         .set({
           ...finalData,
-          status: 'COMPLETED',
-          completedAt: new Date(),
+          status: 'SUBMITTED',
+          submittedAt: new Date(),
           updatedAt: new Date()
         })
         .where(eq(employeeReviews.id, reviewId));
 
-      // Send completion notification
-      await this.sendReviewNotification(reviewId, 'completed');
+      // Send notification to reviewee
+      await this.sendReviewNotification(reviewId, 'submitted');
 
-      console.log(`[SUSAN-REVIEWS] Completed review ${reviewId}`);
+      console.log(`[SUSAN-REVIEWS] Submitted review ${reviewId}`);
       return { success: true };
     } catch (error) {
-      console.error('[SUSAN-REVIEWS] Error completing review:', error);
-      return { success: false, error: 'Failed to complete review' };
+      console.error('[SUSAN-REVIEWS] Error submitting review:', error);
+      return { success: false, error: 'Failed to submit review' };
+    }
+  }
+
+  /**
+   * Acknowledge a review (by the reviewee)
+   */
+  async acknowledgeReview(
+    reviewId: string,
+    revieweeComments?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await db.update(employeeReviews)
+        .set({
+          status: 'ACKNOWLEDGED',
+          revieweeComments: revieweeComments || null,
+          acknowledgedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(employeeReviews.id, reviewId));
+
+      console.log(`[SUSAN-REVIEWS] Acknowledged review ${reviewId}`);
+      return { success: true };
+    } catch (error) {
+      console.error('[SUSAN-REVIEWS] Error acknowledging review:', error);
+      return { success: false, error: 'Failed to acknowledge review' };
     }
   }
 
@@ -121,22 +156,22 @@ export class SusanReviewManager {
    * Bulk create reviews for multiple employees
    */
   async bulkCreateReviews(
-    employeeIds: string[],
+    revieweeIds: string[],
     reviewData: {
-      reviewType: 'ANNUAL' | 'QUARTERLY' | 'PROBATION' | 'PROJECT';
-      period: string;
+      reviewType: 'ANNUAL' | 'QUARTERLY' | 'PROBATION' | 'PROJECT' | 'IMPROVEMENT';
+      reviewPeriod: string;
       dueDate: Date;
       reviewerId?: string;
     }
   ): Promise<{ success: boolean; createdCount?: number; error?: string }> {
     try {
-      const reviews = employeeIds.map(employeeId => ({
+      const reviews = revieweeIds.map((revieweeId) => ({
         id: uuidv4(),
-        employeeId,
+        revieweeId,
         reviewerId: reviewData.reviewerId || 'auto-assigned',
         reviewType: reviewData.reviewType,
-        period: reviewData.period,
-        status: 'PENDING',
+        reviewPeriod: reviewData.reviewPeriod,
+        status: 'DRAFT' as const,
         dueDate: reviewData.dueDate,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -165,8 +200,8 @@ export class SusanReviewManager {
       const pendingReviews = await db.select()
         .from(employeeReviews)
         .where(and(
-          eq(employeeReviews.status, 'PENDING'),
-          sql`${employeeReviews.dueDate} <= ${reminderDate}`
+          eq(employeeReviews.status, 'DRAFT'),
+          lte(employeeReviews.dueDate, reminderDate)
         ));
 
       for (const review of pendingReviews) {
@@ -185,32 +220,38 @@ export class SusanReviewManager {
    * Generate review reports
    */
   async generateReviewReports(
-    period: string,
-    department?: string
+    reviewPeriod: string
   ): Promise<{ success: boolean; report?: any; error?: string }> {
     try {
       const reviews = await db.select()
         .from(employeeReviews)
-        .where(and(
-          eq(employeeReviews.period, period),
-          eq(employeeReviews.status, 'COMPLETED')
-        ));
+        .where(eq(employeeReviews.reviewPeriod, reviewPeriod));
+
+      const submittedReviews = reviews.filter((r) => r.status === 'SUBMITTED' || r.status === 'ACKNOWLEDGED');
+      const ratingsSum = submittedReviews.reduce((sum, r) => sum + (r.overallRating || 0), 0);
 
       const report = {
-        period,
+        reviewPeriod,
         totalReviews: reviews.length,
-        averageRating: reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length,
-        completionRate: (reviews.filter(r => r.status === 'COMPLETED').length / reviews.length) * 100,
+        submittedCount: submittedReviews.length,
+        averageRating: submittedReviews.length > 0 ? ratingsSum / submittedReviews.length : 0,
+        completionRate: reviews.length > 0 ? (submittedReviews.length / reviews.length) * 100 : 0,
+        byStatus: {
+          draft: reviews.filter((r) => r.status === 'DRAFT').length,
+          inProgress: reviews.filter((r) => r.status === 'IN_PROGRESS').length,
+          submitted: reviews.filter((r) => r.status === 'SUBMITTED').length,
+          acknowledged: reviews.filter((r) => r.status === 'ACKNOWLEDGED').length
+        },
         byRating: {
-          excellent: reviews.filter(r => r.rating && r.rating >= 4.5).length,
-          good: reviews.filter(r => r.rating && r.rating >= 3.5 && r.rating < 4.5).length,
-          average: reviews.filter(r => r.rating && r.rating >= 2.5 && r.rating < 3.5).length,
-          needsImprovement: reviews.filter(r => r.rating && r.rating < 2.5).length
+          excellent: submittedReviews.filter((r) => r.overallRating && r.overallRating >= 5).length,
+          good: submittedReviews.filter((r) => r.overallRating && r.overallRating >= 4 && r.overallRating < 5).length,
+          average: submittedReviews.filter((r) => r.overallRating && r.overallRating >= 3 && r.overallRating < 4).length,
+          needsImprovement: submittedReviews.filter((r) => r.overallRating && r.overallRating < 3).length
         },
         generatedAt: new Date()
       };
 
-      console.log(`[SUSAN-REVIEWS] Generated report for period ${period}`);
+      console.log(`[SUSAN-REVIEWS] Generated report for period ${reviewPeriod}`);
       return { success: true, report };
     } catch (error) {
       console.error('[SUSAN-REVIEWS] Error generating report:', error);
@@ -219,7 +260,7 @@ export class SusanReviewManager {
   }
 
   /**
-   * Schedule automated reviews
+   * Schedule automated reviews for all active employees
    */
   async scheduleReviews(
     frequency: 'QUARTERLY' | 'ANNUAL',
@@ -231,9 +272,20 @@ export class SusanReviewManager {
         .from(users)
         .where(eq(users.isActive, true));
 
-      const reviews = [];
+      const reviews: Array<{
+        id: string;
+        revieweeId: string;
+        reviewerId: string;
+        reviewType: 'QUARTERLY' | 'ANNUAL';
+        reviewPeriod: string;
+        status: 'DRAFT';
+        dueDate: Date;
+        createdAt: Date;
+        updatedAt: Date;
+      }> = [];
+
       const dueDate = new Date(startDate);
-      
+
       if (frequency === 'QUARTERLY') {
         dueDate.setMonth(dueDate.getMonth() + 3);
       } else {
@@ -243,11 +295,11 @@ export class SusanReviewManager {
       for (const employee of employees) {
         reviews.push({
           id: uuidv4(),
-          employeeId: employee.id,
+          revieweeId: employee.id,
           reviewerId: employee.primaryManagerId || 'auto-assigned',
-          reviewType: frequency === 'QUARTERLY' ? 'QUARTERLY' : 'ANNUAL',
-          period: `${startDate.getFullYear()}-${frequency}`,
-          status: 'SCHEDULED',
+          reviewType: frequency,
+          reviewPeriod: `${startDate.getFullYear()}-${frequency}`,
+          status: 'DRAFT',
           dueDate,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -267,39 +319,11 @@ export class SusanReviewManager {
   }
 
   /**
-   * Archive old reviews
-   */
-  async archiveReviews(
-    olderThanDays: number = 730 // 2 years
-  ): Promise<{ success: boolean; archivedCount?: number; error?: string }> {
-    try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
-
-      const result = await db.update(employeeReviews)
-        .set({
-          status: 'ARCHIVED',
-          updatedAt: new Date()
-        })
-        .where(and(
-          sql`${employeeReviews.completedAt} < ${cutoffDate}`,
-          eq(employeeReviews.status, 'COMPLETED')
-        ));
-
-      console.log(`[SUSAN-REVIEWS] Archived old reviews`);
-      return { success: true };
-    } catch (error) {
-      console.error('[SUSAN-REVIEWS] Error archiving reviews:', error);
-      return { success: false, error: 'Failed to archive reviews' };
-    }
-  }
-
-  /**
    * Send review notification
    */
   private async sendReviewNotification(
     reviewId: string,
-    type: 'assigned' | 'reminder' | 'completed'
+    type: 'assigned' | 'reminder' | 'submitted'
   ): Promise<void> {
     try {
       const [review] = await db.select()
@@ -314,53 +338,53 @@ export class SusanReviewManager {
         .where(eq(users.id, review.reviewerId))
         .limit(1);
 
-      const [employee] = await db.select()
+      const [reviewee] = await db.select()
         .from(users)
-        .where(eq(users.id, review.employeeId))
+        .where(eq(users.id, review.revieweeId))
         .limit(1);
 
-      if (!reviewer || !employee) return;
+      if (!reviewer || !reviewee) return;
 
       let subject = '';
       let html = '';
 
-      const employeeName = `${employee.firstName} ${employee.lastName}`;
+      const revieweeName = `${reviewee.firstName} ${reviewee.lastName}`;
       const reviewerName = `${reviewer.firstName} ${reviewer.lastName}`;
 
       switch (type) {
         case 'assigned':
-          subject = `New Performance Review Assigned - ${employeeName}`;
+          subject = `New Performance Review Assigned - ${revieweeName}`;
           html = `
             <p>Dear ${reviewerName},</p>
-            <p>You have been assigned to complete a performance review for ${employeeName}.</p>
+            <p>You have been assigned to complete a performance review for ${revieweeName}.</p>
             <p>Due Date: ${review.dueDate}</p>
             <p>Please log in to complete the review.</p>
             <p>Best regards,<br>HR Team</p>
           `;
           break;
         case 'reminder':
-          subject = `Reminder: Performance Review Due - ${employeeName}`;
+          subject = `Reminder: Performance Review Due - ${revieweeName}`;
           html = `
             <p>Dear ${reviewerName},</p>
-            <p>This is a reminder that the performance review for ${employeeName} is due on ${review.dueDate}.</p>
+            <p>This is a reminder that the performance review for ${revieweeName} is due on ${review.dueDate}.</p>
             <p>Please complete it as soon as possible.</p>
             <p>Best regards,<br>HR Team</p>
           `;
           break;
-        case 'completed':
-          subject = `Performance Review Completed`;
+        case 'submitted':
+          subject = `Performance Review Submitted`;
           html = `
-            <p>Dear ${employeeName},</p>
-            <p>Your performance review has been completed.</p>
-            <p>Rating: ${review.rating}/5</p>
-            <p>Please log in to view your full review.</p>
+            <p>Dear ${revieweeName},</p>
+            <p>Your performance review has been submitted.</p>
+            ${review.overallRating ? `<p>Overall Rating: ${review.overallRating}/5</p>` : ''}
+            <p>Please log in to view and acknowledge your review.</p>
             <p>Best regards,<br>HR Team</p>
           `;
           break;
       }
 
-      const recipient = type === 'completed' ? employee.email : reviewer.email;
-      
+      const recipient = type === 'submitted' ? reviewee.email : reviewer.email;
+
       await this.emailService.sendEmail({
         to: recipient,
         subject,
@@ -383,24 +407,25 @@ export class SusanReviewManager {
     if (lowerCommand.includes('create review') || lowerCommand.includes('start review')) {
       const typeMatch = lowerCommand.includes('annual') ? 'ANNUAL' :
                        lowerCommand.includes('quarterly') ? 'QUARTERLY' :
-                       lowerCommand.includes('probation') ? 'PROBATION' : 'PROJECT';
-      
+                       lowerCommand.includes('probation') ? 'PROBATION' :
+                       lowerCommand.includes('improvement') ? 'IMPROVEMENT' : 'PROJECT';
+
       return {
         type: 'create_review',
         data: {
           reviewType: typeMatch,
-          period: new Date().getFullYear().toString()
+          reviewPeriod: new Date().getFullYear().toString()
         }
       };
     }
 
-    // Complete review
-    if (lowerCommand.includes('complete review') || lowerCommand.includes('finish review')) {
+    // Submit review
+    if (lowerCommand.includes('submit review') || lowerCommand.includes('complete review') || lowerCommand.includes('finish review')) {
       const ratingMatch = command.match(/rating\s+(\d+)/i);
       return {
-        type: 'complete_review',
+        type: 'submit_review',
         data: {
-          rating: ratingMatch ? parseInt(ratingMatch[1]) : 4
+          overallRating: ratingMatch ? parseInt(ratingMatch[1]) : 4
         }
       };
     }
@@ -411,7 +436,7 @@ export class SusanReviewManager {
         type: 'bulk_create',
         data: {
           reviewType: 'ANNUAL',
-          period: new Date().getFullYear().toString()
+          reviewPeriod: new Date().getFullYear().toString()
         }
       };
     }
@@ -425,7 +450,7 @@ export class SusanReviewManager {
     if (lowerCommand.includes('generate report') || lowerCommand.includes('review report')) {
       return {
         type: 'generate_reports',
-        data: { period: new Date().getFullYear().toString() }
+        data: { reviewPeriod: new Date().getFullYear().toString() }
       };
     }
 
