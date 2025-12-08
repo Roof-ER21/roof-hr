@@ -92,7 +92,11 @@ export class CoiAlertService {
   }
 
   private async sendAlert(doc: CoiDocument, daysUntilExpiration: number): Promise<void> {
-    // Get employee details
+    // Get employee details (skip if no employeeId - external contractor)
+    if (!doc.employeeId) {
+      console.log(`Skipping alert for external contractor COI: ${doc.id}`);
+      return;
+    }
     const employee = await storage.getUserById(doc.employeeId);
     if (!employee) {
       console.error(`Employee not found for COI document: ${doc.id}`);

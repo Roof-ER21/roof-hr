@@ -150,6 +150,7 @@ export const ptoRequests = pgTable('pto_requests', {
   startDate: text('start_date').notNull(),
   endDate: text('end_date').notNull(),
   days: real('days').notNull(), // Changed from integer to real to support half-days (0.5)
+  type: text('type').$type<'VACATION' | 'SICK' | 'PERSONAL'>().notNull().default('VACATION'),
   reason: text('reason').notNull(),
   status: text('status').$type<'PENDING' | 'APPROVED' | 'DENIED'>().notNull().default('PENDING'),
   reviewedBy: text('reviewed_by'),
@@ -199,7 +200,9 @@ export const insertAiCriteriaSchema = createInsertSchema(aiCriteria).omit({
 // COI (Certificate of Insurance) Tracking - NEW
 export const coiDocuments = pgTable('coi_documents', {
   id: text('id').primaryKey(),
-  employeeId: text('employee_id').notNull(),
+  employeeId: text('employee_id'), // Nullable - can be null for external contractors not in system
+  externalName: text('external_name'), // Name extracted from COI when no employee match (for subcontractors, etc.)
+  parsedInsuredName: text('parsed_insured_name'), // Raw name extracted from document for reference
   type: text('type').$type<'WORKERS_COMP' | 'GENERAL_LIABILITY'>().notNull(),
   documentUrl: text('document_url').notNull(),
   issueDate: text('issue_date').notNull(),
@@ -209,6 +212,7 @@ export const coiDocuments = pgTable('coi_documents', {
   lastAlertSent: timestamp('last_alert_sent'),
   alertFrequency: text('alert_frequency').$type<'MONTH_BEFORE' | 'TWO_WEEKS' | 'ONE_WEEK' | 'DAILY'>(),
   notes: text('notes'),
+  googleDriveId: text('google_drive_id'), // For deduplication during sync
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -2210,6 +2214,24 @@ export const attendanceCheckInsRelations = relations(attendanceCheckIns, ({ one 
   })
 }));
 
+// Susan AI Chat Sessions - for persisting conversation history
+export const susanChatSessions = pgTable('susan_chat_sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  messages: text('messages').notNull().default('[]'), // JSON array of messages
+  title: text('title'), // Optional title for the conversation
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const susanChatSessionSchema = createInsertSchema(susanChatSessions);
+export const insertSusanChatSessionSchema = createInsertSchema(susanChatSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Export Workflow types
 export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowStep = typeof workflowSteps.$inferSelect;
@@ -2238,3 +2260,5 @@ export type AttendanceSession = typeof attendanceSessions.$inferSelect;
 export type InsertAttendanceSession = typeof attendanceSessions.$inferInsert;
 export type AttendanceCheckIn = typeof attendanceCheckIns.$inferSelect;
 export type InsertAttendanceCheckIn = typeof attendanceCheckIns.$inferInsert;
+export type SusanChatSession = typeof susanChatSessions.$inferSelect;
+export type InsertSusanChatSession = z.infer<typeof insertSusanChatSessionSchema>;

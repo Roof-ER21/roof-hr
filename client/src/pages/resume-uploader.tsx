@@ -42,7 +42,7 @@ const CATEGORIES = [
     id: 'insurance-sales',
     name: 'Insurance Sales',
     icon: Shield,
-    color: 'bg-blue-500',
+    color: 'bg-red-500',
     description: 'Insurance sales representatives'
   },
   {
@@ -56,15 +56,29 @@ const CATEGORIES = [
     id: 'retail-marketing',
     name: 'Retail Marketing',
     icon: Megaphone,
-    color: 'bg-orange-500',
+    color: 'bg-purple-500',
     description: 'Retail marketing and lead generation'
   },
   {
     id: 'office',
     name: 'Office',
     icon: Building2,
-    color: 'bg-purple-500',
+    color: 'bg-orange-500',
     description: 'Administrative and office roles'
+  },
+  {
+    id: 'production-coordinator',
+    name: 'Production Coordinator',
+    icon: Store,
+    color: 'bg-blue-500',
+    description: 'Production coordination and scheduling'
+  },
+  {
+    id: 'field-tech',
+    name: 'Field Tech',
+    icon: RefreshCw,
+    color: 'bg-cyan-500',
+    description: 'Field technicians and installers'
   }
 ] as const;
 
@@ -274,11 +288,11 @@ export default function ResumeUploaderPage() {
 
       {/* Category Tabs */}
       <Tabs value={activeCategory} onValueChange={(v) => setActiveCategory(v as CategoryId)}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
           {CATEGORIES.map((cat) => (
-            <TabsTrigger key={cat.id} value={cat.id} className="flex items-center gap-2">
+            <TabsTrigger key={cat.id} value={cat.id} className={`flex items-center gap-2 ${cat.color} text-white data-[state=active]:ring-2 data-[state=active]:ring-offset-2`}>
               <cat.icon className="h-4 w-4" />
-              {cat.name}
+              <span className="hidden md:inline">{cat.name}</span>
             </TabsTrigger>
           ))}
         </TabsList>

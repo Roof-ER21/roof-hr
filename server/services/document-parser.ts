@@ -4,7 +4,8 @@ import pdfParse from 'pdf-parse';
  * Parsed data from COI (Certificate of Insurance) documents
  */
 export interface COIParsedData {
-  insuredName: string | null;
+  insuredName: string | null;      // Person name for employee matching
+  rawInsuredName: string | null;   // Raw name from document (person or company)
   policyNumber: string | null;
   effectiveDate: string | null;
   expirationDate: string | null;
@@ -164,109 +165,268 @@ function looksLikePersonName(name: string): boolean {
 }
 
 /**
+ * Check if a string looks like a valid name (person OR company)
+ * Less strict than looksLikePersonName - accepts business names too
+ */
+function looksLikeValidName(name: string): boolean {
+  if (!name || name.trim().length < 3) return false;
+
+  const cleanName = name.trim();
+
+  // Should have at least 2 characters
+  if (cleanName.length < 2) return false;
+
+  // Shouldn't be all numbers
+  if (/^\d+$/.test(cleanName)) return false;
+
+  // Shouldn't be a common document header/label
+  const skipLabels = [
+    'insured', 'producer', 'certificate', 'holder', 'policy', 'number',
+    'acord', 'date', 'coverage', 'limits', 'type', 'effective', 'expiration',
+    'description', 'operations', 'additional', 'remarks', 'authorized',
+    'revision', 'naic', 'contact', 'phone', 'fax', 'email', 'address',
+    'name', 'important', 'should', 'cancellation', 'representative',
+    'affording', 'subrogation', 'waived', 'provisions', 'endorsement',
+    // Additional skip labels for ACORD forms
+    'named', 'above', 'for', 'the', 'this', 'is', 'issued', 'as', 'matter',
+    'information', 'only', 'does', 'not', 'affirmatively', 'negatively',
+    'amend', 'extend', 'alter', 'alter', 'interest', 'loss', 'payee',
+    'mortgagee', 'lender', 'lessor', 'owner', 'landlord', 'confer', 'rights'
+  ];
+
+  const lowerName = cleanName.toLowerCase();
+  for (const label of skipLabels) {
+    // Exact match or starts with the label (e.g., "Revision Number")
+    if (lowerName === label || lowerName.startsWith(label + ' ')) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Result of insured name extraction
+ */
+interface InsuredNameResult {
+  personName: string | null;  // Person name if detected (for employee matching)
+  rawName: string | null;     // Any name found (person or company, for display)
+}
+
+/**
+ * Check if a string looks like a company/business name
+ */
+function looksLikeCompanyName(name: string): boolean {
+  const companyIndicators = [
+    'llc', 'inc', 'corp', 'ltd', 'co.', 'company', 'enterprises', 'services',
+    'roofing', 'construction', 'contracting', 'contractors', 'agency',
+    'carpentry', 'builders', 'exteriors', 'restoration', 'holdings',
+    'solutions', 'group', 'partners', 'associates', 'industries'
+  ];
+  const lowerName = name.toLowerCase();
+  return companyIndicators.some(indicator => lowerName.includes(indicator));
+}
+
+/**
+ * Check if a phrase should be skipped (common ACORD form labels)
+ */
+function skipPhrase(text: string): boolean {
+  const skipPhrases = [
+    'named above', 'for the policy', 'this certificate', 'is issued',
+    'as a matter', 'of information', 'only and does', 'not affirmatively',
+    'negatively amend', 'extend or alter', 'the coverage afforded',
+    'certificate holder', 'additional insured', 'cancellation',
+    'policy number', 'effective date', 'expiration date'
+  ];
+  const lowerText = text.toLowerCase();
+  return skipPhrases.some(phrase => lowerText.includes(phrase));
+}
+
+/**
  * Extract insured name from COI document
  * Optimized for ACORD 25 Certificate of Liability Insurance format
+ * Returns both person name (for matching) and raw name (for display)
  */
-function extractInsuredName(text: string): string | null {
+function extractInsuredName(text: string): InsuredNameResult {
   console.log('[Document Parser] Searching for insured name...');
   console.log('[Document Parser] Full text length:', text.length);
   console.log('[Document Parser] Text preview (first 500 chars):', text.substring(0, 500).replace(/\n/g, '\\n'));
 
-  // For ACORD certificates, the INSURED section appears after PRODUCER
-  // Format typically: PRODUCER [address info] INSURED [name] [address]
+  let rawName: string | null = null;
+  let personName: string | null = null;
 
-  // ACORD-SPECIFIC PATTERNS (highest priority)
-  const acordPatterns = [
-    // ACORD format: Look for INSURED followed by name on next line(s)
-    // The name appears between INSURED and the address (which usually starts with a number)
-    /INSURED\s+([A-Z][a-zA-Z]+\s+[A-Z][a-zA-Z]+)(?:\s+\d|\s+[A-Z]{2}\s|\n)/,
-
-    // INSURED followed by a person name (First Last format)
-    /INSURED\s*\n?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/,
-
-    // After INSURER info, look for the insured name
-    /INSURER\s+[A-Z][\s\S]{0,100}?([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s+\d{3,}|\s+[A-Z]{2}\s+\d)/,
-
-    // Name followed by address pattern (street number)
-    /([A-Z][a-z]+\s+[A-Z][a-z]+)\s+\d{2,5}\s+[A-Z]/,
-  ];
-
-  // Try ACORD-specific patterns first
-  for (let i = 0; i < acordPatterns.length; i++) {
-    const pattern = acordPatterns[i];
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      const name = match[1].trim();
-      if (looksLikePersonName(name)) {
-        console.log(`[Document Parser] Found person name with ACORD pattern ${i + 1}:`, name);
-        return name;
+  // PRIORITY 0: ACORD 25 FORMAT - Company name followed by street address
+  // In ACORD forms, the INSURED section shows:
+  // INSURED
+  // I&M Carpentry LLC
+  // 5449 VARNUM ST
+  // Pattern: Find text between INSURED and a street address (number + street name)
+  const companyBeforeAddressPattern = /INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+?)[\s\n]+\d{2,5}\s+[A-Z]/i;
+  const addressMatch = text.match(companyBeforeAddressPattern);
+  if (addressMatch && addressMatch[1]) {
+    const candidate = addressMatch[1].trim()
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    // Validate it's not a form label and has multiple words or is a company name
+    if (candidate.length >= 5 &&
+        !skipPhrase(candidate) &&
+        (candidate.includes(' ') || looksLikeCompanyName(candidate))) {
+      rawName = candidate;
+      console.log('[Document Parser] Found company name before address:', rawName);
+      if (looksLikePersonName(candidate)) {
+        personName = candidate;
       }
     }
   }
 
-  // GENERIC PATTERNS (fallback)
-  const genericPatterns = [
-    // "Insured: Name" or "Named Insured: Name"
-    /(?:named\s+)?insured\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
-    // "Contractor: Name"
-    /contractor\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
-    // "Policyholder: Name"
-    /policyholder\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
-    // Look for "First Last" pattern near beginning of document
-    /^[\s\S]{0,200}?([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})(?:\s+\d|\n)/,
-  ];
+  // PRIORITY 1: Look for company names with LLC/Inc/Corp etc. after INSURED
+  // These are the most reliable matches for COI documents
+  if (!rawName) {
+    const companyPatterns = [
+      // Company name with common suffixes (LLC, Inc, Corp, etc.)
+      /INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+(?:LLC|Inc|Corp|Ltd|Co\.|Company|Enterprises|Services|Roofing|Construction|Contracting|Carpentry)[^\n]*)/i,
+      // Business name ending with LLC etc. anywhere in the INSURED section
+      /INSURED[\s\S]{0,100}?([A-Z][A-Za-z0-9\s\.\,\&\-\']+(?:LLC|Inc|Corp|Ltd))/i,
+    ];
 
-  for (let i = 0; i < genericPatterns.length; i++) {
-    const pattern = genericPatterns[i];
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      const name = match[1].trim();
-      if (looksLikePersonName(name)) {
-        console.log(`[Document Parser] Found person name with generic pattern ${i + 1}:`, name);
-        return name;
+    for (const pattern of companyPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const name = match[1].trim()
+          .replace(/\s+\d{5}.*$/, '') // Remove ZIP codes
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        if (name.length >= 5 && looksLikeCompanyName(name)) {
+          rawName = name;
+          console.log('[Document Parser] Found company name:', rawName);
+          break;
+        }
       }
     }
   }
 
-  // LAST RESORT: Scan for any "First Last" pattern that looks like a person name
-  // Look in the first 1000 chars (where insured info usually appears)
-  const scanText = text.substring(0, 1000);
-  const namePattern = /([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})/g;
-  let nameMatch;
-  const foundNames: string[] = [];
+  // PRIORITY 2: ACORD FORMAT - Look for the INSURED section (skip header words)
+  if (!rawName) {
+    // Pattern that specifically skips common header words after INSURED
+    const insuredSectionPattern = /INSURED[\s\n]+(?!(?:revision|certificate|number|naic|contact|phone|fax|email|address|name|important|should|policy|coverage)\b)([A-Z][^\n]+)/i;
+    const insuredMatch = text.match(insuredSectionPattern);
+    if (insuredMatch && insuredMatch[1]) {
+      const firstLine = insuredMatch[1].trim();
+      // Clean up common artifacts
+      const cleanedName = firstLine
+        .replace(/^\s*[A-Z]\s+/, '') // Remove single letter prefixes like "A "
+        .replace(/\s+\d{5}.*$/, '') // Remove ZIP codes at end
+        .replace(/\s{2,}/g, ' ')
+        .trim();
 
-  while ((nameMatch = namePattern.exec(scanText)) !== null) {
-    const potentialName = nameMatch[1].trim();
-    if (looksLikePersonName(potentialName)) {
-      foundNames.push(potentialName);
+      if (looksLikeValidName(cleanedName)) {
+        rawName = cleanedName;
+        console.log('[Document Parser] Found raw insured name:', rawName);
+
+        // Check if it's a person name
+        if (looksLikePersonName(cleanedName)) {
+          personName = cleanedName;
+          console.log('[Document Parser] Raw name is also a person name');
+        }
+      }
     }
   }
 
-  // Filter out known non-names (common words that appear in certificates)
-  const excludeNames = [
-    'Christine Payton', // Common agent name
-    'Certificate Holder', 'Additional Insured', 'Certificate Number',
-    'Policy Number', 'Insurance Agency', 'Insurance Company',
-    'Accident Fund', 'Chesapeake Employers', 'The Roof', 'Roof Docs'
-  ];
+  // PRIORITY 3: Try more generic patterns
+  if (!rawName) {
+    // Look for text after "INSURED" label up to address
+    const patterns = [
+      // INSURED followed by multi-word name (at least 2 words to avoid single word headers)
+      /INSURED\s+([A-Z][A-Za-z]+(?:\s+[A-Za-z0-9\&]+)+)(?:\s+\d{2,}|\s+[A-Z]{2}\s+\d|\n)/,
+      // Named Insured pattern
+      /(?:named\s+)?insured\s*:?\s*([A-Z][A-Za-z]+(?:\s+[A-Za-z0-9\&]+)+)(?:\s+\d{3,}|\n)/i,
+    ];
 
-  for (const name of foundNames) {
-    let isExcluded = false;
-    for (const exclude of excludeNames) {
-      if (name.toLowerCase().includes(exclude.toLowerCase()) ||
-          exclude.toLowerCase().includes(name.toLowerCase())) {
-        isExcluded = true;
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const name = match[1].trim();
+        if (looksLikeValidName(name) && name.includes(' ')) { // Must have at least 2 words
+          rawName = name;
+          console.log('[Document Parser] Found raw name with alternate pattern:', rawName);
+
+          if (looksLikePersonName(name)) {
+            personName = name;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // If we still don't have a person name, scan for "First Last" patterns
+  if (!personName) {
+    const scanText = text.substring(0, 1500);
+    const namePattern = /([A-Z][a-z]{2,15}\s+[A-Z][a-z]{2,20})/g;
+    let nameMatch;
+    const foundNames: string[] = [];
+
+    while ((nameMatch = namePattern.exec(scanText)) !== null) {
+      const potentialName = nameMatch[1].trim();
+      if (looksLikePersonName(potentialName)) {
+        foundNames.push(potentialName);
+      }
+    }
+
+    // Filter out known non-names (common words that appear in certificates)
+    const excludeNames = [
+      'Christine Payton', 'Certificate Holder', 'Additional Insured', 'Certificate Number',
+      'Policy Number', 'Insurance Agency', 'Insurance Company',
+      'Accident Fund', 'Chesapeake Employers', 'The Roof', 'Roof Docs',
+      'General Liability', 'Workers Compensation', 'Auto Liability'
+    ];
+
+    for (const name of foundNames) {
+      let isExcluded = false;
+      for (const exclude of excludeNames) {
+        if (name.toLowerCase().includes(exclude.toLowerCase()) ||
+            exclude.toLowerCase().includes(name.toLowerCase())) {
+          isExcluded = true;
+          break;
+        }
+      }
+      if (!isExcluded) {
+        personName = name;
+        console.log('[Document Parser] Found person name from scan:', personName);
+
+        // If we don't have rawName yet, use this
+        if (!rawName) {
+          rawName = name;
+        }
         break;
       }
     }
-    if (!isExcluded) {
-      console.log('[Document Parser] Found potential person name from scan:', name);
-      return name;
+
+    if (!personName) {
+      console.log('[Document Parser] No person name found. Names scanned:', foundNames);
     }
   }
 
-  console.log('[Document Parser] No person name found in document. Names scanned:', foundNames);
-  return null;
+  // If we still have no rawName at all, use any text after INSURED
+  if (!rawName) {
+    const fallbackMatch = text.match(/INSURED[\s\n]+([A-Za-z][^\n]{2,50})/i);
+    if (fallbackMatch && fallbackMatch[1]) {
+      const cleanedFallback = fallbackMatch[1].trim().replace(/\s+\d{5}.*$/, '').trim();
+      if (looksLikeValidName(cleanedFallback)) {
+        rawName = cleanedFallback;
+        console.log('[Document Parser] Found fallback raw name:', rawName);
+      }
+    }
+  }
+
+  console.log('[Document Parser] Final result - Person name:', personName, '| Raw name:', rawName);
+  return { personName, rawName };
+}
+
+/**
+ * Legacy wrapper for backward compatibility
+ */
+function extractInsuredNameLegacy(text: string): string | null {
+  const result = extractInsuredName(text);
+  return result.personName || result.rawName;
 }
 
 /**
@@ -519,7 +679,7 @@ export async function parseCOIDocument(buffer: Buffer): Promise<COIParsedData> {
 
     console.log('[Document Parser] Extracted', text.length, 'characters from PDF');
 
-    const insuredName = extractInsuredName(text);
+    const insuredNameResult = extractInsuredName(text);
     const policyNumber = extractPolicyNumber(text);
     const { effectiveDate, expirationDate } = extractDates(text);
     const insurerName = extractInsurerName(text);
@@ -542,7 +702,8 @@ export async function parseCOIDocument(buffer: Buffer): Promise<COIParsedData> {
     }
 
     const result: COIParsedData = {
-      insuredName,
+      insuredName: insuredNameResult.personName,       // Person name for employee matching
+      rawInsuredName: insuredNameResult.rawName,       // Raw name from document (for display)
       policyNumber,
       effectiveDate,
       expirationDate,
@@ -557,6 +718,7 @@ export async function parseCOIDocument(buffer: Buffer): Promise<COIParsedData> {
 
     console.log('[Document Parser] Parsing complete:', {
       insuredName: result.insuredName,
+      rawInsuredName: result.rawInsuredName,
       policyNumber: result.policyNumber,
       effectiveDate: result.effectiveDate,
       expirationDate: result.expirationDate,

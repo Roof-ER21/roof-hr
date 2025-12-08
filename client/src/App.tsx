@@ -15,7 +15,8 @@ import ChangePassword from '@/pages/change-password';
 import Settings from '@/pages/settings';
 import Login from '@/pages/login';
 import ApiTest from '@/pages/api-test';
-import ResumeUploader from '@/pages/resume-uploader';
+// ResumeUploader is now integrated into EnhancedRecruiting page
+// import ResumeUploader from '@/pages/resume-uploader';
 import { Tools } from '@/pages/Tools';
 import EmailTemplates from '@/pages/EmailTemplates';
 import WorkflowBuilder from '@/pages/WorkflowBuilder';
@@ -95,7 +96,7 @@ function AuthenticatedRoutes() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/change-password" element={<ChangePassword />} />
         <Route path="/api-test" element={<ApiTest />} />
-        <Route path="/resume-uploader" element={<ResumeUploader />} />
+        {/* Resume uploader is now integrated into the recruiting page */}
         <Route path="/tools" element={<Tools />} />
         <Route path="/email-templates" element={<EmailTemplates />} />
         <Route path="/workflow-builder" element={<WorkflowBuilder />} />

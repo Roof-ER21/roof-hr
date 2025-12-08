@@ -39,20 +39,56 @@ function requireHROrManager(req: any, res: any, next: any) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   // HR, Managers, and Territory Managers can manage COI documents
   if (!['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
     return res.status(403).json({ error: 'HR or Manager access required' });
   }
-  
+
   next();
+}
+
+// Helper function to auto-calculate COI expiration status based on current date
+function calculateCoiStatus(expirationDate: string | null): 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' {
+  if (!expirationDate) return 'ACTIVE';
+
+  const expDate = new Date(expirationDate);
+  const today = new Date();
+  const daysUntilExpiration = Math.floor((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysUntilExpiration <= 0) {
+    return 'EXPIRED';
+  } else if (daysUntilExpiration <= 30) {
+    return 'EXPIRING_SOON';
+  }
+  return 'ACTIVE';
+}
+
+// Add auto-calculated status to COI documents
+function enrichCoiDocuments(documents: any[]) {
+  return documents.map(doc => ({
+    ...doc,
+    // Override stored status with calculated status based on current date
+    status: calculateCoiStatus(doc.expirationDate),
+    // Add days until expiration for frontend use
+    daysUntilExpiration: doc.expirationDate
+      ? Math.floor((new Date(doc.expirationDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+      : null
+  }));
 }
 
 // Get all COI documents
 router.get('/api/coi-documents', requireAuth, requireHROrManager, async (req, res) => {
   try {
+    // Set no-cache headers to prevent browser caching stale data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const documents = await storage.getAllCoiDocuments();
-    res.json(documents);
+    console.log(`[COI Documents] Returning ${documents.length} documents from database`);
+    // Auto-calculate status based on current date
+    res.json(enrichCoiDocuments(documents));
   } catch (error) {
     console.error('Error fetching COI documents:', error);
     res.status(500).json({ error: 'Failed to fetch COI documents' });
@@ -70,7 +106,8 @@ router.get('/api/coi-documents/employee/:employeeId', requireAuth, async (req, r
     }
 
     const documents = await storage.getCoiDocumentsByEmployeeId(req.params.employeeId);
-    res.json(documents);
+    // Auto-calculate status based on current date
+    res.json(enrichCoiDocuments(documents));
   } catch (error) {
     console.error('Error fetching employee COI documents:', error);
     res.status(500).json({ error: 'Failed to fetch COI documents' });
@@ -84,9 +121,10 @@ router.get('/api/coi-documents/expiring/:days', requireAuth, requireHROrManager,
     if (isNaN(days)) {
       return res.status(400).json({ error: 'Invalid days parameter' });
     }
-    
+
     const documents = await storage.getExpiringCoiDocuments(days);
-    res.json(documents);
+    // Auto-calculate status based on current date
+    res.json(enrichCoiDocuments(documents));
   } catch (error) {
     console.error('Error fetching expiring COI documents:', error);
     res.status(500).json({ error: 'Failed to fetch expiring COI documents' });
@@ -205,7 +243,8 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
       ...data,
       type: data.type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       status,
-      alertFrequency
+      alertFrequency,
+      googleDriveId: driveFile.id // Store Drive ID for deduplication
     });
 
     console.log('[COI Upload] COI document created successfully. ID:', document.id, 'Google Drive ID:', driveFile.id);
@@ -529,6 +568,7 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
       parsedData = await parseCOIDocument(req.file.buffer);
       console.log('[COI Smart Upload] Parsed data:', {
         insuredName: parsedData.insuredName,
+        rawInsuredName: parsedData.rawInsuredName,
         policyNumber: parsedData.policyNumber,
         effectiveDate: parsedData.effectiveDate,
         expirationDate: parsedData.expirationDate,
@@ -539,6 +579,7 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
       // For images, return empty parsed data with a flag
       parsedData = {
         insuredName: null,
+        rawInsuredName: null,
         policyNumber: null,
         effectiveDate: null,
         expirationDate: null,
@@ -551,7 +592,7 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
       console.log('[COI Smart Upload] Image file detected - cannot extract text from images');
     }
 
-    // Try to match employee
+    // Try to match employee using the person name
     console.log('[COI Smart Upload] Attempting employee match...');
     const employeeMatch = await matchEmployeeFromName(parsedData.insuredName);
     console.log('[COI Smart Upload] Employee match result:', {
@@ -561,10 +602,14 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
       suggestions: employeeMatch.suggestedEmployees.length
     });
 
+    // Get display name - prefer rawInsuredName which includes company names
+    const displayName = parsedData.rawInsuredName || parsedData.insuredName;
+
     // Always return parsed data for user review - never auto-save
     console.log('[COI Smart Upload] Returning parsed data for user review');
     console.log('[COI Smart Upload] Final result:', {
       insuredName: parsedData.insuredName,
+      rawInsuredName: parsedData.rawInsuredName,
       matchedEmployee: employeeMatch.matchedEmployee
         ? `${employeeMatch.matchedEmployee.firstName} ${employeeMatch.matchedEmployee.lastName}`
         : null,
@@ -580,10 +625,10 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
       message = 'Image files (JPG/PNG) cannot be scanned for text. Please upload a PDF version of the COI, or enter the details manually below.';
     } else if (employeeMatch.matchedEmployee && employeeMatch.confidence >= 80) {
       message = `Matched to ${employeeMatch.matchedEmployee.firstName} ${employeeMatch.matchedEmployee.lastName} (${employeeMatch.confidence}% confidence)`;
-    } else if (parsedData.insuredName) {
-      message = `Found "${parsedData.insuredName}" but no confident match. Please select employee manually.`;
+    } else if (displayName) {
+      message = `Found "${displayName}" - please select employee or enter as external name.`;
     } else {
-      message = 'Could not extract insured name from document. Please select employee manually.';
+      message = 'Could not extract insured name from document. Please select employee or enter name manually.';
     }
 
     const response: SmartUploadResponse = {
@@ -610,47 +655,75 @@ router.post('/api/coi-documents/smart-upload', requireAuth, requireHROrManager, 
   }
 });
 
-// Confirm smart upload assignment - saves the document with selected employee
+// Confirm smart upload assignment - saves the document with selected employee OR external name
 router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrManager, upload.single('file'), async (req, res) => {
   try {
     const currentUser = req.user!;
-    const { employeeId, type, issueDate, expirationDate, notes, policyNumber, insurerName } = req.body;
+    const { employeeId, externalName, parsedInsuredName, type, issueDate, expirationDate, notes, policyNumber, insurerName } = req.body;
 
-    console.log('[COI Confirm] Confirming assignment for employee:', employeeId);
+    console.log('[COI Confirm] Confirming assignment - Employee:', employeeId, 'External:', externalName);
 
     if (!req.file) {
       return res.status(400).json({ error: 'File is required' });
     }
 
-    if (!employeeId) {
-      return res.status(400).json({ error: 'Employee ID is required' });
+    // Must have either employeeId OR externalName
+    if (!employeeId && !externalName) {
+      return res.status(400).json({ error: 'Either employee selection or external name is required' });
     }
 
-    // Get employee details
-    const employee = await storage.getUserById(employeeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
+    let employee = null;
+    let targetFolderId: string | null = null;
+    let displayName = externalName || 'Unknown';
+
+    // If we have an employee, get their folder
+    if (employeeId) {
+      employee = await storage.getUserById(employeeId);
+      if (!employee) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
+      displayName = `${employee.firstName} ${employee.lastName}`;
+      console.log('[COI Confirm] Employee found:', displayName);
+
+      // Get or create employee folder structure
+      const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
+      if (employeeFolders?.coiFolderId) {
+        targetFolderId = employeeFolders.coiFolderId;
+      }
     }
 
-    console.log('[COI Confirm] Employee found:', employee.firstName, employee.lastName);
-
-    // Get or create employee folder structure
-    const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
-    if (!employeeFolders || !employeeFolders.coiFolderId) {
-      throw new Error('Failed to get employee COI folder');
+    // If no employee folder, use a general "External COI" folder
+    if (!targetFolderId) {
+      // For external contractors, upload to a general COI folder
+      console.log('[COI Confirm] Using external COI folder for:', externalName);
+      // Try to get/create an "External COI" folder at root level
+      const externalFolders = await googleSyncEnhanced.getOrCreateExternalCoiFolder();
+      targetFolderId = externalFolders?.folderId || null;
     }
 
     // Upload file to Google Drive
     const coiType = type || 'GENERAL_LIABILITY';
-    const fileName = `COI_${coiType}_${employee.lastName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
+    const safeName = (employee?.lastName || externalName || 'External').replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `COI_${coiType}_${safeName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
 
-    const driveFile = await googleDriveService.uploadFile({
-      name: fileName,
-      mimeType: req.file.mimetype,
-      content: req.file.buffer,
-      parentFolderId: employeeFolders.coiFolderId,
-      description: `COI Document - ${coiType} - Confirmed Upload`
-    });
+    let driveFile;
+    if (targetFolderId) {
+      driveFile = await googleDriveService.uploadFile({
+        name: fileName,
+        mimeType: req.file.mimetype,
+        content: req.file.buffer,
+        parentFolderId: targetFolderId,
+        description: `COI Document - ${coiType} - ${displayName}`
+      });
+    } else {
+      // Fallback: upload to root if no folder
+      driveFile = await googleDriveService.uploadFile({
+        name: fileName,
+        mimeType: req.file.mimetype,
+        content: req.file.buffer,
+        description: `COI Document - ${coiType} - ${displayName}`
+      });
+    }
 
     console.log('[COI Confirm] Uploaded to Google Drive:', driveFile.id);
 
@@ -686,10 +759,12 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       alertFrequency = 'MONTH_BEFORE';
     }
 
-    // Create database record
+    // Create database record - employeeId can be null for external contractors
     const document = await storage.createCoiDocument({
       id: uuidv4(),
-      employeeId,
+      employeeId: employeeId || null,
+      externalName: externalName || null,
+      parsedInsuredName: parsedInsuredName || null,
       type: coiType as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
       issueDate: finalIssueDate,
@@ -697,7 +772,8 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       notes: notes || `Policy: ${policyNumber || 'Unknown'}. Insurer: ${insurerName || 'Unknown'}`,
       uploadedBy: currentUser.id,
       status,
-      alertFrequency
+      alertFrequency,
+      googleDriveId: driveFile.id // Store Drive ID for deduplication
     });
 
     console.log('[COI Confirm] Document saved successfully:', document.id);
@@ -705,7 +781,7 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
     res.json({
       success: true,
       document,
-      message: `COI document saved for ${employee.firstName} ${employee.lastName}`
+      message: `COI document saved for ${displayName}`
     });
 
   } catch (error: any) {

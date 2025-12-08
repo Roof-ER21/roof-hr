@@ -23,6 +23,7 @@ import { useAuth } from '@/lib/auth';
 const ptoSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
+  type: z.enum(['VACATION', 'SICK', 'PERSONAL']).default('VACATION'),
   reason: z.string().min(1, "Reason is required"),
 });
 
@@ -131,6 +132,7 @@ function PTO() {
     defaultValues: {
       startDate: '',
       endDate: '',
+      type: 'VACATION',
       reason: '',
     }
   });
@@ -175,6 +177,7 @@ function PTO() {
       const requestBody = {
         startDate: data.startDate,
         endDate: data.endDate,
+        type: data.type,
         reason: data.reason,
         days
       };
@@ -578,7 +581,7 @@ function PTO() {
                     {...form.register('startDate')}
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="endDate">End Date</Label>
                   <Input
@@ -587,7 +590,24 @@ function PTO() {
                     {...form.register('endDate')}
                   />
                 </div>
-                
+
+                <div>
+                  <Label htmlFor="type">Type of Time Off</Label>
+                  <Select
+                    value={form.watch('type')}
+                    onValueChange={(value: 'VACATION' | 'SICK' | 'PERSONAL') => form.setValue('type', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VACATION">Vacation</SelectItem>
+                      <SelectItem value="SICK">Sick</SelectItem>
+                      <SelectItem value="PERSONAL">Personal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div>
                   <Label htmlFor="reason">Reason</Label>
                   <Textarea
@@ -624,6 +644,7 @@ function PTO() {
                   <th className="text-left py-3 px-4">Employee</th>
                   <th className="text-left py-3 px-4">Dates</th>
                   <th className="text-left py-3 px-4">Days</th>
+                  <th className="text-left py-3 px-4">Type</th>
                   <th className="text-left py-3 px-4">Reason</th>
                   <th className="text-left py-3 px-4">Status</th>
                   <th className="text-left py-3 px-4">Actions</th>
@@ -651,6 +672,15 @@ function PTO() {
                         {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
                       </td>
                       <td className="py-3 px-4">{request.days}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant="outline" className={
+                          request.type === 'VACATION' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          request.type === 'SICK' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                          'bg-purple-50 text-purple-700 border-purple-200'
+                        }>
+                          {request.type || 'VACATION'}
+                        </Badge>
+                      </td>
                       <td className="py-3 px-4">{request.reason}</td>
                       <td className="py-3 px-4">
                         <Badge className={getStatusColor(request.status)}>

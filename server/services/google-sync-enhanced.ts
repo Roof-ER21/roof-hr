@@ -235,13 +235,13 @@ class GoogleSyncEnhanced extends EventEmitter {
       if (!googleDriveService.isInitialized()) {
         await googleDriveService.initialize();
       }
-      
+
       // Check if folder already exists
       let employeeFolder = this.employeeFolders.get(employee.id);
       if (employeeFolder) {
         return employeeFolder;
       }
-      
+
       // Create new folder structure
       employeeFolder = await this.createEmployeeFolder(employee);
       return employeeFolder;
@@ -250,7 +250,50 @@ class GoogleSyncEnhanced extends EventEmitter {
       return null;
     }
   }
-  
+
+  // External COI folder for contractors not in the system
+  private externalCoiFolderId: string | null = null;
+
+  async getOrCreateExternalCoiFolder(): Promise<{ folderId: string } | null> {
+    try {
+      // Ensure Google Drive service is initialized
+      if (!googleDriveService.isInitialized()) {
+        await googleDriveService.initialize();
+      }
+
+      // Return cached folder if available
+      if (this.externalCoiFolderId) {
+        return { folderId: this.externalCoiFolderId };
+      }
+
+      // Check if folder already exists in Drive
+      const existingFolders = await googleDriveService.listFiles({
+        q: `name='External COI Documents' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        pageSize: 1
+      });
+
+      if (existingFolders && existingFolders.length > 0) {
+        const folderId = existingFolders[0].id!;
+        this.externalCoiFolderId = folderId;
+        console.log('[Enhanced Google Sync] Found existing External COI folder:', folderId);
+        return { folderId };
+      }
+
+      // Create new folder
+      const folder = await googleDriveService.createFolder('External COI Documents');
+      if (folder?.id) {
+        this.externalCoiFolderId = folder.id;
+        console.log('[Enhanced Google Sync] Created External COI folder:', folder.id);
+        return { folderId: folder.id };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[Enhanced Google Sync] Error getting/creating external COI folder:', error);
+      return null;
+    }
+  }
+
   async shareEmployeeFolderWithManager(employeeId: string, managerId: string) {
     try {
       // Get the employee and manager details
@@ -775,19 +818,26 @@ Communication Score: ${review.communicationScore || 'N/A'}/5`;
   async importCOIDocumentsFromDrive() {
     try {
       console.log('[Enhanced Google Sync] Starting COI import from Google Drive...');
-      
+
       // Get all employees
       const employees = await storage.getAllUsers();
       const existingDocs = await storage.getAllCoiDocuments();
-      // Extract Drive IDs from the notes field where we stored them
+
+      // Use googleDriveId column for reliable deduplication
+      // Also fall back to extracting from notes for legacy records
       const existingDriveIds = new Set(
         existingDocs
           .map(doc => {
+            // First try the dedicated column
+            if (doc.googleDriveId) return doc.googleDriveId;
+            // Fall back to legacy notes extraction
             const match = doc.notes?.match(/Drive ID: ([^)]+)/);
             return match ? match[1] : null;
           })
           .filter((id): id is string => id !== null && id !== undefined)
       );
+
+      console.log(`[Enhanced Google Sync] Found ${existingDriveIds.size} existing Drive IDs to skip`);
       
       let importedCount = 0;
       
@@ -835,16 +885,17 @@ Communication Score: ${review.communicationScore || 'N/A'}/5`;
             const today = new Date();
             const issueDate = new Date();
             issueDate.setFullYear(issueDate.getFullYear() - 1); // Default issue date to 1 year before expiration
-            
+
             const docData: any = {
               employeeId: employee.id,
               type: coiType,
               documentUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
               issueDate: issueDate.toISOString().split('T')[0],
               expirationDate: expirationDate.toISOString().split('T')[0],
-              uploadedBy: 'system',
+              uploadedBy: employee.id, // Attribute to the employee whose COI this is
               status: 'ACTIVE',
-              notes: `Imported from Google Drive: ${filename} (Drive ID: ${file.id})`
+              googleDriveId: file.id, // Store Drive ID for reliable deduplication
+              notes: `Imported from Google Drive: ${filename}`
             };
             await storage.createCoiDocument(docData);
             

@@ -27,7 +27,9 @@ const CATEGORY_POSITIONS: Record<string, string> = {
   'insurance-sales': 'Insurance Sales',
   'retail-closer': 'Retail Closer',
   'retail-marketing': 'Retail Marketing',
-  'office': 'Office'
+  'office': 'Office',
+  'production-coordinator': 'Production Coordinator',
+  'field-tech': 'Field Tech'
 };
 
 const router = express.Router();

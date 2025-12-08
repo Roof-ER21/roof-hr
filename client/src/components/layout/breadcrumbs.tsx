@@ -9,7 +9,6 @@ const routeNames: Record<string, string> = {
   'team-directory': 'Team Directory',
   'team-dashboard': 'Team Dashboard',
   'susan-ai': 'Susan AI',
-  'resume-uploader': 'Resume Uploader',
   'recruiting': 'Recruiting',
   'documents': 'Documents',
   'tools': 'Tools & Equipment',

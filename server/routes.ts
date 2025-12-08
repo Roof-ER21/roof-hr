@@ -1103,8 +1103,9 @@ router.get('/api/candidates', requireAuth, async (req, res) => {
   try {
     const candidates = await storage.getAllCandidates();
     res.json(candidates);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch candidates' });
+  } catch (error: any) {
+    console.error('[Candidates API] Error fetching candidates:', error);
+    res.status(500).json({ error: 'Failed to fetch candidates', details: error?.message });
   }
 });
 

@@ -48,9 +48,9 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
     // Get upcoming reviews
     const allReviews = await storage.getAllEmployeeReviews();
     const myUpcomingReviews = allReviews.filter(r =>
-      r.employeeId === userId &&
-      r.status !== 'COMPLETED' &&
-      new Date(r.scheduledDate) >= new Date()
+      r.revieweeId === userId &&
+      r.status !== 'ACKNOWLEDGED' &&
+      new Date(r.dueDate) >= new Date()
     ).slice(0, 3);
 
     // Get recent activity (last 10 items)
@@ -65,6 +65,29 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
         status: r.status
       }));
 
+    // Calculate actual used days by type from APPROVED requests
+    const currentYear = new Date().getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+
+    const approvedRequests = myPtoRequests.filter(r =>
+      r.status === 'APPROVED' &&
+      r.startDate >= yearStart &&
+      r.startDate <= yearEnd
+    );
+
+    const usedVacation = approvedRequests
+      .filter(r => r.type === 'VACATION' || !r.type)
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedSick = approvedRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedPersonal = approvedRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+
+    const pendingDaysTotal = pendingPto.reduce((sum, r) => sum + (r.days || 0), 0);
+
     // Build dashboard data
     const dashboardData = {
       user: {
@@ -74,23 +97,17 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
         email: user.email,
         position: user.position,
         department: user.department,
-        phone: user.phone,
-        hireDate: user.hireDate,
-        avatar: user.avatar
+        phone: user.phone || null,
+        hireDate: user.hireDate
       },
       ptoBalance: ptoPolicy ? {
         vacationDays: ptoPolicy.vacationDays || 10,
         sickDays: ptoPolicy.sickDays || 5,
         personalDays: ptoPolicy.personalDays || 3,
-        usedVacation: Math.floor((ptoPolicy.usedDays || 0) * 0.6), // Approximate breakdown
-        usedSick: Math.floor((ptoPolicy.usedDays || 0) * 0.25),
-        usedPersonal: Math.floor((ptoPolicy.usedDays || 0) * 0.15),
-        pendingDays: pendingPto.reduce((sum, r) => {
-          const start = new Date(r.startDate);
-          const end = new Date(r.endDate);
-          const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-          return sum + days;
-        }, 0)
+        usedVacation,
+        usedSick,
+        usedPersonal,
+        pendingDays: pendingDaysTotal
       } : {
         vacationDays: 10,
         sickDays: 5,
@@ -152,7 +169,7 @@ router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res
       sickDays = individualPolicy.sickDays || 5;
       personalDays = individualPolicy.personalDays || 3;
       policySource = 'individual';
-    } else if (deptSetting && deptSetting.overridesCompany) {
+    } else if (deptSetting && !deptSetting.inheritFromCompany) {
       vacationDays = deptSetting.vacationDays || 10;
       sickDays = deptSetting.sickDays || 5;
       personalDays = deptSetting.personalDays || 3;
@@ -194,10 +211,27 @@ router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res
     const pendingRequests = myRequests.filter(r => r.status === 'PENDING');
     const pendingDays = pendingRequests.reduce((sum, r) => sum + (r.days || 0), 0);
 
-    // Breakdown by type (approximation since requests don't track type)
-    const usedVacation = Math.min(vacationDays, Math.floor(usedDays * 0.6));
-    const usedSick = Math.min(sickDays, Math.floor(usedDays * 0.25));
-    const usedPersonal = Math.min(personalDays, usedDays - usedVacation - usedSick);
+    // Calculate ACTUAL used days by type from request type field
+    const usedVacation = approvedRequests
+      .filter(r => r.type === 'VACATION' || !r.type) // Default to vacation if no type
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedSick = approvedRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedPersonal = approvedRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+
+    // Calculate pending days by type
+    const pendingVacation = pendingRequests
+      .filter(r => r.type === 'VACATION' || !r.type)
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const pendingSick = pendingRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const pendingPersonal = pendingRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
 
     res.json({
       vacationDays,
@@ -210,6 +244,13 @@ router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res
       usedVacation,
       usedSick,
       usedPersonal,
+      pendingVacation,
+      pendingSick,
+      pendingPersonal,
+      // Remaining days by type
+      remainingVacation: Math.max(0, vacationDays - usedVacation),
+      remainingSick: Math.max(0, sickDays - usedSick),
+      remainingPersonal: Math.max(0, personalDays - usedPersonal),
       policySource // Helps with debugging
     });
   } catch (error) {
@@ -238,8 +279,8 @@ router.get('/api/employee-portal/pending-items', requireAuth, async (req: any, r
     // Upcoming reviews
     const allReviews = await storage.getAllEmployeeReviews();
     const upcomingReviews = allReviews.filter(r =>
-      r.employeeId === userId &&
-      r.status !== 'COMPLETED'
+      r.revieweeId === userId &&
+      r.status !== 'ACKNOWLEDGED'
     );
 
     res.json({
@@ -281,13 +322,13 @@ router.get('/api/employee-portal/upcoming-events', requireAuth, async (req: any,
     // Upcoming reviews
     const allReviews = await storage.getAllEmployeeReviews();
     const upcomingReviews = allReviews.filter(r =>
-      r.employeeId === userId &&
-      r.status !== 'COMPLETED' &&
-      new Date(r.scheduledDate) >= new Date()
+      r.revieweeId === userId &&
+      r.status !== 'ACKNOWLEDGED' &&
+      new Date(r.dueDate) >= new Date()
     ).map(r => ({
       type: 'review' as const,
       title: `${r.reviewType} Review`,
-      date: r.scheduledDate
+      date: r.dueDate
     }));
 
     // Combine and sort by date
@@ -446,7 +487,6 @@ router.get('/api/employee-portal/team', requireAuth, async (req: any, res) => {
       position: u.position,
       department: u.department,
       phone: u.phone,
-      avatar: u.avatar,
       isSameDepartment: user.department ? u.department === user.department : false
     }));
 
@@ -529,9 +569,9 @@ router.get('/api/employee-portal/manager/pending-reviews', requireAuth, async (r
 
     // Filter pending reviews and add employee names
     const pendingReviews = allReviews
-      .filter(r => r.status !== 'COMPLETED')
+      .filter(r => r.status !== 'ACKNOWLEDGED')
       .map(r => {
-        const employee = userMap.get(r.employeeId);
+        const employee = userMap.get(r.revieweeId);
         return {
           ...r,
           employeeName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown Employee',

@@ -642,4 +642,256 @@ router.post('/confirm-action', async (req, res) => {
   }
 });
 
+/**
+ * Chat Sessions - Persistent conversation history
+ */
+
+// Get all chat sessions for current user
+router.get('/sessions', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const sessions = await storage.getSusanChatSessionsByUserId(user.id);
+    res.json(sessions.map(s => ({
+      ...s,
+      messages: JSON.parse(s.messages || '[]')
+    })));
+  } catch (error) {
+    console.error('[SUSAN-AI] Get sessions error:', error);
+    res.status(500).json({ error: 'Failed to fetch chat sessions' });
+  }
+});
+
+// Get or create active session for current user
+router.get('/sessions/active', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    let session = await storage.getActiveSusanChatSession(user.id);
+
+    // Create new session if none exists
+    if (!session) {
+      session = await storage.createSusanChatSession(user.id, 'New Conversation');
+    }
+
+    res.json({
+      ...session,
+      messages: JSON.parse(session.messages || '[]')
+    });
+  } catch (error) {
+    console.error('[SUSAN-AI] Get active session error:', error);
+    res.status(500).json({ error: 'Failed to get active session' });
+  }
+});
+
+// Create new chat session
+router.post('/sessions', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { title } = req.body;
+
+    // Deactivate all existing sessions
+    await storage.deactivateAllSusanChatSessions(user.id);
+
+    // Create new session
+    const session = await storage.createSusanChatSession(user.id, title || 'New Conversation');
+
+    res.json({
+      ...session,
+      messages: []
+    });
+  } catch (error) {
+    console.error('[SUSAN-AI] Create session error:', error);
+    res.status(500).json({ error: 'Failed to create chat session' });
+  }
+});
+
+// Get specific session
+router.get('/sessions/:id', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const session = await storage.getSusanChatSessionById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Check ownership
+    if (session.userId !== user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    res.json({
+      ...session,
+      messages: JSON.parse(session.messages || '[]')
+    });
+  } catch (error) {
+    console.error('[SUSAN-AI] Get session error:', error);
+    res.status(500).json({ error: 'Failed to get session' });
+  }
+});
+
+// Switch to a different session
+router.post('/sessions/:id/activate', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const session = await storage.getSusanChatSessionById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.userId !== user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Deactivate all other sessions
+    await storage.deactivateAllSusanChatSessions(user.id);
+
+    // Activate this session
+    const updated = await storage.updateSusanChatSession(req.params.id, { isActive: true });
+
+    res.json({
+      ...updated,
+      messages: JSON.parse(updated?.messages || '[]')
+    });
+  } catch (error) {
+    console.error('[SUSAN-AI] Activate session error:', error);
+    res.status(500).json({ error: 'Failed to activate session' });
+  }
+});
+
+// Delete a session
+router.delete('/sessions/:id', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const session = await storage.getSusanChatSessionById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.userId !== user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await storage.deleteSusanChatSession(req.params.id);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[SUSAN-AI] Delete session error:', error);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
+// Chat with session persistence
+router.post('/chat/session', async (req, res) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { message, sessionId } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // Get or create session
+    let session;
+    if (sessionId) {
+      session = await storage.getSusanChatSessionById(sessionId);
+      if (!session || session.userId !== user.id) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+    } else {
+      session = await storage.getActiveSusanChatSession(user.id);
+      if (!session) {
+        session = await storage.createSusanChatSession(user.id, 'New Conversation');
+      }
+    }
+
+    // Parse existing messages
+    const messages = JSON.parse(session.messages || '[]');
+
+    // Build context
+    const context = await buildSusanContext(req);
+    context.sessionHistory = messages;
+
+    // Add user message
+    const userMessage = {
+      role: 'user',
+      content: message,
+      timestamp: new Date().toISOString()
+    };
+    messages.push(userMessage);
+
+    // Use appropriate AI instance
+    const isAdmin = context.userRole === 'ADMIN' ||
+                   (context.userRole === 'MANAGER' && isAuthorizedManager(context.userId));
+    const aiInstance = isAdmin ? adminSusanAI : susanAI;
+
+    // Process query
+    const response = await aiInstance.processQuery(message, context, storage);
+
+    // Add assistant response
+    const assistantMessage = {
+      role: 'assistant',
+      content: response.message,
+      timestamp: new Date().toISOString()
+    };
+    messages.push(assistantMessage);
+
+    // Keep only last 50 messages per session
+    const trimmedMessages = messages.slice(-50);
+
+    // Update title based on first message if it's a new conversation
+    let newTitle = session.title;
+    if (messages.length <= 2 && message.length > 0) {
+      // Use first 50 chars of user's first message as title
+      newTitle = message.slice(0, 50) + (message.length > 50 ? '...' : '');
+    }
+
+    // Persist to database
+    await storage.updateSusanChatSession(session.id, {
+      messages: JSON.stringify(trimmedMessages),
+      title: newTitle ?? undefined
+    });
+
+    res.json({
+      ...response,
+      sessionId: session.id
+    });
+  } catch (error) {
+    console.error('[SUSAN-AI] Session chat error:', error);
+    res.status(500).json({
+      error: 'Failed to process your request',
+      message: 'I apologize, but I encountered an error. Please try again.'
+    });
+  }
+});
+
 export default router;

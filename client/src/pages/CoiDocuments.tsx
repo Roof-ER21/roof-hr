@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
@@ -25,9 +25,42 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import type { User, CoiDocument } from '@/../../shared/schema';
 
+// Helper function to convert date formats
+// Parses MM/DD/YYYY or M/D/YYYY and returns YYYY-MM-DD for HTML date inputs
+function formatDateForInput(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+
+  // If already in YYYY-MM-DD format, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  // Try to parse MM/DD/YYYY or M/D/YYYY format
+  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const month = match[1].padStart(2, '0');
+    const day = match[2].padStart(2, '0');
+    const year = match[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try to parse as a date and format
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+
+  return '';
+}
+
 // Types for smart upload
 interface COIParsedData {
-  insuredName: string | null;
+  insuredName: string | null;      // Person name for employee matching
+  rawInsuredName: string | null;   // Raw name from document (person or company)
   policyNumber: string | null;
   effectiveDate: string | null;
   expirationDate: string | null;
@@ -101,6 +134,8 @@ export default function CoiDocuments() {
   // Smart upload form fields (editable by user)
   const [smartFormData, setSmartFormData] = useState({
     employeeId: '',
+    externalName: '', // For contractors not in the system
+    useExternalName: false, // Toggle between employee selection and external name
     type: 'GENERAL_LIABILITY' as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
     issueDate: '',
     expirationDate: '',
@@ -124,9 +159,21 @@ export default function CoiDocuments() {
     }
   });
 
-  const { data: documents = [], isLoading: documentsLoading } = useQuery<CoiDocument[]>({
+  const { data: documents = [], isLoading: documentsLoading, refetch: refetchDocuments } = useQuery<CoiDocument[]>({
     queryKey: ['/api/coi-documents'],
+    staleTime: 0,  // Always fetch fresh data
+    gcTime: 0,     // Don't cache responses
+    refetchOnMount: 'always', // Always refetch when component mounts
   });
+
+  // Force cache clear and refresh on mount to ensure we have latest data
+  useEffect(() => {
+    // Remove any stale cached data first, then refetch fresh data
+    queryClient.removeQueries({ queryKey: ['/api/coi-documents'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/coi-documents'] });
+    refetchDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   // Filter users based on current user's role
   const { data: allUsers = [], isLoading: usersLoading } = useQuery<User[]>({
@@ -310,12 +357,18 @@ export default function CoiDocuments() {
 
       setEmployeeNotFound(!hasConfidentMatch);
 
+      // Get display name - use rawInsuredName which includes company names
+      const displayName = result.parsedData.rawInsuredName || result.parsedData.insuredName || '';
+
       // Pre-fill form data - only pre-select employee if confident match
+      // If no confident match, pre-fill the external name with whatever was extracted
       setSmartFormData({
         employeeId: hasConfidentMatch ? result.employeeMatch.matchedEmployee!.id : '',
+        externalName: !hasConfidentMatch ? displayName : '',
+        useExternalName: !hasConfidentMatch && !!displayName, // Auto-enable external name if no match
         type: docType,
-        issueDate: result.parsedData.effectiveDate || today.toISOString().split('T')[0],
-        expirationDate: result.parsedData.expirationDate || oneYearFromNow.toISOString().split('T')[0],
+        issueDate: formatDateForInput(result.parsedData.effectiveDate) || today.toISOString().split('T')[0],
+        expirationDate: formatDateForInput(result.parsedData.expirationDate) || oneYearFromNow.toISOString().split('T')[0],
         notes: '',
         policyNumber: result.parsedData.policyNumber || '',
         insurerName: result.parsedData.insurerName || '',
@@ -323,12 +376,12 @@ export default function CoiDocuments() {
 
       // Better toast message showing what was found
       toast({
-        title: result.parsedData.insuredName ? 'Document Analyzed' : 'Document Uploaded',
+        title: displayName ? 'Document Analyzed' : 'Document Uploaded',
         description: hasConfidentMatch
           ? `Matched to ${result.employeeMatch.matchedEmployee?.firstName} ${result.employeeMatch.matchedEmployee?.lastName} (${result.employeeMatch.confidence}% confidence)`
-          : result.parsedData.insuredName
-            ? `Found "${result.parsedData.insuredName}" but no confident match. Please select employee manually.`
-            : 'Could not extract name from document. Please select employee manually.',
+          : displayName
+            ? `Found "${displayName}" - select employee or save as external.`
+            : 'Could not extract name from document. Please enter details manually.',
       });
 
     } catch (error: any) {
@@ -346,7 +399,9 @@ export default function CoiDocuments() {
   const confirmAssignmentMutation = useMutation({
     mutationFn: async (data: {
       file: File;
-      employeeId: string;
+      employeeId?: string;
+      externalName?: string;
+      parsedInsuredName?: string;
       type: string;
       issueDate: string;
       expirationDate: string;
@@ -356,7 +411,9 @@ export default function CoiDocuments() {
     }) => {
       const formData = new FormData();
       formData.append('file', data.file);
-      formData.append('employeeId', data.employeeId);
+      if (data.employeeId) formData.append('employeeId', data.employeeId);
+      if (data.externalName) formData.append('externalName', data.externalName);
+      if (data.parsedInsuredName) formData.append('parsedInsuredName', data.parsedInsuredName);
       formData.append('type', data.type);
       formData.append('issueDate', data.issueDate);
       formData.append('expirationDate', data.expirationDate);
@@ -404,6 +461,8 @@ export default function CoiDocuments() {
     setEmployeeNotFound(false);
     setSmartFormData({
       employeeId: '',
+      externalName: '',
+      useExternalName: false,
       type: 'GENERAL_LIABILITY',
       issueDate: '',
       expirationDate: '',
@@ -452,10 +511,11 @@ export default function CoiDocuments() {
       return;
     }
 
-    if (!smartFormData.employeeId) {
+    // Must have either employeeId OR externalName
+    if (!smartFormData.employeeId && !smartFormData.externalName) {
       toast({
-        title: 'Employee Required',
-        description: 'Please select an employee to assign this document to',
+        title: 'Name Required',
+        description: 'Please select an employee or enter an external name',
         variant: 'destructive',
       });
       setEmployeeNotFound(true);
@@ -471,9 +531,15 @@ export default function CoiDocuments() {
       return;
     }
 
+    // Get the raw insured name from parsed result for storage
+    const parsedInsuredName = smartUploadResult?.parsedData?.rawInsuredName ||
+                              smartUploadResult?.parsedData?.insuredName || undefined;
+
     confirmAssignmentMutation.mutate({
       file: smartUploadFile,
-      employeeId: smartFormData.employeeId,
+      employeeId: smartFormData.useExternalName ? undefined : smartFormData.employeeId || undefined,
+      externalName: smartFormData.useExternalName ? smartFormData.externalName : undefined,
+      parsedInsuredName,
       type: smartFormData.type,
       issueDate: smartFormData.issueDate,
       expirationDate: smartFormData.expirationDate,
@@ -707,11 +773,11 @@ export default function CoiDocuments() {
                     </div>
 
                     {/* Detected Info Summary */}
-                    {smartUploadResult.parsedData.insuredName && (
+                    {(smartUploadResult.parsedData.rawInsuredName || smartUploadResult.parsedData.insuredName) && (
                       <Alert className="border-blue-200 bg-blue-50">
                         <Sparkles className="h-4 w-4 text-blue-500" />
                         <AlertDescription className="text-blue-700 text-sm">
-                          Detected: <strong>{smartUploadResult.parsedData.insuredName}</strong>
+                          Detected: <strong>{smartUploadResult.parsedData.rawInsuredName || smartUploadResult.parsedData.insuredName}</strong>
                           {smartUploadResult.parsedData.policyNumber && (
                             <> | Policy: <strong>{smartUploadResult.parsedData.policyNumber}</strong></>
                           )}
@@ -719,86 +785,132 @@ export default function CoiDocuments() {
                       </Alert>
                     )}
 
-                    {/* Employee Selection - Highlighted if not found */}
-                    <div className="space-y-2">
-                      <Label className={employeeNotFound ? 'text-red-600 font-semibold' : ''}>
-                        Employee *
-                        {employeeNotFound && <span className="ml-2 text-sm">(Please select)</span>}
-                      </Label>
-
-                      {/* Suggested matches */}
-                      {smartUploadResult.employeeMatch.suggestedEmployees.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-xs text-gray-500 mb-1">Suggested matches:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {smartUploadResult.employeeMatch.suggestedEmployees.slice(0, 5).map((emp) => (
-                              <Badge
-                                key={emp.id}
-                                variant={smartFormData.employeeId === emp.id ? "default" : "outline"}
-                                className="cursor-pointer hover:bg-purple-100 text-xs"
-                                onClick={() => {
-                                  setSmartFormData(prev => ({ ...prev, employeeId: emp.id }));
-                                  setEmployeeNotFound(false);
-                                }}
-                              >
-                                {emp.firstName} {emp.lastName} ({emp.score}%)
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <Popover open={smartEmployeeOpen} onOpenChange={setSmartEmployeeOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={smartEmployeeOpen}
-                            className={cn(
-                              "w-full justify-between",
-                              employeeNotFound && "border-red-500 ring-2 ring-red-200"
-                            )}
-                          >
-                            {smartFormData.employeeId
-                              ? sortedUsers.find((user) => user.id === smartFormData.employeeId)
-                                ? `${sortedUsers.find((user) => user.id === smartFormData.employeeId)?.firstName} ${sortedUsers.find((user) => user.id === smartFormData.employeeId)?.lastName}`
-                                : "Select employee..."
-                              : "Select employee..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[400px] p-0">
-                          <Command>
-                            <CommandInput placeholder="Search employees..." />
-                            <CommandList>
-                              <CommandEmpty>No employee found.</CommandEmpty>
-                              <CommandGroup>
-                                {sortedUsers.map((user) => (
-                                  <CommandItem
-                                    key={user.id}
-                                    value={`${user.firstName} ${user.lastName} ${user.email}`}
-                                    onSelect={() => {
-                                      setSmartFormData(prev => ({ ...prev, employeeId: user.id }));
-                                      setEmployeeNotFound(false);
-                                      setSmartEmployeeOpen(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        smartFormData.employeeId === user.id ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    {user.firstName} {user.lastName}
-                                    <span className="ml-2 text-xs text-muted-foreground">{user.email}</span>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                    {/* Assignment Type Toggle */}
+                    <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                      <Label className="text-sm font-medium">Assign to:</Label>
+                      <div className="flex gap-2">
+                        <Badge
+                          variant={!smartFormData.useExternalName ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => setSmartFormData(prev => ({ ...prev, useExternalName: false }))}
+                        >
+                          <UserIcon className="w-3 h-3 mr-1" />
+                          Employee in System
+                        </Badge>
+                        <Badge
+                          variant={smartFormData.useExternalName ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => setSmartFormData(prev => ({ ...prev, useExternalName: true }))}
+                        >
+                          External Contractor
+                        </Badge>
+                      </div>
                     </div>
+
+                    {/* Employee Selection - Only shown when NOT using external name */}
+                    {!smartFormData.useExternalName && (
+                      <div className="space-y-2">
+                        <Label className={employeeNotFound && !smartFormData.useExternalName ? 'text-red-600 font-semibold' : ''}>
+                          Employee *
+                        </Label>
+
+                        {/* Suggested matches */}
+                        {smartUploadResult.employeeMatch.suggestedEmployees.length > 0 && (
+                          <div className="mb-2">
+                            <p className="text-xs text-gray-500 mb-1">Suggested matches:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {smartUploadResult.employeeMatch.suggestedEmployees.slice(0, 5).map((emp) => (
+                                <Badge
+                                  key={emp.id}
+                                  variant={smartFormData.employeeId === emp.id ? "default" : "outline"}
+                                  className="cursor-pointer hover:bg-purple-100 text-xs"
+                                  onClick={() => {
+                                    setSmartFormData(prev => ({ ...prev, employeeId: emp.id, useExternalName: false }));
+                                    setEmployeeNotFound(false);
+                                  }}
+                                >
+                                  {emp.firstName} {emp.lastName} ({emp.score}%)
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <Popover open={smartEmployeeOpen} onOpenChange={setSmartEmployeeOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={smartEmployeeOpen}
+                              className={cn(
+                                "w-full justify-between",
+                                employeeNotFound && !smartFormData.useExternalName && "border-red-500 ring-2 ring-red-200"
+                              )}
+                            >
+                              {smartFormData.employeeId
+                                ? sortedUsers.find((user) => user.id === smartFormData.employeeId)
+                                  ? `${sortedUsers.find((user) => user.id === smartFormData.employeeId)?.firstName} ${sortedUsers.find((user) => user.id === smartFormData.employeeId)?.lastName}`
+                                  : "Select employee..."
+                                : "Select employee..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[400px] p-0">
+                            <Command>
+                              <CommandInput placeholder="Search employees..." />
+                              <CommandList>
+                                <CommandEmpty>No employee found.</CommandEmpty>
+                                <CommandGroup>
+                                  {sortedUsers.map((user) => (
+                                    <CommandItem
+                                      key={user.id}
+                                      value={`${user.firstName} ${user.lastName} ${user.email}`}
+                                      onSelect={() => {
+                                        setSmartFormData(prev => ({ ...prev, employeeId: user.id }));
+                                        setEmployeeNotFound(false);
+                                        setSmartEmployeeOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          smartFormData.employeeId === user.id ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {user.firstName} {user.lastName}
+                                      <span className="ml-2 text-xs text-muted-foreground">{user.email}</span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    )}
+
+                    {/* External Name Input - Only shown when using external name */}
+                    {smartFormData.useExternalName && (
+                      <div className="space-y-2">
+                        <Label className={employeeNotFound && smartFormData.useExternalName && !smartFormData.externalName ? 'text-red-600 font-semibold' : ''}>
+                          Contractor/Company Name *
+                        </Label>
+                        <Input
+                          placeholder="Enter name as shown on COI"
+                          value={smartFormData.externalName}
+                          onChange={(e) => {
+                            setSmartFormData(prev => ({ ...prev, externalName: e.target.value }));
+                            if (e.target.value) setEmployeeNotFound(false);
+                          }}
+                          className={cn(
+                            employeeNotFound && smartFormData.useExternalName && !smartFormData.externalName && "border-red-500 ring-2 ring-red-200"
+                          )}
+                        />
+                        <p className="text-xs text-gray-500">
+                          For subcontractors or companies not in our employee system
+                        </p>
+                      </div>
+                    )}
 
                     {/* Document Type */}
                     <div className="space-y-2">
@@ -887,249 +999,7 @@ export default function CoiDocuments() {
               </DialogContent>
             </Dialog>
 
-            <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-              setIsCreateDialogOpen(open);
-              if (open && currentUser?.role === 'EMPLOYEE') {
-                // Auto-set employee ID for employees
-                form.setValue('employeeId', currentUser.id);
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Manual Upload
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[525px]">
-                <DialogHeader>
-                  <DialogTitle>Upload COI Document</DialogTitle>
-                  <DialogDescription>
-                    Add a new Certificate of Insurance document
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="employeeId"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel htmlFor="employeeId">Employee</FormLabel>
-                          <Popover open={regularEmployeeOpen} onOpenChange={setRegularEmployeeOpen}>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  aria-expanded={regularEmployeeOpen}
-                                  disabled={currentUser?.role === 'EMPLOYEE'}
-                                  className={cn(
-                                    "w-full justify-between",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                >
-                                  {field.value
-                                    ? sortedUsers.find((user) => user.id === field.value)
-                                      ? `${sortedUsers.find((user) => user.id === field.value)?.firstName} ${sortedUsers.find((user) => user.id === field.value)?.lastName}`
-                                      : "Select employee..."
-                                    : "Select employee..."}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[400px] p-0">
-                              <Command>
-                                <CommandInput placeholder="Search employees..." />
-                                <CommandList>
-                                  <CommandEmpty>No employee found.</CommandEmpty>
-                                  <CommandGroup>
-                                    {sortedUsers.map((user) => (
-                                      <CommandItem
-                                        key={user.id}
-                                        value={`${user.firstName} ${user.lastName} ${user.email}`}
-                                        onSelect={() => {
-                                          field.onChange(user.id);
-                                          setRegularEmployeeOpen(false);
-                                        }}
-                                      >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4",
-                                            field.value === user.id ? "opacity-100" : "opacity-0"
-                                          )}
-                                        />
-                                        {user.firstName} {user.lastName}
-                                        <span className="ml-2 text-xs text-muted-foreground">{user.email}</span>
-                                      </CommandItem>
-                                    ))}
-                                  </CommandGroup>
-                                </CommandList>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                          {currentUser?.role === 'EMPLOYEE' && (
-                            <FormDescription>
-                              You can only upload documents for yourself
-                            </FormDescription>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel htmlFor="documentType">Document Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger id="documentType" name="type">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="WORKERS_COMP">Workers Compensation</SelectItem>
-                              <SelectItem value="GENERAL_LIABILITY">General Liability</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="documentUrl"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Document Upload</FormLabel>
-                          <FormControl>
-                            <div className="space-y-2">
-                              {/* File Upload Section */}
-                              <div className="flex items-center gap-2">
-                                <input
-                                  ref={fileInputRef}
-                                  type="file"
-                                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                  onChange={handleFileSelect}
-                                  className="hidden"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => fileInputRef.current?.click()}
-                                  className="w-full"
-                                >
-                                  <Upload className="h-4 w-4 mr-2" />
-                                  Choose File
-                                </Button>
-                              </div>
-                              
-                              {/* Selected File Display */}
-                              {selectedFile && (
-                                <div className="flex items-center justify-between p-2 border rounded-md bg-gray-50">
-                                  <div className="flex items-center gap-2">
-                                    <File className="h-4 w-4 text-gray-500" />
-                                    <span className="text-sm">{selectedFile.name}</span>
-                                    <span className="text-xs text-gray-500">
-                                      ({(selectedFile.size / 1024).toFixed(2)} KB)
-                                    </span>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleRemoveFile}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              {/* URL Input as Alternative */}
-                              <div className="relative">
-                                <div className="absolute inset-0 flex items-center">
-                                  <span className="w-full border-t" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                  <span className="bg-background px-2 text-muted-foreground">
-                                    Or provide URL directly
-                                  </span>
-                                </div>
-                              </div>
-                              <Input 
-                                placeholder="https://..." 
-                                value={field.value}
-                                onChange={(e) => {
-                                  field.onChange(e);
-                                  if (e.target.value && selectedFile) {
-                                    handleRemoveFile();
-                                  }
-                                }}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormDescription>
-                            Upload a file or provide a direct URL to the document
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="issueDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel htmlFor="issueDate">Issue Date</FormLabel>
-                            <FormControl>
-                              <Input id="issueDate" type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="expirationDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel htmlFor="expirationDate">Expiration Date</FormLabel>
-                            <FormControl>
-                              <Input id="expirationDate" type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="notes"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel htmlFor="notes">Notes</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              id="notes"
-                              placeholder="Additional notes..." 
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <DialogFooter>
-                      <Button type="submit" disabled={createMutation.isPending}>
-                        {createMutation.isPending ? 'Uploading...' : 'Upload Document'}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+            {/* Manual Upload button removed - use Smart Upload instead */}
           </div>
         )}
       </div>
@@ -1228,14 +1098,26 @@ export default function CoiDocuments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDocuments.map((document: CoiDocument) => {
+              {filteredDocuments.map((document) => {
                 const employee = users.find((u: User) => u.id === document.employeeId);
                 const alertInfo = getAlertFrequency(document);
-                
+                // Display name: employee name > external name > parsed name > Unknown
+                const displayName = employee
+                  ? `${employee.firstName} ${employee.lastName}`
+                  : document.externalName || document.parsedInsuredName || 'Unknown';
+                const isExternal = !employee && (document.externalName || document.parsedInsuredName);
+
                 return (
                   <TableRow key={document.id}>
                     <TableCell className="font-medium">
-                      {employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown'}
+                      <div className="flex items-center gap-2">
+                        {displayName}
+                        {isExternal && (
+                          <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                            External
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">

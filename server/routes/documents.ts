@@ -206,17 +206,14 @@ router.get('/:id/download', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Increment download count - update the full document with only downloadCount changed
-    const updatedDoc = await storage.getDocumentById(id);
-    if (updatedDoc) {
-      // downloadCount is not in InsertDocument, so we skip updating it
-      // The field exists in the database but not in the update interface
-    }
+    // Increment download count
+    await storage.incrementDocumentDownloadCount(id);
 
     console.log('[DOCUMENT DOWNLOADED]', {
       documentId: id,
       name: document.name,
-      downloadedBy: user.email
+      downloadedBy: user.email,
+      previousDownloadCount: document.downloadCount || 0
     });
 
     res.json({

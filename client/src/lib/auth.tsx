@@ -11,6 +11,9 @@ interface User {
   department: string;
   position: string;
   mustChangePassword?: boolean;
+  phone?: string | null;
+  hireDate?: string;
+  profilePhoto?: string;
 }
 
 interface AuthContextType {

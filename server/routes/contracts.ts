@@ -38,13 +38,46 @@ function requireManager(req: any, res: any, next: any) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   if (!['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Manager access required' });
   }
-  
+
   next();
 }
+
+// Helper function to extract template variables and validate they have values
+function extractTemplateVariables(content: string): string[] {
+  const regex = /\{\{([^}]+)\}\}/g;
+  const variables: string[] = [];
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    variables.push(match[1].trim());
+  }
+  return Array.from(new Set(variables)); // Return unique variables
+}
+
+function validateTemplateVariables(
+  content: string,
+  providedValues: Record<string, string>
+): { isValid: boolean; missingVariables: string[] } {
+  const variables = extractTemplateVariables(content);
+  const missingVariables = variables.filter(v => {
+    // Check if variable is provided and not empty
+    return !providedValues[v] && providedValues[v] !== '';
+  });
+
+  return {
+    isValid: missingVariables.length === 0,
+    missingVariables
+  };
+}
+
+// Standard template variables that are auto-filled
+const AUTO_FILLED_VARIABLES = [
+  'name', 'employeeName', 'firstName', 'lastName',
+  'position', 'department', 'email', 'date', 'startDate'
+];
 
 // Contract Templates
 
@@ -134,6 +167,94 @@ router.delete('/api/contract-templates/:id', requireAuth, requireManager, async 
   } catch (error) {
     console.error('Error deleting contract template:', error);
     res.status(500).json({ error: 'Failed to delete contract template' });
+  }
+});
+
+// Get template variables - for UI to know what fields to show
+router.get('/api/contract-templates/:id/variables', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const template = await storage.getContractTemplateById(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    const variables = extractTemplateVariables(template.content);
+
+    // Categorize variables
+    const autoFilled = variables.filter(v => AUTO_FILLED_VARIABLES.includes(v));
+    const userProvided = variables.filter(v => !AUTO_FILLED_VARIABLES.includes(v));
+
+    res.json({
+      templateId: template.id,
+      templateName: template.name,
+      allVariables: variables,
+      autoFilled,
+      userProvided,
+      // Template's own variable list if defined
+      declaredVariables: template.variables || []
+    });
+  } catch (error) {
+    console.error('Error extracting template variables:', error);
+    res.status(500).json({ error: 'Failed to extract template variables' });
+  }
+});
+
+// Validate template variables before generating contract
+router.post('/api/contract-templates/:id/validate', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const template = await storage.getContractTemplateById(req.params.id);
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    const { fieldValues, recipientType, employeeId, candidateId } = req.body;
+
+    // Build the auto-filled values based on recipient
+    const autoValues: Record<string, string> = {};
+
+    if (recipientType === 'EMPLOYEE' && employeeId) {
+      const employee = await storage.getUserById(employeeId);
+      if (employee) {
+        autoValues.name = `${employee.firstName} ${employee.lastName}`;
+        autoValues.employeeName = autoValues.name;
+        autoValues.firstName = employee.firstName;
+        autoValues.lastName = employee.lastName;
+        autoValues.position = employee.position || '';
+        autoValues.department = employee.department || '';
+        autoValues.email = employee.email;
+        autoValues.date = new Date().toLocaleDateString();
+        autoValues.startDate = new Date().toLocaleDateString();
+      }
+    } else if (recipientType === 'CANDIDATE' && candidateId) {
+      const candidate = await storage.getCandidateById(candidateId);
+      if (candidate) {
+        autoValues.name = `${candidate.firstName} ${candidate.lastName}`;
+        autoValues.employeeName = autoValues.name;
+        autoValues.firstName = candidate.firstName;
+        autoValues.lastName = candidate.lastName;
+        autoValues.position = candidate.position || '';
+        autoValues.department = 'New Hire';
+        autoValues.email = candidate.email;
+        autoValues.date = new Date().toLocaleDateString();
+        autoValues.startDate = new Date().toLocaleDateString();
+      }
+    }
+
+    // Combine auto-filled and user-provided values
+    const allValues = { ...autoValues, ...fieldValues };
+
+    // Validate
+    const validation = validateTemplateVariables(template.content, allValues);
+
+    res.json({
+      isValid: validation.isValid,
+      missingVariables: validation.missingVariables,
+      providedVariables: Object.keys(allValues),
+      allVariables: extractTemplateVariables(template.content)
+    });
+  } catch (error) {
+    console.error('Error validating template variables:', error);
+    res.status(500).json({ error: 'Failed to validate template variables' });
   }
 });
 

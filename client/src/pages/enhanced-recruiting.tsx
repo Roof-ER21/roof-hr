@@ -1,27 +1,31 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DndContext, DragOverlay, closestCenter, useDroppable } from '@dnd-kit/core';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import {
   Users, UserPlus, UserCheck, Calendar, Phone, Mail, FileText,
   Clock, ChevronRight, CheckCircle, XCircle, AlertCircle,
   Download, Upload, Send, MoreVertical, Brain, Star,
-  TrendingUp, Award, Zap, GitCompare, MailIcon, X, FileUp, Pencil
+  TrendingUp, Award, Zap, GitCompare, MailIcon, X, FileUp, Pencil,
+  Shield, Store, Building2, RefreshCw, User, ExternalLink,
+  CheckCircle2, Loader2, FolderSync, Megaphone, Target,
+  Clipboard, Wrench
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { CandidateComparison } from '@/components/recruiting/candidate-comparison';
@@ -31,12 +35,14 @@ import { DraggableCandidateCard } from '@/components/recruiting/draggable-candid
 import { EmailTemplateGenerator } from '@/components/recruiting/email-template-generator';
 import { EmailCampaignManager } from '@/components/recruiting/email-campaign-manager';
 import { WorkflowBuilder } from '@/components/workflows/workflow-builder';
-import { CandidateQuestionnaire, QuestionnaireData } from '@/components/CandidateQuestionnaire';
+// CandidateQuestionnaire removed - no longer showing popup when moving to Hired
 import { CandidateNotes } from '@/components/CandidateNotes';
 import { ChatbotWidget } from '@/components/recruitment/chatbot-widget';
 import { AIInsightsPanel } from '@/components/ai-enhancements/ai-insights-panel';
 import { InPersonInterviewScreening, type ScreeningData } from '@/components/recruiting/in-person-interview-screening';
 import type { Candidate } from '@shared/schema';
+import { useDropzone } from 'react-dropzone';
+import { format } from 'date-fns';
 
 // Droppable Column Component
 function DroppableColumn({ status, children }: { status: string; children: React.ReactNode }) {
@@ -62,15 +68,22 @@ const stages = {
   INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-purple-100 text-purple-800' },
   OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-green-100 text-green-800' },
   HIRED: { name: 'Hired', next: null, color: 'bg-green-600 text-white' },
+  DEAD: { name: 'Dead', next: null, color: 'bg-red-100 text-red-800' },
+  // Keep these for internal status but combine in display
   DEAD_BY_US: { name: 'DEAD by us', next: null, color: 'bg-red-100 text-red-800' },
   DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-800' }
 };
+
+// Display stages for Kanban view (combines DEAD_BY_US and DEAD_BY_CANDIDATE into one column)
+const kanbanStages = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD'] as const;
 
 const positionTypes = [
   'Insurance Sales',
   'Retail Closer',
   'Retail Marketing',
   'Office',
+  'Production Coordinator',
+  'Field Tech',
   'Field Worker',
   'Sales Representative',
   'Project Manager',
@@ -187,21 +200,488 @@ function EditCandidateForm({
   );
 }
 
+// Position colors for visual identification in Kanban and List views
+const POSITION_COLORS: Record<string, { bg: string; text: string; border: string; badge: string }> = {
+  'Insurance Sales': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300', badge: 'bg-red-500' },
+  'Retail Closer': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300', badge: 'bg-green-500' },
+  'Retail Marketing': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-300', badge: 'bg-purple-500' },
+  'Office': { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-300', badge: 'bg-orange-500' },
+  'Production Coordinator': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300', badge: 'bg-blue-500' },
+  'Field Tech': { bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-300', badge: 'bg-cyan-500' },
+  // Default fallback
+  'default': { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300', badge: 'bg-gray-500' },
+};
+
+// Get position color (returns default if not found)
+function getPositionColor(position: string) {
+  return POSITION_COLORS[position] || POSITION_COLORS['default'];
+}
+
+// Category configuration for Resume Uploader
+const RESUME_CATEGORIES = [
+  {
+    id: 'insurance-sales',
+    name: 'Insurance Sales',
+    icon: Shield,
+    color: 'bg-red-500',
+    description: 'Insurance sales representatives'
+  },
+  {
+    id: 'retail-closer',
+    name: 'Retail Closer',
+    icon: Target,
+    color: 'bg-green-500',
+    description: 'Retail closing sales positions'
+  },
+  {
+    id: 'retail-marketing',
+    name: 'Retail Marketing',
+    icon: Megaphone,
+    color: 'bg-purple-500',
+    description: 'Retail marketing and lead generation'
+  },
+  {
+    id: 'office',
+    name: 'Office',
+    icon: Building2,
+    color: 'bg-orange-500',
+    description: 'Administrative and office roles'
+  },
+  {
+    id: 'production-coordinator',
+    name: 'Production Coordinator',
+    icon: Clipboard,
+    color: 'bg-blue-500',
+    description: 'Production coordination and scheduling'
+  },
+  {
+    id: 'field-tech',
+    name: 'Field Tech',
+    icon: Wrench,
+    color: 'bg-cyan-500',
+    description: 'Field technicians and installers'
+  }
+] as const;
+
+type CategoryId = typeof RESUME_CATEGORIES[number]['id'];
+
+// Resume Uploader Content Component
+function ResumeUploaderContent() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [activeCategory, setActiveCategory] = useState<CategoryId>('insurance-sales');
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [sourceFolderId, setSourceFolderId] = useState('');
+
+  // Query for recent uploads
+  const { data: recentData, isLoading: isLoadingRecent, refetch: refetchRecent } = useQuery({
+    queryKey: ['/api/resumes/recent', activeCategory],
+    queryFn: async () => {
+      const res = await fetch(`/api/resumes/recent?category=${activeCategory}&limit=20`);
+      if (!res.ok) throw new Error('Failed to fetch recent resumes');
+      return res.json();
+    }
+  });
+
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async ({ file, category }: { file: File; category: CategoryId }) => {
+      const formData = new FormData();
+      formData.append('resume', file);
+      formData.append('category', category);
+
+      const response = await fetch('/api/resumes/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Resume Uploaded',
+        description: `Created candidate: ${data.candidate.firstName} ${data.candidate.lastName}`,
+      });
+      refetchRecent();
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Upload Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Sync from Drive mutation
+  const syncMutation = useMutation({
+    mutationFn: async ({ category, sourceFolderId }: { category: CategoryId; sourceFolderId?: string }) => {
+      const response = await fetch('/api/resumes/sync-from-drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category, sourceFolderId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Sync failed');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Sync Complete',
+        description: `Processed ${data.processed} new resumes`,
+      });
+      setSyncDialogOpen(false);
+      refetchRecent();
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Sync Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Dropzone handler
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      uploadMutation.mutate({ file: acceptedFiles[0], category: activeCategory });
+    }
+  }, [activeCategory, uploadMutation]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    },
+    maxSize: 10 * 1024 * 1024, // 10MB
+    multiple: false,
+    disabled: uploadMutation.isPending
+  });
+
+  const activeCategoryData = RESUME_CATEGORIES.find(c => c.id === activeCategory)!;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-muted-foreground">
+            Upload resumes to automatically create candidates in the recruiting pipeline
+          </p>
+        </div>
+        <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <FolderSync className="h-4 w-4" />
+              Sync from Drive
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Sync Resumes from Google Drive</DialogTitle>
+              <DialogDescription>
+                Import resumes from a Google Drive folder. The folder should have subfolders
+                named "Insurance Sales", "Retail Sales", and "Office".
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="folderId">Source Folder ID (optional)</Label>
+                <Input
+                  id="folderId"
+                  placeholder="Leave empty to use default folder"
+                  value={sourceFolderId}
+                  onChange={(e) => setSourceFolderId(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  The folder ID can be found in the Google Drive URL after /folders/
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Category to Sync</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {RESUME_CATEGORIES.map((cat) => (
+                    <Button
+                      key={cat.id}
+                      variant={activeCategory === cat.id ? 'default' : 'outline'}
+                      size="sm"
+                      className={`gap-1 ${activeCategory === cat.id ? cat.color + ' text-white' : ''}`}
+                      onClick={() => setActiveCategory(cat.id)}
+                    >
+                      <cat.icon className="h-3 w-3" />
+                      {cat.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSyncDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => syncMutation.mutate({
+                  category: activeCategory,
+                  sourceFolderId: sourceFolderId || undefined
+                })}
+                disabled={syncMutation.isPending}
+              >
+                {syncMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Start Sync
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Category Tabs */}
+      <Tabs value={activeCategory} onValueChange={(v) => setActiveCategory(v as CategoryId)}>
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
+          {RESUME_CATEGORIES.map((cat) => (
+            <TabsTrigger key={cat.id} value={cat.id} className={`flex items-center gap-2 ${cat.color} text-white data-[state=active]:ring-2 data-[state=active]:ring-offset-2`}>
+              <cat.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{cat.name}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {RESUME_CATEGORIES.map((cat) => (
+          <TabsContent key={cat.id} value={cat.id} className="mt-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Upload Zone */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="h-5 w-5" />
+                    Upload Resume
+                  </CardTitle>
+                  <CardDescription>
+                    {cat.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div
+                    {...getRootProps()}
+                    className={`
+                      border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200
+                      ${isDragActive ? 'border-primary bg-primary/5 scale-[1.02]' : 'border-muted-foreground/25 hover:border-primary/50'}
+                      ${uploadMutation.isPending ? 'opacity-50 pointer-events-none' : ''}
+                    `}
+                  >
+                    <input {...getInputProps()} />
+                    {uploadMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-12 w-12 mx-auto text-primary mb-4 animate-spin" />
+                        <p className="font-medium">Processing resume...</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          AI is extracting candidate information
+                        </p>
+                      </>
+                    ) : isDragActive ? (
+                      <>
+                        <Upload className="h-12 w-12 mx-auto text-primary mb-4" />
+                        <p className="font-medium">Drop the resume here...</p>
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="font-medium">Drag & drop a resume here</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          or click to select (PDF, DOC, DOCX)
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-4">
+                          AI will automatically extract the candidate's name and create their profile
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Upload Stats */}
+                  <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      AI-powered name extraction
+                    </div>
+                    <div>Max file size: 10MB</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Uploads */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Clock className="h-5 w-5" />
+                      Recent Uploads
+                    </span>
+                    <Badge variant="secondary">
+                      {recentData?.total || 0} total
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Recently uploaded resumes for {cat.name}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingRecent ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : recentData?.candidates?.length > 0 ? (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {recentData.candidates.map((candidate: any) => (
+                        <div
+                          key={candidate.id}
+                          className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`h-10 w-10 rounded-full ${cat.color} flex items-center justify-center`}>
+                              <User className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                              <p className="font-medium">
+                                {candidate.firstName} {candidate.lastName}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>{candidate.stage || candidate.status}</span>
+                                <span>•</span>
+                                <span>{format(new Date(candidate.appliedDate), 'MMM d, yyyy')}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={candidate.source === 'Resume Upload' ? 'default' : 'secondary'}
+                            >
+                              {candidate.source === 'Resume Upload' ? 'Uploaded' : 'Synced'}
+                            </Badge>
+                            {candidate.resumeUrl && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                asChild
+                              >
+                                <a
+                                  href={candidate.resumeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View Resume"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No resumes uploaded yet for {cat.name}</p>
+                      <p className="text-sm mt-1">Upload a resume to get started</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+
+      {/* Info Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <Upload className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Direct Upload</h3>
+                <p className="text-sm text-muted-foreground">
+                  Drag and drop resumes directly into the upload zone
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                <FolderSync className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Drive Sync</h3>
+                <p className="text-sm text-muted-foreground">
+                  Import multiple resumes from a Google Drive folder
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold">AI Processing</h3>
+                <p className="text-sm text-muted-foreground">
+                  AI extracts names and creates candidates automatically
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default function EnhancedRecruiting() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'interviews' | 'campaigns' | 'workflows'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'interviews' | 'campaigns' | 'workflows' | 'resume-uploads'>('kanban');
   const [showInterviewScheduler, setShowInterviewScheduler] = useState(false);
   const [selectedCandidateForInterview, setSelectedCandidateForInterview] = useState<Candidate | null>(null);
   const [showComparison, setShowComparison] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [showEmailGenerator, setShowEmailGenerator] = useState(false);
   const [selectedCandidateForEmail, setSelectedCandidateForEmail] = useState<Candidate | null>(null);
-  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const [questionnaireCandidate, setQuestionnaireCandidate] = useState<{candidate: Candidate; nextStage: string} | null>(null);
+  // Questionnaire state removed - no longer showing popup when moving to Hired
+  // Dead type selection modal
+  const [showDeadTypeModal, setShowDeadTypeModal] = useState(false);
+  const [candidateForDeadType, setCandidateForDeadType] = useState<Candidate | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [selectedCandidateForNotes, setSelectedCandidateForNotes] = useState<Candidate | null>(null);
   const [showScreeningConfirmation, setShowScreeningConfirmation] = useState(false);
@@ -594,7 +1074,9 @@ export default function EnhancedRecruiting() {
   };
 
   const filteredCandidates = candidates.filter(candidate => {
-    const matchesFilter = filterStatus === 'ALL' || candidate.status === filterStatus;
+    // Handle combined DEAD filter option
+    const matchesFilter = filterStatus === 'ALL' ||
+      (filterStatus === 'DEAD' ? (candidate.status === 'DEAD_BY_US' || candidate.status === 'DEAD_BY_CANDIDATE') : candidate.status === filterStatus);
     const matchesPosition = filterPosition === 'ALL' || candidate.position === filterPosition;
     const matchesSearch = searchTerm === '' || 
       `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -609,8 +1091,8 @@ export default function EnhancedRecruiting() {
     INTERVIEW: filteredCandidates.filter(c => c.status === 'INTERVIEW'),
     OFFER: filteredCandidates.filter(c => c.status === 'OFFER'),
     HIRED: filteredCandidates.filter(c => c.status === 'HIRED'),
-    DEAD_BY_US: filteredCandidates.filter(c => c.status === 'DEAD_BY_US'),
-    DEAD_BY_CANDIDATE: filteredCandidates.filter(c => c.status === 'DEAD_BY_CANDIDATE'),
+    // Combined DEAD column - shows both DEAD_BY_US and DEAD_BY_CANDIDATE
+    DEAD: filteredCandidates.filter(c => c.status === 'DEAD_BY_US' || c.status === 'DEAD_BY_CANDIDATE'),
   };
   
   // Helper function to get next status
@@ -681,21 +1163,18 @@ export default function EnhancedRecruiting() {
       }
     }
 
-    // Check if moving to a stage that requires questionnaire (only HIRED now)
-    const requiresQuestionnaire = newStatus === 'HIRED';
-
-    if (requiresQuestionnaire && !currentCandidate.questionnaireCompleted) {
-      setQuestionnaireCandidate({
-        candidate: currentCandidate,
-        nextStage: stages[newStatus as keyof typeof stages].name
-      });
-      setShowQuestionnaire(true);
-    } else {
-      updateCandidateMutation.mutate({
-        id: candidateId,
-        data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
-      });
+    // Check if moving to DEAD - show type selection modal
+    if (newStatus === 'DEAD') {
+      setCandidateForDeadType(currentCandidate);
+      setShowDeadTypeModal(true);
+      return;
     }
+
+    // Directly update status without questionnaire
+    updateCandidateMutation.mutate({
+      id: candidateId,
+      data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+    });
   };
 
   const activeDragCandidate = activeDragId 
@@ -809,6 +1288,14 @@ export default function EnhancedRecruiting() {
                   <Zap className="mr-1 h-3 w-3" />
                   Workflows
                 </Button>
+                <Button
+                  variant={viewMode === 'resume-uploads' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('resume-uploads')}
+                >
+                  <Upload className="mr-1 h-3 w-3" />
+                  Upload Resumes
+                </Button>
               </div>
             </div>
           </CardHeader>
@@ -831,9 +1318,7 @@ export default function EnhancedRecruiting() {
                   <SelectItem value="INTERVIEW">Interview</SelectItem>
                   <SelectItem value="OFFER">Offer</SelectItem>
                   <SelectItem value="HIRED">Hired</SelectItem>
-                  <SelectItem value="REJECTED">Rejected</SelectItem>
-                  <SelectItem value="DEAD_BY_US">DEAD by us</SelectItem>
-                  <SelectItem value="DEAD_BY_CANDIDATE">DEAD by candidate</SelectItem>
+                  <SelectItem value="DEAD">Dead (All)</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={filterPosition} onValueChange={setFilterPosition}>
@@ -851,18 +1336,18 @@ export default function EnhancedRecruiting() {
 
             {/* Content based on view mode */}
             {viewMode === 'kanban' ? (
-              <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-                {(['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE'] as const).map(status => (
+              <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                {kanbanStages.map(status => (
                   <DroppableColumn key={status} status={status}>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <h3 className="font-medium mb-3 flex items-center justify-between">
                         {stages[status].name}
                         <Badge className={stages[status].color}>
-                          {candidatesByStatus[status].length}
+                          {candidatesByStatus[status as keyof typeof candidatesByStatus]?.length || 0}
                         </Badge>
                       </h3>
                     <div className="space-y-3">
-                      {candidatesByStatus[status].map(candidate => (
+                      {(candidatesByStatus[status as keyof typeof candidatesByStatus] || []).map(candidate => (
                         <DraggableCandidateCard
                           key={candidate.id}
                           candidate={{
@@ -918,21 +1403,18 @@ export default function EnhancedRecruiting() {
                               }
                             }
 
-                            // Check if moving to a stage that requires questionnaire (only HIRED now)
-                            const requiresQuestionnaire = newStatus === 'HIRED';
-
-                            if (requiresQuestionnaire && !currentCandidate.questionnaireCompleted) {
-                              setQuestionnaireCandidate({
-                                candidate: currentCandidate,
-                                nextStage: stages[newStatus as keyof typeof stages].name
-                              });
-                              setShowQuestionnaire(true);
-                            } else {
-                              updateCandidateMutation.mutate({
-                                id: candidateId,
-                                data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
-                              });
+                            // Check if moving to DEAD - show type selection modal
+                            if (newStatus === 'DEAD') {
+                              setCandidateForDeadType(currentCandidate);
+                              setShowDeadTypeModal(true);
+                              return;
                             }
+
+                            // Directly update status without questionnaire
+                            updateCandidateMutation.mutate({
+                              id: candidateId,
+                              data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+                            });
                           }}
                           onAnalyze={(candidate) => analyzeCandidateMutation.mutate(candidate.id)}
                           onEmail={(candidate) => {
@@ -1024,21 +1506,11 @@ export default function EnhancedRecruiting() {
                             }
                           }
 
-                          // Check if moving to a stage that requires questionnaire (only HIRED now)
-                          const requiresQuestionnaire = newStatus === 'HIRED';
-
-                          if (requiresQuestionnaire && !currentCandidate.questionnaireCompleted) {
-                            setQuestionnaireCandidate({
-                              candidate: currentCandidate,
-                              nextStage: stages[newStatus as keyof typeof stages].name
-                            });
-                            setShowQuestionnaire(true);
-                          } else {
-                            updateCandidateMutation.mutate({
-                              id: candidateId,
-                              data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
-                            });
-                          }
+                          // Directly update status without questionnaire
+                          updateCandidateMutation.mutate({
+                            id: candidateId,
+                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+                          });
                         }}
                         onAnalyze={(candidate) => analyzeCandidateMutation.mutate(candidate.id)}
                         onEmail={(candidate) => {
@@ -1095,21 +1567,18 @@ export default function EnhancedRecruiting() {
                             }
                           }
 
-                          // Check if moving to a stage that requires questionnaire (only HIRED now)
-                          const requiresQuestionnaire = newStatus === 'HIRED';
-
-                          if (requiresQuestionnaire && !currentCandidate.questionnaireCompleted) {
-                            setQuestionnaireCandidate({
-                              candidate: currentCandidate,
-                              nextStage: stages[newStatus as keyof typeof stages].name
-                            });
-                            setShowQuestionnaire(true);
-                          } else {
-                            updateCandidateMutation.mutate({
-                              id: candidate.id,
-                              data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
-                            });
+                          // Check if moving to DEAD - show type selection modal
+                          if (newStatus === 'DEAD') {
+                            setCandidateForDeadType(currentCandidate);
+                            setShowDeadTypeModal(true);
+                            return;
                           }
+
+                          // Directly update status without questionnaire
+                          updateCandidateMutation.mutate({
+                            id: candidate.id,
+                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+                          });
                         }}
                       >
                         <SelectTrigger className="w-[180px]">
@@ -1121,8 +1590,7 @@ export default function EnhancedRecruiting() {
                           <SelectItem value="INTERVIEW">Interview</SelectItem>
                           <SelectItem value="OFFER">Offer</SelectItem>
                           <SelectItem value="HIRED">Hired</SelectItem>
-                          <SelectItem value="DEAD_BY_US">DEAD by us</SelectItem>
-                          <SelectItem value="DEAD_BY_CANDIDATE">DEAD by candidate</SelectItem>
+                          <SelectItem value="DEAD">Dead</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1193,6 +1661,9 @@ export default function EnhancedRecruiting() {
                 
                 <WorkflowBuilder />
               </div>
+            ) : viewMode === 'resume-uploads' ? (
+              // Resume Uploads View
+              <ResumeUploaderContent />
             ) : null}
           </CardContent>
         </Card>
@@ -1280,40 +1751,64 @@ export default function EnhancedRecruiting() {
         </DialogContent>
       </Dialog>
 
-      {/* Candidate Questionnaire Modal */}
-      {showQuestionnaire && questionnaireCandidate && (
-        <CandidateQuestionnaire
-          isOpen={showQuestionnaire}
-          onClose={() => {
-            setShowQuestionnaire(false);
-            setQuestionnaireCandidate(null);
-          }}
-          candidateName={`${questionnaireCandidate.candidate.firstName} ${questionnaireCandidate.candidate.lastName}`}
-          nextStage={questionnaireCandidate.nextStage}
-          onSubmit={(data: QuestionnaireData) => {
-            // Update candidate with questionnaire data and new status
-            const newStatus = questionnaireCandidate.nextStage === 'Hired' ? 'HIRED' : 
-                            questionnaireCandidate.nextStage === 'Offer Extended' ? 'OFFER' :
-                            questionnaireCandidate.nextStage === 'DEAD by us' ? 'DEAD_BY_US' :
-                            questionnaireCandidate.nextStage === 'DEAD by candidate' ? 'DEAD_BY_CANDIDATE' :
-                            questionnaireCandidate.nextStage === 'Not Selected' ? 'REJECTED' : 
-                            questionnaireCandidate.candidate.status;
-            
-            updateCandidateMutation.mutate({
-              id: questionnaireCandidate.candidate.id,
-              data: {
-                ...data,
-                status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE'
-              }
-            });
-            
-            setShowQuestionnaire(false);
-            setQuestionnaireCandidate(null);
-          }}
-        />
-      )}
+      {/* Questionnaire modal removed - no longer showing popup when moving to Hired */}
 
-
+      {/* Dead Type Selection Modal */}
+      <Dialog open={showDeadTypeModal} onOpenChange={setShowDeadTypeModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Select Dead Type</DialogTitle>
+            <DialogDescription>
+              {candidateForDeadType && (
+                <>Please select the reason for marking <strong>{candidateForDeadType.firstName} {candidateForDeadType.lastName}</strong> as dead.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
+                if (candidateForDeadType) {
+                  updateCandidateMutation.mutate({
+                    id: candidateForDeadType.id,
+                    data: { status: 'DEAD_BY_US' }
+                  });
+                  setShowDeadTypeModal(false);
+                  setCandidateForDeadType(null);
+                }
+              }}
+            >
+              <XCircle className="mr-2 h-4 w-4" />
+              Dead by Us
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={() => {
+                if (candidateForDeadType) {
+                  updateCandidateMutation.mutate({
+                    id: candidateForDeadType.id,
+                    data: { status: 'DEAD_BY_CANDIDATE' }
+                  });
+                  setShowDeadTypeModal(false);
+                  setCandidateForDeadType(null);
+                }
+              }}
+            >
+              <XCircle className="mr-2 h-4 w-4" />
+              Dead by Candidate
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeadTypeModal(false);
+                setCandidateForDeadType(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Candidate Notes Side Panel */}
       <Sheet open={showNotes} onOpenChange={setShowNotes}>
@@ -1499,20 +1994,11 @@ export default function EnhancedRecruiting() {
                   onClick={() => {
                     const nextStatus = getNextStatus(selectedCandidate.status);
                     if (nextStatus) {
-                      // Check if moving to HIRED requires questionnaire
-                      if (nextStatus === 'HIRED' && !selectedCandidate.questionnaireCompleted) {
-                        setQuestionnaireCandidate({
-                          candidate: selectedCandidate,
-                          nextStage: stages['HIRED'].name
-                        });
-                        setShowQuestionnaire(true);
-                        setShowCandidateDetails(false);
-                      } else {
-                        updateCandidateMutation.mutate({
-                          id: selectedCandidate.id,
-                          data: { status: nextStatus }
-                        });
-                      }
+                      // Directly update status without questionnaire
+                      updateCandidateMutation.mutate({
+                        id: selectedCandidate.id,
+                        data: { status: nextStatus }
+                      });
                     }
                   }}
                   disabled={!getNextStatus(selectedCandidate.status)}

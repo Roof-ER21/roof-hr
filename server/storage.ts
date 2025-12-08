@@ -64,7 +64,9 @@ import {
   AttendanceCheckIn, InsertAttendanceCheckIn, attendanceCheckIns,
   // Equipment Checklist and Termination
   equipmentChecklists, terminationReminders,
-  InsertEquipmentChecklist, InsertTerminationReminder
+  InsertEquipmentChecklist, InsertTerminationReminder,
+  // Susan AI Chat Sessions
+  SusanChatSession, InsertSusanChatSession, susanChatSessions
 } from '@shared/schema';
 import { db } from './db';
 import { eq, and, lt, inArray, or, sql, gte, lte } from 'drizzle-orm';
@@ -769,6 +771,69 @@ class DrizzleStorage implements IStorage {
 
   async deleteDocument(id: string): Promise<void> {
     await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  async incrementDocumentDownloadCount(id: string): Promise<Document | null> {
+    const doc = await this.getDocumentById(id);
+    if (!doc) return null;
+
+    const [updated] = await db.update(documents)
+      .set({ downloadCount: (doc.downloadCount || 0) + 1 })
+      .where(eq(documents.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  // Susan AI Chat Session methods
+  async createSusanChatSession(userId: string, title?: string): Promise<SusanChatSession> {
+    const id = uuidv4();
+    const [session] = await db.insert(susanChatSessions).values({
+      id,
+      userId,
+      messages: '[]',
+      title: title || 'New Chat',
+      isActive: true
+    }).returning();
+    return session;
+  }
+
+  async getSusanChatSessionById(id: string): Promise<SusanChatSession | null> {
+    const [session] = await db.select().from(susanChatSessions).where(eq(susanChatSessions.id, id));
+    return session || null;
+  }
+
+  async getSusanChatSessionsByUserId(userId: string): Promise<SusanChatSession[]> {
+    return await db.select().from(susanChatSessions)
+      .where(eq(susanChatSessions.userId, userId))
+      .orderBy(sql`${susanChatSessions.updatedAt} DESC`);
+  }
+
+  async getActiveSusanChatSession(userId: string): Promise<SusanChatSession | null> {
+    const [session] = await db.select().from(susanChatSessions)
+      .where(and(
+        eq(susanChatSessions.userId, userId),
+        eq(susanChatSessions.isActive, true)
+      ))
+      .orderBy(sql`${susanChatSessions.updatedAt} DESC`);
+    return session || null;
+  }
+
+  async updateSusanChatSession(id: string, data: { messages?: string; title?: string; isActive?: boolean }): Promise<SusanChatSession | null> {
+    const [session] = await db.update(susanChatSessions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(susanChatSessions.id, id))
+      .returning();
+    return session || null;
+  }
+
+  async deleteSusanChatSession(id: string): Promise<void> {
+    await db.delete(susanChatSessions).where(eq(susanChatSessions.id, id));
+  }
+
+  async deactivateAllSusanChatSessions(userId: string): Promise<void> {
+    await db.update(susanChatSessions)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(susanChatSessions.userId, userId));
   }
 
   // Employee Review methods
