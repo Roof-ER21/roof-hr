@@ -253,26 +253,78 @@ function extractInsuredName(text: string): InsuredNameResult {
   let rawName: string | null = null;
   let personName: string | null = null;
 
-  // PRIORITY 0: ACORD 25 FORMAT - Company name followed by street address
+  // PRIORITY 0 (NEW): ACORD 25 FORMAT - Find insured after producer section
+  // In ACORD forms, PRODUCER has: Name + phone + email
+  // Then INSURED has: Name/Company + address (NO phone after)
+  // Look for: email pattern, then find the insured section
+  const emailPattern = /@[a-z0-9.-]+\.[a-z]{2,}/i;
+  const emailMatch = text.match(emailPattern);
+  if (emailMatch && emailMatch.index !== undefined) {
+    // Get first 500 chars after email - limits to INSURED section only (avoids certificate holder at bottom)
+    const afterEmail = text.substring(emailMatch.index + emailMatch[0].length, emailMatch.index + emailMatch[0].length + 500);
+    console.log('[Document Parser] Text after email (first 200 chars):', afterEmail.substring(0, 200).replace(/\n/g, '\\n'));
+
+    // Common address/non-name words to exclude from person name matching
+    const addressWords = ['blvd', 'ste', 'suite', 'ave', 'avenue', 'street', 'drive', 'road', 'lane', 'way', 'court', 'circle', 'plaza', 'floor'];
+
+    // FIRST: Try to find a company name (LLC, Inc, Corp, etc.) BEFORE any address
+    const companyPattern = /^\s*([A-Za-z][A-Za-z0-9\s\.\,\&\-\']+(?:LLC|Inc|Corp|Ltd|Co\.|Company|Enterprises|Services|Roofing|Construction|Contracting|Carpentry|dba\s+[A-Za-z0-9\-]+)[^\n]*)/im;
+    const companyMatch = afterEmail.match(companyPattern);
+    if (companyMatch && companyMatch[1]) {
+      const candidate = companyMatch[1].trim().replace(/\s+/g, ' ');
+      // Make sure this company appears BEFORE any address numbers
+      const companyIndex = afterEmail.indexOf(companyMatch[0]);
+      const addressIndex = afterEmail.search(/\d{2,5}\s+[A-Za-z]/);
+      if ((companyIndex < addressIndex || addressIndex === -1) && candidate.length >= 5 && !skipPhrase(candidate)) {
+        rawName = candidate;
+        console.log('[Document Parser] Found company insured:', rawName);
+      }
+    }
+
+    // SECOND: If no company found, try to find person name (First Last) followed by address
+    if (!rawName) {
+      // Pattern: Word Word (capitalized) followed by number and street
+      const nameAddressPattern = /([A-Z][a-z]+\s+[A-Z][a-z]+)\s*\n?\s*(\d{2,5}\s+[A-Za-z])/;
+      const nameMatch = afterEmail.match(nameAddressPattern);
+      if (nameMatch && nameMatch[1]) {
+        const candidate = nameMatch[1].trim();
+        // Make sure it's not an address word like "Blvd Ste"
+        const words = candidate.toLowerCase().split(/\s+/);
+        const isAddressWord = words.some(w => addressWords.includes(w));
+
+        if (!isAddressWord && looksLikeValidName(candidate)) {
+          rawName = candidate;
+          if (looksLikePersonName(candidate)) {
+            personName = candidate;
+          }
+          console.log('[Document Parser] Found person insured:', rawName);
+        }
+      }
+    }
+  }
+
+  // PRIORITY 0.5: ACORD 25 FORMAT - Company name followed by street address
   // In ACORD forms, the INSURED section shows:
   // INSURED
   // I&M Carpentry LLC
   // 5449 VARNUM ST
   // Pattern: Find text between INSURED and a street address (number + street name)
-  const companyBeforeAddressPattern = /INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+?)[\s\n]+\d{2,5}\s+[A-Z]/i;
-  const addressMatch = text.match(companyBeforeAddressPattern);
-  if (addressMatch && addressMatch[1]) {
-    const candidate = addressMatch[1].trim()
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    // Validate it's not a form label and has multiple words or is a company name
-    if (candidate.length >= 5 &&
-        !skipPhrase(candidate) &&
-        (candidate.includes(' ') || looksLikeCompanyName(candidate))) {
-      rawName = candidate;
-      console.log('[Document Parser] Found company name before address:', rawName);
-      if (looksLikePersonName(candidate)) {
-        personName = candidate;
+  if (!rawName) {
+    const companyBeforeAddressPattern = /INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+?)[\s\n]+\d{2,5}\s+[A-Z]/i;
+    const addressMatch = text.match(companyBeforeAddressPattern);
+    if (addressMatch && addressMatch[1]) {
+      const candidate = addressMatch[1].trim()
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      // Validate it's not a form label and has multiple words or is a company name
+      if (candidate.length >= 5 &&
+          !skipPhrase(candidate) &&
+          (candidate.includes(' ') || looksLikeCompanyName(candidate))) {
+        rawName = candidate;
+        console.log('[Document Parser] Found company name before address:', rawName);
+        if (looksLikePersonName(candidate)) {
+          personName = candidate;
+        }
       }
     }
   }
@@ -683,13 +735,19 @@ function calculateConfidence(data: Partial<COIParsedData>): number {
  * Parse a COI (Certificate of Insurance) PDF document
  */
 export async function parseCOIDocument(buffer: Buffer): Promise<COIParsedData> {
-  console.log('[Document Parser] Parsing COI document...');
+  console.log('[Document Parser] ========== PARSING COI DOCUMENT ==========');
 
   try {
     const data = await pdfParse(buffer);
     const text = data.text;
 
     console.log('[Document Parser] Extracted', text.length, 'characters from PDF');
+    console.log('[Document Parser] ===== RAW TEXT FIRST 800 CHARS =====');
+    console.log(text.substring(0, 800));
+    console.log('[Document Parser] ===== END RAW TEXT =====');
+    console.log('[Document Parser] Contains INSURED?', text.toUpperCase().includes('INSURED'));
+    console.log('[Document Parser] Contains CERTIFICATE?', text.toUpperCase().includes('CERTIFICATE'));
+    console.log('[Document Parser] Contains POLICY?', text.toUpperCase().includes('POLICY'));
 
     const insuredNameResult = extractInsuredName(text);
     const policyNumber = extractPolicyNumber(text);
