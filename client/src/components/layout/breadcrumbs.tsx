@@ -5,6 +5,9 @@ import { cn } from '@/lib/utils';
 // Route name mappings for better display
 const routeNames: Record<string, string> = {
   'dashboard': 'Dashboard',
+  'my-portal': 'My Portal',
+  'team-directory': 'Team Directory',
+  'team-dashboard': 'Team Dashboard',
   'susan-ai': 'Susan AI',
   'resume-uploader': 'Resume Uploader',
   'recruiting': 'Recruiting',

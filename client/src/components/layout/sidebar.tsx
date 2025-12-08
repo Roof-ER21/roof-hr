@@ -26,11 +26,14 @@ import {
   Sparkles,
   Cloud,
   Clock,
-  Upload
+  Upload,
+  UserCircle
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
+  { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH'] },
+  { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: ['ADMIN', 'MANAGER', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER'] },
   { name: 'Susan AI', href: '/susan-ai', icon: Sparkles, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH'] },
   { name: 'Resume Uploader', href: '/resume-uploader', icon: Upload, roles: ['ADMIN', 'MANAGER'] },
   { name: 'Recruiting', href: '/recruiting', icon: Briefcase, roles: ['ADMIN', 'MANAGER'] },

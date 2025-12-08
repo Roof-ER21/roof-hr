@@ -45,6 +45,7 @@ import aiCriteriaRoutes from './routes/ai-criteria';
 import googleDriveUploadRoutes from './routes/google-drive-uploads';
 import attendanceRoutes from './routes/attendance';
 import equipmentReceiptRoutes from './routes/equipment-receipts';
+import employeePortalRoutes from './routes/employee-portal';
 
 const router = express.Router();
 
@@ -2299,6 +2300,9 @@ export function registerRoutes(app: express.Application) {
 
   // Mount equipment receipt routes
   app.use(equipmentReceiptRoutes);
+
+  // Mount employee portal routes
+  app.use(employeePortalRoutes);
 
   // Mount LLM status routes
   app.use(llmStatusRoutes);

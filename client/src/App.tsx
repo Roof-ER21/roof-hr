@@ -30,6 +30,9 @@ import AttendanceDashboard from '@/pages/AttendanceDashboard';
 import AttendanceCheckIn from '@/pages/AttendanceCheckIn';
 import AttendanceAdminDashboard from '@/pages/AttendanceAdminDashboard';
 import EquipmentChecklistForm from '@/pages/equipment-checklist-form';
+import EmployeeDashboard from '@/pages/employee-dashboard';
+import TeamDirectory from '@/pages/team-directory';
+import TeamDashboard from '@/pages/team-dashboard';
 import { SusanFloatingOrb } from '@/components/susan-ai/floating-orb';
 import { OnboardingTour } from '@/components/OnboardingTour';
 import { useEffect } from 'react';
@@ -105,6 +108,9 @@ function AuthenticatedRoutes() {
         <Route path="/google-integration" element={<GoogleIntegration />} />
         <Route path="/attendance" element={<AttendanceDashboard />} />
         <Route path="/attendance/admin" element={<AttendanceAdminDashboard />} />
+        <Route path="/my-portal" element={<EmployeeDashboard />} />
+        <Route path="/team-directory" element={<TeamDirectory />} />
+        <Route path="/team-dashboard" element={<TeamDashboard />} />
       </Routes>
       <SusanFloatingOrb />
       <OnboardingTour />
