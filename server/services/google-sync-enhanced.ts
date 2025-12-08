@@ -927,7 +927,9 @@ Communication Score: ${review.communicationScore || 'N/A'}/5`;
       }
 
       // Part 1: Sync FROM Google Drive TO database (import new documents)
-      await this.importCOIDocumentsFromDrive();
+      // DISABLED: Auto-import was assigning all COIs to wrong employees based on folder location
+      // COIs should be uploaded manually via the smart upload feature which parses the actual document
+      // await this.importCOIDocumentsFromDrive();
       
       // Part 2: Sync FROM database TO Google Drive (export documents)
       const coiDocuments = await storage.getAllCoiDocuments();
