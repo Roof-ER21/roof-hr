@@ -458,18 +458,34 @@ function extractInsurerName(text: string): string | null {
 }
 
 /**
- * Parse a date string to a Date object
+ * Parse a date string to a Date object using UTC to avoid timezone drift
  */
 function parseDateString(dateStr: string): Date | null {
   // Try MM/DD/YYYY format
   const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (match) {
-    const month = parseInt(match[1]) - 1;
-    const day = parseInt(match[2]);
-    const year = parseInt(match[3]);
-    return new Date(year, month, day);
+    const month = match[1].padStart(2, '0');
+    const day = match[2].padStart(2, '0');
+    const year = match[3];
+    // Use ISO format with UTC to avoid timezone drift
+    return new Date(`${year}-${month}-${day}T00:00:00Z`);
   }
   return null;
+}
+
+/**
+ * Add exactly one year to a date string (MM/DD/YYYY format)
+ * Works purely with strings to avoid timezone issues
+ */
+function addOneYear(dateStr: string): string {
+  const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!match) return dateStr;
+
+  const month = match[1].padStart(2, '0');
+  const day = match[2].padStart(2, '0');
+  const year = parseInt(match[3]) + 1;
+
+  return `${month}/${day}/${year}`;
 }
 
 /**
@@ -630,13 +646,9 @@ function extractDates(text: string): { effectiveDate: string | null; expirationD
 
   // LAST FALLBACK: If we found only one date and no expiration, assume 1 year policy
   if (effectiveDate && !expirationDate) {
-    const effDate = parseDateString(effectiveDate);
-    if (effDate) {
-      const expDate = new Date(effDate);
-      expDate.setFullYear(expDate.getFullYear() + 1);
-      expirationDate = `${expDate.getMonth() + 1}/${expDate.getDate()}/${expDate.getFullYear()}`;
-      console.log('[Document Parser] Calculated expiration (1 year from effective):', expirationDate);
-    }
+    // Use string-based calculation to avoid timezone issues
+    expirationDate = addOneYear(effectiveDate);
+    console.log('[Document Parser] Calculated expiration (1 year from effective):', expirationDate);
   }
 
   console.log('[Document Parser] Final dates - Effective:', effectiveDate, 'Expiration:', expirationDate);
