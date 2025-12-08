@@ -123,60 +123,94 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
 router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res) => {
   try {
     const userId = req.user.id;
+    const user = await storage.getUserById(userId);
 
-    // Get PTO policy
-    let ptoPolicy = await storage.getPtoPolicyByEmployeeId(userId);
-
-    if (!ptoPolicy) {
-      // Create default policy if none exists
-      const user = await storage.getUserById(userId);
-      const deptSetting = user?.department ?
-        await storage.getDepartmentPtoSettingByDepartment(user.department) : null;
-
-      const vacationDays = deptSetting?.vacationDays || 10;
-      const sickDays = deptSetting?.sickDays || 5;
-      const personalDays = deptSetting?.personalDays || 3;
-      const totalDays = vacationDays + sickDays + personalDays;
-
-      ptoPolicy = await storage.createPtoPolicy({
-        employeeId: userId,
-        policyLevel: 'COMPANY',
-        vacationDays,
-        sickDays,
-        personalDays,
-        baseDays: totalDays,
-        additionalDays: 0,
-        totalDays,
-        usedDays: 0,
-        remainingDays: totalDays
-      });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Get pending PTO requests to calculate pending days
+    // Use the same policy hierarchy as PTO page: individual → department → company
+    // 1. Check for individual policy
+    const individualPolicies = await storage.getAllPtoPolicies();
+    const individualPolicy = individualPolicies.find((p: any) => p.employeeId === userId);
+
+    // 2. Check for department policy
+    const deptSetting = user.department ?
+      await storage.getDepartmentPtoSettingByDepartment(user.department) : null;
+
+    // 3. Get company policy
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+
+    // Determine effective PTO allowance (individual > department > company > defaults)
+    let vacationDays = 10;
+    let sickDays = 5;
+    let personalDays = 3;
+    let policySource = 'default';
+
+    if (individualPolicy) {
+      vacationDays = individualPolicy.vacationDays || 10;
+      sickDays = individualPolicy.sickDays || 5;
+      personalDays = individualPolicy.personalDays || 3;
+      policySource = 'individual';
+    } else if (deptSetting && deptSetting.overridesCompany) {
+      vacationDays = deptSetting.vacationDays || 10;
+      sickDays = deptSetting.sickDays || 5;
+      personalDays = deptSetting.personalDays || 3;
+      policySource = 'department';
+    } else if (companyPolicy) {
+      vacationDays = companyPolicy.vacationDays || 10;
+      sickDays = companyPolicy.sickDays || 5;
+      personalDays = companyPolicy.personalDays || 3;
+      policySource = 'company';
+    }
+
+    // Special case: Sales/1099 contractors get 0 PTO unless individual override
+    if ((user.department === 'Sales' || user.employmentType === '1099') && !individualPolicy) {
+      vacationDays = 0;
+      sickDays = 0;
+      personalDays = 0;
+      policySource = 'none (Sales/1099)';
+    }
+
+    const totalDays = vacationDays + sickDays + personalDays;
+
+    // Calculate ACTUAL used days from APPROVED PTO requests (current year)
     const allPtoRequests = await storage.getAllPtoRequests();
-    const pendingRequests = allPtoRequests.filter(r =>
-      r.employeeId === userId && r.status === 'PENDING'
+    const currentYear = new Date().getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+
+    const myRequests = allPtoRequests.filter(r => r.employeeId === userId);
+
+    const approvedRequests = myRequests.filter(r =>
+      r.status === 'APPROVED' &&
+      r.startDate >= yearStart &&
+      r.startDate <= yearEnd
     );
 
-    const pendingDays = pendingRequests.reduce((sum, r) => {
-      const start = new Date(r.startDate);
-      const end = new Date(r.endDate);
-      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      return sum + days;
-    }, 0);
+    const usedDays = approvedRequests.reduce((sum, r) => sum + (r.days || 0), 0);
+
+    // Calculate pending days
+    const pendingRequests = myRequests.filter(r => r.status === 'PENDING');
+    const pendingDays = pendingRequests.reduce((sum, r) => sum + (r.days || 0), 0);
+
+    // Breakdown by type (approximation since requests don't track type)
+    const usedVacation = Math.min(vacationDays, Math.floor(usedDays * 0.6));
+    const usedSick = Math.min(sickDays, Math.floor(usedDays * 0.25));
+    const usedPersonal = Math.min(personalDays, usedDays - usedVacation - usedSick);
 
     res.json({
-      vacationDays: ptoPolicy.vacationDays || 10,
-      sickDays: ptoPolicy.sickDays || 5,
-      personalDays: ptoPolicy.personalDays || 3,
-      totalDays: ptoPolicy.totalDays || 18,
-      usedDays: ptoPolicy.usedDays || 0,
-      remainingDays: ptoPolicy.remainingDays || ptoPolicy.totalDays || 18,
+      vacationDays,
+      sickDays,
+      personalDays,
+      totalDays,
+      usedDays,
+      remainingDays: Math.max(0, totalDays - usedDays),
       pendingDays,
-      // Breakdown by type (approximation based on common usage patterns)
-      usedVacation: Math.floor((ptoPolicy.usedDays || 0) * 0.6),
-      usedSick: Math.floor((ptoPolicy.usedDays || 0) * 0.25),
-      usedPersonal: Math.floor((ptoPolicy.usedDays || 0) * 0.15)
+      usedVacation,
+      usedSick,
+      usedPersonal,
+      policySource // Helps with debugging
     });
   } catch (error) {
     console.error('Error fetching PTO balance:', error);
