@@ -72,16 +72,29 @@ function TeamDashboard() {
     enabled: isManager
   });
 
-  // Fetch pending PTO requests
+  // Fetch pending PTO requests with employee names
   const { data: pendingPtoRequests = [], isLoading: ptoLoading } = useQuery<PtoRequest[]>({
-    queryKey: ['/api/pto', 'pending'],
+    queryKey: ['/api/employee-portal/manager/pto-requests', 'pending'],
     queryFn: async () => {
-      const response = await fetch('/api/pto', {
+      const response = await fetch('/api/employee-portal/manager/pto-requests', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (!response.ok) return [];
       const data = await response.json();
       return data.filter((r: PtoRequest) => r.status === 'PENDING');
+    },
+    enabled: isManager
+  });
+
+  // Fetch pending reviews count
+  const { data: pendingReviewsData } = useQuery<{ reviews: any[]; count: number }>({
+    queryKey: ['/api/employee-portal/manager/pending-reviews'],
+    queryFn: async () => {
+      const response = await fetch('/api/employee-portal/manager/pending-reviews', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!response.ok) return { reviews: [], count: 0 };
+      return response.json();
     },
     enabled: isManager
   });
@@ -242,7 +255,7 @@ function TeamDashboard() {
                 <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-300" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">0</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{pendingReviewsData?.count || 0}</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Pending Reviews</p>
               </div>
             </div>

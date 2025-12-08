@@ -1,8 +1,9 @@
 import express from 'express';
 import { storage } from '../storage';
 import { db } from '../db';
-import { users, ptoRequests, documents, tasks, employeeReviews, ptoPolicies } from '../../shared/schema';
-import { eq, and, or, gte, lte, desc } from 'drizzle-orm';
+import { users, ptoRequests, documents, tasks, employeeReviews, ptoPolicies, documentAcknowledgments } from '../../shared/schema';
+import { eq, and, or, gte, lte, desc, notInArray } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
@@ -270,11 +271,74 @@ router.get('/api/employee-portal/upcoming-events', requireAuth, async (req: any,
 // Get documents that need acknowledgment
 router.get('/api/employee-portal/documents-to-acknowledge', requireAuth, async (req: any, res) => {
   try {
-    // For now, return empty array - will implement with document acknowledgment feature
-    res.json([]);
+    const userId = req.user.id;
+
+    // Get all APPROVED documents
+    const allDocuments = await db.select().from(documents).where(eq(documents.status, 'APPROVED'));
+
+    // Get all acknowledgments by this user
+    const userAcknowledgments = await db.select()
+      .from(documentAcknowledgments)
+      .where(eq(documentAcknowledgments.employeeId, userId));
+
+    const acknowledgedDocIds = new Set(userAcknowledgments.map(a => a.documentId));
+
+    // Filter to documents not yet acknowledged
+    const unacknowledgedDocs = allDocuments
+      .filter(doc => !acknowledgedDocIds.has(doc.id))
+      .map(doc => ({
+        id: doc.id,
+        title: doc.name,
+        category: doc.category,
+        description: doc.description,
+        createdAt: doc.createdAt,
+        fileUrl: doc.fileUrl
+      }));
+
+    res.json(unacknowledgedDocs);
   } catch (error) {
     console.error('Error fetching documents to acknowledge:', error);
     res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
+// Acknowledge a document
+router.post('/api/employee-portal/acknowledge-document', requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { documentId, signature } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({ error: 'Document ID required' });
+    }
+
+    // Check if already acknowledged
+    const existing = await db.select()
+      .from(documentAcknowledgments)
+      .where(and(
+        eq(documentAcknowledgments.documentId, documentId),
+        eq(documentAcknowledgments.employeeId, userId)
+      ));
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Document already acknowledged' });
+    }
+
+    // Create acknowledgment
+    const acknowledgment = {
+      id: uuidv4(),
+      documentId,
+      employeeId: userId,
+      signature: signature || req.user.firstName + ' ' + req.user.lastName,
+      acknowledgedAt: new Date()
+    };
+
+    await db.insert(documentAcknowledgments).values(acknowledgment);
+
+    res.json({ success: true, acknowledgment });
+  } catch (error) {
+    console.error('Error acknowledging document:', error);
+    res.status(500).json({ error: 'Failed to acknowledge document' });
   }
 });
 
@@ -373,6 +437,81 @@ router.get('/api/employee-portal/my-pto', requireAuth, async (req: any, res) => 
   } catch (error) {
     console.error('Error fetching PTO requests:', error);
     res.status(500).json({ error: 'Failed to fetch PTO requests' });
+  }
+});
+
+// Get PTO requests with employee names (for managers)
+router.get('/api/employee-portal/manager/pto-requests', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user;
+
+    // Check if user is a manager
+    if (!['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'TRUE_ADMIN'].includes(user.role)) {
+      return res.status(403).json({ error: 'Manager access required' });
+    }
+
+    // Get all PTO requests
+    const allPtoRequests = await storage.getAllPtoRequests();
+    const allUsers = await storage.getAllUsers();
+
+    // Create user lookup map
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+    // Add employee names to requests
+    const requestsWithNames = allPtoRequests.map(r => {
+      const employee = userMap.get(r.employeeId);
+      return {
+        ...r,
+        employeeName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown Employee',
+        employeeEmail: employee?.email,
+        employeeDepartment: employee?.department,
+        employeePosition: employee?.position
+      };
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json(requestsWithNames);
+  } catch (error) {
+    console.error('Error fetching manager PTO requests:', error);
+    res.status(500).json({ error: 'Failed to fetch PTO requests' });
+  }
+});
+
+// Get pending reviews for manager dashboard
+router.get('/api/employee-portal/manager/pending-reviews', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user;
+
+    // Check if user is a manager
+    if (!['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'TRUE_ADMIN'].includes(user.role)) {
+      return res.status(403).json({ error: 'Manager access required' });
+    }
+
+    // Get all reviews
+    const allReviews = await storage.getAllEmployeeReviews();
+    const allUsers = await storage.getAllUsers();
+
+    // Create user lookup map
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+    // Filter pending reviews and add employee names
+    const pendingReviews = allReviews
+      .filter(r => r.status !== 'COMPLETED')
+      .map(r => {
+        const employee = userMap.get(r.employeeId);
+        return {
+          ...r,
+          employeeName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown Employee',
+          employeeDepartment: employee?.department
+        };
+      });
+
+    res.json({
+      reviews: pendingReviews,
+      count: pendingReviews.length
+    });
+  } catch (error) {
+    console.error('Error fetching pending reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch pending reviews' });
   }
 });
 
