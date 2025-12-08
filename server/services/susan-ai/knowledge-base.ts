@@ -295,7 +295,7 @@ export class KnowledgeBase {
     const queryWords = queryLower.split(/\s+/);
 
     // Search through all documents
-    for (const doc of this.documents.values()) {
+    for (const doc of Array.from(this.documents.values())) {
       // Check if user has access to this document
       if (!this.hasAccess(doc, context)) continue;
 

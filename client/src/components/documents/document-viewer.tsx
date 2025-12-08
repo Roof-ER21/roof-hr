@@ -68,12 +68,21 @@ const statusColors = {
   ARCHIVED: 'bg-red-100 text-red-800'
 };
 
+interface DocumentVersion {
+  id: string;
+  version: string;
+  createdAt: string;
+  createdBy: string;
+  changeLog?: string;
+  fileUrl: string;
+}
+
 export function DocumentViewer({ document, onAcknowledge }: DocumentViewerProps) {
   const [showAcknowledgment, setShowAcknowledgment] = useState(false);
   const [signature, setSignature] = useState('');
   const [notes, setNotes] = useState('');
 
-  const { data: versions = [] } = useQuery({
+  const { data: versions = [] } = useQuery<DocumentVersion[]>({
     queryKey: [`/api/documents/${document.id}/versions`],
     enabled: !!document.id,
   });
@@ -129,7 +138,7 @@ export function DocumentViewer({ document, onAcknowledge }: DocumentViewerProps)
             <Button
               variant="outline"
               onClick={() => {
-                const link = document.createElement('a');
+                const link = window.document.createElement('a');
                 link.href = document.fileUrl;
                 link.download = document.originalName;
                 link.click();
@@ -288,7 +297,7 @@ export function DocumentViewer({ document, onAcknowledge }: DocumentViewerProps)
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {versions.map((version: any, index: number) => (
+              {versions.map((version) => (
                 <div key={version.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
                     <div className="font-medium">Version {version.version}</div>

@@ -126,13 +126,13 @@ export function WorkflowTemplates({ onTemplateSelect }: { onTemplateSelect?: (te
   const templates = defaultTemplates;
 
   // Create workflow from template
-  const createFromTemplate = useMutation({
+  const createFromTemplate = useMutation<any, Error, any>({
     mutationFn: async (data: any) => {
       // Parse the template config to create workflow and steps
       const config = JSON.parse(data.template.config);
-      
+
       // Create the workflow first
-      const workflowRes = await apiRequest('/api/workflows', 'POST', {
+      const workflowRes: Response = await apiRequest('/api/workflows', 'POST', {
         name: data.name,
         description: data.description,
         type: config.type || 'CUSTOM',

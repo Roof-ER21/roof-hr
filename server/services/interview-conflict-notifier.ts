@@ -355,7 +355,7 @@ export class InterviewConflictNotifier {
       if (!interview || interview.status !== 'SCHEDULED') return;
 
       const candidate = await this.storage.getCandidateById(interview.candidateId);
-      const interviewer = await this.storage.getUserById(interview.interviewerId);
+      const interviewer = interview.interviewerId ? await this.storage.getUserById(interview.interviewerId) : null;
 
       if (!candidate || !interviewer) return;
 

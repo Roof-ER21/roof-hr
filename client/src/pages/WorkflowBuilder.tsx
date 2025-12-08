@@ -154,10 +154,16 @@ export default function WorkflowBuilder() {
   const [editingStep, setEditingStep] = useState<WorkflowStep | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   
-  const [workflowForm, setWorkflowForm] = useState({
+  const [workflowForm, setWorkflowForm] = useState<{
+    name: string;
+    description: string;
+    triggerType: 'MANUAL' | 'SCHEDULED' | 'EVENT';
+    triggerEvent: string;
+    schedule: string;
+  }>({
     name: '',
     description: '',
-    triggerType: 'MANUAL' as const,
+    triggerType: 'MANUAL',
     triggerEvent: '',
     schedule: '',
   });
@@ -350,7 +356,7 @@ export default function WorkflowBuilder() {
     setActiveId(null);
   };
 
-  const canEdit = user?.role === 'ADMIN' || user?.role === 'HR' || user?.role === 'MANAGER';
+  const canEdit = ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'HR_MANAGER'].includes(user?.role || '');
 
   return (
     <div className="container mx-auto p-6">
@@ -554,7 +560,7 @@ export default function WorkflowBuilder() {
                 </SelectContent>
               </Select>
             </div>
-            {workflowForm.triggerType === 'EVENT' && (
+            {workflowForm.triggerType === ('EVENT' as const) && (
               <div>
                 <Label>Trigger Event</Label>
                 <Select
@@ -574,7 +580,7 @@ export default function WorkflowBuilder() {
                 </Select>
               </div>
             )}
-            {workflowForm.triggerType === 'SCHEDULED' && (
+            {workflowForm.triggerType === ('SCHEDULED' as const) && (
               <div>
                 <Label>Schedule (Cron Expression)</Label>
                 <Input

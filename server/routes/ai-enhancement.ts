@@ -63,7 +63,7 @@ router.post('/parse-resume', async (req, res) => {
       // Store the parsed resume data
       await storage.updateCandidate(candidateId, {
         parsedResumeData: JSON.stringify(parsedData),
-        resumeText: resumeText, // Store the raw resume text for future reparsing
+        // Resume text stored in parsedResumeData for future reference
       });
 
       // Create comprehensive AI insights including the parsed data

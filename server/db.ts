@@ -47,7 +47,7 @@ pool.on('error', (err) => {
 });
 
 export const db = usePgDriver
-  ? drizzlePg(pool as PgPool, { schema })
+  ? drizzlePg(pool as InstanceType<typeof PgPool>, { schema })
   : drizzleNeon({ client: pool as NeonPool, schema });
 
 // Test database connection with retry logic

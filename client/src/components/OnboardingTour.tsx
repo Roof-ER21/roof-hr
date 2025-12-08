@@ -168,11 +168,11 @@ export function OnboardingTour() {
     // Highlight element if specified
     if (step.element) {
       setTimeout(() => {
-        const element = document.querySelector(step.element) as HTMLElement;
+        const element = document.querySelector(step.element!) as HTMLElement;
         if (element) {
           setHighlightedElement(element);
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
+
           // Add highlight class
           element.classList.add('tour-highlight');
         }

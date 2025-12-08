@@ -117,7 +117,7 @@ class ApiInterceptor {
 export const apiInterceptor = ApiInterceptor.getInstance();
 
 // Override the global fetch with our interceptor
-window.fetch = (url: string | Request, options?: RequestInit) => {
+(window as any).fetch = (url: RequestInfo | URL, options?: RequestInit) => {
   if (typeof url === 'string' && url.startsWith('/api/') && !url.includes('/auth/validate')) {
     return apiInterceptor.interceptRequest(url, options);
   }

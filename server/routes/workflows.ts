@@ -145,7 +145,7 @@ router.patch('/api/workflows/:id/status', requireAuth, async (req: any, res) => 
 router.get('/api/workflows/:id/steps', requireAuth, async (req: any, res) => {
   try {
     const { id } = req.params;
-    const steps = await storage.getWorkflowSteps(id);
+    const steps = await storage.getWorkflowStepsByWorkflowId(id);
     res.json(steps);
   } catch (error) {
     console.error('Error fetching workflow steps:', error);

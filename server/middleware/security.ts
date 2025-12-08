@@ -29,7 +29,7 @@ class RateLimitStore {
   // Clean up old entries periodically
   cleanup() {
     const now = Date.now();
-    for (const [key, value] of this.requests.entries()) {
+    for (const [key, value] of Array.from(this.requests.entries())) {
       if (now > value.resetTime) {
         this.requests.delete(key);
       }

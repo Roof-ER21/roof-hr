@@ -24,7 +24,7 @@ let attendanceGoogleSync: AttendanceGoogleSync | null = null;
 // Initialize Google sync if available
 export function initializeAttendanceGoogleSync(googleSync: any) {
   if (googleSync) {
-    attendanceGoogleSync = new AttendanceGoogleSync(googleSync);
+    attendanceGoogleSync = new AttendanceGoogleSync();
     attendanceGoogleSync.initialize().catch(console.error);
   }
 }

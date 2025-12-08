@@ -553,7 +553,7 @@ router.get('/analytics', async (req, res) => {
     const context = await buildSusanContext(req);
     let insights = [];
     try {
-      insights = await susanAI.getAnalyticsInsights(context, storage);
+      insights = await susanAI.getAnalyticsInsights(context);
     } catch (insightError) {
       console.error('[SUSAN-AI] Error generating insights:', insightError);
       // Continue with empty insights array rather than failing the entire request

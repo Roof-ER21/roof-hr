@@ -63,8 +63,9 @@ router.get('/api/contract-templates', requireAuth, async (req: any, res) => {
 });
 
 // Get contract template by ID
-router.get('/api/contract-templates/:id', requireAuth, requireManager, async (req, res) => {
+router.get('/api/contract-templates/:id', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     const template = await storage.getContractTemplateById(req.params.id);
     if (!template) {
       return res.status(404).json({ error: 'Contract template not found' });
@@ -77,8 +78,9 @@ router.get('/api/contract-templates/:id', requireAuth, requireManager, async (re
 });
 
 // Get contract templates by territory
-router.get('/api/contract-templates/territory/:territory', requireAuth, requireManager, async (req, res) => {
+router.get('/api/contract-templates/territory/:territory', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user!;
     const templates = await storage.getContractTemplatesByTerritory(req.params.territory);
     res.json(templates);
   } catch (error) {
@@ -88,14 +90,19 @@ router.get('/api/contract-templates/territory/:territory', requireAuth, requireM
 });
 
 // Create new contract template
-router.post('/api/contract-templates', requireAuth, requireManager, async (req, res) => {
+router.post('/api/contract-templates', requireAuth, requireManager, async (req: any, res) => {
   try {
     const user = req.user!;
-    const data = insertContractTemplateSchema.parse({
+    const parsedData = insertContractTemplateSchema.parse({
       ...req.body,
-      id: uuidv4(),
       createdBy: user.id
     });
+
+    const data = {
+      ...parsedData,
+      id: uuidv4(),
+      type: parsedData.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER'
+    };
 
     const template = await storage.createContractTemplate(data);
     res.json(template);
@@ -371,22 +378,21 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       recipientDepartment = employee.department;
     }
 
-    const data = insertEmployeeContractSchema.parse({
+    let parsedData = insertEmployeeContractSchema.parse({
       ...req.body,
-      id: uuidv4(),
       recipientName,
       recipientEmail,
       createdBy: user.id,
-      status: 'DRAFT'
+      status: 'DRAFT' as const
     });
-    
+
     // If using a template, fetch it and populate the content
-    if (data.templateId) {
-      const template = await storage.getContractTemplateById(data.templateId);
+    if (parsedData.templateId) {
+      const template = await storage.getContractTemplateById(parsedData.templateId);
       if (template) {
         // Replace variables in template content
         let content = template.content;
-        
+
         // Replace common variables
         const replacements: { [key: string]: string } = {
           '{{name}}': recipientName,
@@ -399,16 +405,27 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
           '{{date}}': new Date().toLocaleDateString(),
           '{{startDate}}': new Date().toLocaleDateString()
         };
-        
+
         for (const [key, value] of Object.entries(replacements)) {
           content = content.replace(new RegExp(key, 'g'), value);
         }
-        
-        data.content = content;
+
+        parsedData = { ...parsedData, content };
       }
     }
-    
-    const contract = await storage.createEmployeeContract(data);
+
+    const contractData: any = {
+      ...parsedData,
+      id: uuidv4(),
+      status: 'DRAFT' as 'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED'
+    };
+
+    // Type assertion for recipientType if present
+    if (contractData.recipientType) {
+      contractData.recipientType = contractData.recipientType as 'EMPLOYEE' | 'CANDIDATE';
+    }
+
+    const contract = await storage.createEmployeeContract(contractData);
     res.json(contract);
   } catch (error: any) {
     console.error('Error creating employee contract:', error);

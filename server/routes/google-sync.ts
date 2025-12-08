@@ -188,12 +188,12 @@ router.post('/api/google-sync/upload', requireAdmin, async (req, res) => {
     }
     
     const driveService = googleServicesManager.getDriveService();
-    
+
     const file = await driveService.uploadFile({
       name: fileName,
       content: Buffer.from(fileContent, 'base64'),
       mimeType: mimeType || 'application/pdf',
-      folderId
+      parentFolderId: folderId
     });
     
     res.json({
@@ -220,13 +220,14 @@ router.post('/api/google-sync/calendar/event', requireAdmin, async (req, res) =>
     }
     
     const calendarService = googleServicesManager.getCalendarService();
-    
-    const event = await calendarService.createEvent(calendarId || 'primary', {
+
+    const event = await calendarService.createEvent({
       summary,
       description,
-      start: { dateTime: start },
-      end: { dateTime: end },
-      attendees
+      startDateTime: new Date(start),
+      endDateTime: new Date(end),
+      attendees,
+      sendNotifications: true
     });
     
     res.json({

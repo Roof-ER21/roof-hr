@@ -61,8 +61,9 @@ IMPORTANT:
 
     const context: LLMTaskContext = {
       taskType: 'extraction',
-      expectedResponseTime: 'standard',
-      requiresPrivacy: false
+      expectedResponseTime: 'normal',
+      requiresPrivacy: false,
+      priority: 'medium'
     };
 
     try {

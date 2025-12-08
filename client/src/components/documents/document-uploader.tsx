@@ -197,12 +197,12 @@ export function DocumentUploader({ onUploaded }: DocumentUploaderProps) {
                     {formatFileSize(selectedFile.size)} • {getFileType(selectedFile)}
                   </p>
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => {
                     setSelectedFile(null);
-                    form.setValue('file', null);
+                    form.setValue('file', undefined as unknown as File);
                   }}
                 >
                   <X className="h-4 w-4 mr-2" />

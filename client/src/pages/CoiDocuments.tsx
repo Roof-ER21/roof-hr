@@ -220,10 +220,9 @@ export default function CoiDocuments() {
 
   const sendAlertsMutation = useMutation<{ alertsSent: number }, Error>({
     mutationFn: async () => {
-      const response = await apiRequest('/api/coi-documents/send-alerts', {
+      return apiRequest<{ alertsSent: number }>('/api/coi-documents/send-alerts', {
         method: 'POST',
       });
-      return response.json();
     },
     onSuccess: (data) => {
       toast({
@@ -243,10 +242,9 @@ export default function CoiDocuments() {
   // Sync from Google Drive mutation
   const syncFromDriveMutation = useMutation<{ totalDocuments: number }, Error>({
     mutationFn: async () => {
-      const response = await apiRequest('/api/coi-documents/sync-from-drive', {
+      return apiRequest<{ totalDocuments: number }>('/api/coi-documents/sync-from-drive', {
         method: 'POST',
       });
-      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/coi-documents'] });

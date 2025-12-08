@@ -267,7 +267,7 @@ class GoogleSheetsService {
         return [];
       }
 
-      const tools = data.map(row => ({
+      const tools = data.map((row: string[]) => ({
         id: row[0],
         name: row[1],
         category: row[2],

@@ -63,13 +63,13 @@ export function SusanFloatingOrb() {
   }, [isOpen]);
 
   // Quick action mutation for site-wide Susan AI functions
-  const quickActionMutation = useMutation({
+  const quickActionMutation = useMutation<any, Error, { action: string; params?: any }>({
     mutationFn: async ({ action, params }: { action: string; params?: any }) => {
-      const response = await apiRequest('/api/susan-ai/quick-action', {
+      const response = await apiRequest<any>('/api/susan-ai/quick-action', {
         method: 'POST',
         body: JSON.stringify({ action, params })
       });
-      return await response.json();
+      return response;
     },
     onSuccess: (data) => {
       if (data.message) {

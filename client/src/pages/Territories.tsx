@@ -192,20 +192,20 @@ export default function Territories() {
   });
 
   const onSubmitCreate = (data: z.infer<typeof formSchema>) => {
-    // Convert "none" to null for salesManagerId
+    // Convert "none" or empty string to undefined for salesManagerId
     const submitData = {
       ...data,
-      salesManagerId: data.salesManagerId === 'none' ? null : data.salesManagerId
+      salesManagerId: data.salesManagerId === 'none' || !data.salesManagerId ? undefined : data.salesManagerId
     };
     createMutation.mutate(submitData);
   };
 
   const onSubmitEdit = (data: z.infer<typeof formSchema>) => {
     if (selectedTerritory) {
-      // Convert "none" to null for salesManagerId
+      // Convert "none" or empty string to undefined for salesManagerId
       const submitData = {
         ...data,
-        salesManagerId: data.salesManagerId === 'none' ? null : data.salesManagerId
+        salesManagerId: data.salesManagerId === 'none' || !data.salesManagerId ? undefined : data.salesManagerId
       };
       updateMutation.mutate({
         id: selectedTerritory.id,
@@ -220,7 +220,7 @@ export default function Territories() {
       name: territory.name,
       region: territory.region,
       description: territory.description || '',
-      salesManagerId: territory.salesManagerId || '',
+      salesManagerId: territory.salesManagerId ?? '',
       isActive: territory.isActive
     });
     setIsEditDialogOpen(true);

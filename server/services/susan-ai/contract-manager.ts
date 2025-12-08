@@ -253,13 +253,11 @@ export class SusanContractManager {
       await db.insert(contractTemplates).values({
         id: templateId,
         name: data.name,
-        type: data.type,
+        type: data.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER',
         content: data.content,
         variables: data.variables || [],
         isActive: true,
         createdBy: data.createdBy,
-        createdAt: new Date(),
-        updatedAt: new Date()
       });
 
       console.log(`[SUSAN-CONTRACTS] Created template: ${data.name} (${templateId})`);

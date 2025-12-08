@@ -185,7 +185,7 @@ function getNameVariations(firstName: string): string[] {
     variations.push(...NICKNAME_MAP[lower]);
   }
 
-  return [...new Set(variations)]; // Remove duplicates
+  return Array.from(new Set(variations)); // Remove duplicates
 }
 
 /**

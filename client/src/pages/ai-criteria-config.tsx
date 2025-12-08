@@ -64,17 +64,16 @@ export default function AICriteriaConfig({ onClose }: AICriteriaConfigProps) {
     },
   });
 
-  const createCriteriaMutation = useMutation({
+  const createCriteriaMutation = useMutation<any, Error, CriteriaFormData>({
     mutationFn: async (data: CriteriaFormData) => {
       const criteriaArray = data.criteria.split('\n').filter(c => c.trim());
-      const response = await apiRequest('/api/ai-criteria', {
+      return apiRequest<any>('/api/ai-criteria', {
         method: 'POST',
         body: JSON.stringify({
           ...data,
           criteria: criteriaArray,
         })
       });
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ai-criteria'] });
@@ -95,17 +94,16 @@ export default function AICriteriaConfig({ onClose }: AICriteriaConfigProps) {
     },
   });
 
-  const updateCriteriaMutation = useMutation({
+  const updateCriteriaMutation = useMutation<any, Error, { id: string; data: CriteriaFormData }>({
     mutationFn: async ({ id, data }: { id: string; data: CriteriaFormData }) => {
       const criteriaArray = data.criteria.split('\n').filter(c => c.trim());
-      const response = await apiRequest(`/api/ai-criteria/${id}`, {
+      return apiRequest<any>(`/api/ai-criteria/${id}`, {
         method: 'PUT',
         body: JSON.stringify({
           ...data,
           criteria: criteriaArray,
         })
       });
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ai-criteria'] });
@@ -127,12 +125,11 @@ export default function AICriteriaConfig({ onClose }: AICriteriaConfigProps) {
     },
   });
 
-  const deleteCriteriaMutation = useMutation({
+  const deleteCriteriaMutation = useMutation<any, Error, string>({
     mutationFn: async (id: string) => {
-      const response = await apiRequest(`/api/ai-criteria/${id}`, {
+      return apiRequest<any>(`/api/ai-criteria/${id}`, {
         method: 'DELETE',
       });
-      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ai-criteria'] });

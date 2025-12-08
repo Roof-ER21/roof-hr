@@ -52,18 +52,14 @@ router.post('/exchange-code', requireAuth, checkRole(['ADMIN']), async (req, res
       return res.status(400).json({ error: 'Authorization code is required' });
     }
 
-    // Get auth service and exchange code for tokens
-    const authService = googleServicesManager.getAuthService();
-    const tokens = await authService.getTokenFromCode(code);
-    
-    // Return the refresh token
-    res.json({
-      success: true,
-      refresh_token: tokens.refresh_token,
-      message: 'Token generated successfully. Update GOOGLE_REFRESH_TOKEN environment variable.'
+    // Service account doesn't need OAuth code exchange - tokens are automatic
+    // This endpoint is only for OAuth flows, which we don't use with service accounts
+    res.status(400).json({
+      error: 'OAuth code exchange not needed with service account authentication',
+      message: 'The system uses service account authentication which handles tokens automatically.'
     });
   } catch (error: any) {
-    console.error('Error exchanging code for token:', error);
+    console.error('Error in exchange-code endpoint:', error);
     res.status(500).json({ error: error.message });
   }
 });

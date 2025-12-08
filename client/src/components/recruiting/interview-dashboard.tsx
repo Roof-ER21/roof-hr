@@ -27,12 +27,12 @@ export function InterviewDashboard() {
   });
 
   // Fetch candidates for interview details
-  const { data: candidates = [] } = useQuery({
+  const { data: candidates = [] } = useQuery<any[]>({
     queryKey: ['/api/candidates'],
   });
 
   // Fetch users for interviewer details
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<any[]>({
     queryKey: ['/api/users'],
   });
 

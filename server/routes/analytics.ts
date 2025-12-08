@@ -128,7 +128,7 @@ router.get('/metrics', requireAuth(['ADMIN', 'MANAGER']), async (req: any, res: 
     }));
 
     // Get employee data for predictive analytics
-    const employees = await storage.getAllEmployees();
+    const employees = await storage.getAllUsers();
     
     // Calculate predictive turnover (mock data for demo)
     const riskScores = employees.map((e: any) => {

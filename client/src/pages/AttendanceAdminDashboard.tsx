@@ -121,7 +121,7 @@ export default function AttendanceAdminDashboard() {
   });
 
   // Fetch all sessions for history
-  const { data: allSessions = [], isLoading: sessionsLoading } = useQuery({
+  const { data: allSessions = [], isLoading: sessionsLoading } = useQuery<AttendanceSession[]>({
     queryKey: ['/api/attendance/sessions'],
   });
 

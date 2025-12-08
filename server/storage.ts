@@ -1593,6 +1593,7 @@ class DrizzleStorage implements IStorage {
     const id = uuidv4();
     const [policy] = await db.insert(ptoPolicies).values({
       ...data,
+      policyLevel: (data.policyLevel || 'COMPANY') as 'COMPANY' | 'DEPARTMENT' | 'INDIVIDUAL',
       id,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -1616,8 +1617,10 @@ class DrizzleStorage implements IStorage {
   }
   
   async updatePtoPolicy(id: string, data: Partial<InsertPtoPolicy>): Promise<PtoPolicy> {
+    const { policyLevel, ...restData } = data;
     const updateData: Partial<PtoPolicy> = {
-      ...data,
+      ...restData,
+      ...(policyLevel ? { policyLevel: policyLevel as 'COMPANY' | 'DEPARTMENT' | 'INDIVIDUAL' } : {}),
       updatedAt: new Date()
     };
     const [policy] = await db.update(ptoPolicies)

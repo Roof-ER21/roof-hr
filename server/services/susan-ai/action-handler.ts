@@ -2807,7 +2807,7 @@ Should I proceed with scheduling this interview?`,
           result = await this.reviewManager.createReview(command.data);
           break;
         case 'complete_review':
-          result = await this.reviewManager.completeReview(command.reviewId!, command.data);
+          result = await this.reviewManager.submitReview(command.reviewId!, command.data);
           break;
         case 'bulk_create':
           result = await this.reviewManager.bulkCreateReviews(command.data.employeeIds || [], command.data);

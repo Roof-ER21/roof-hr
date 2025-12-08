@@ -250,7 +250,7 @@ export class SusanEmployeeManager {
         conditions.push(eq(users.department, filter.department));
       }
       if (filter.role) {
-        conditions.push(eq(users.role, filter.role as typeof users.role.$type));
+        conditions.push(eq(users.role, filter.role as 'TRUE_ADMIN' | 'ADMIN' | 'GENERAL_MANAGER' | 'TERRITORY_SALES_MANAGER' | 'MANAGER' | 'EMPLOYEE' | 'CONTRACTOR' | 'SALES_REP' | 'FIELD_TECH'));
       }
       if (filter.isActive !== undefined) {
         conditions.push(eq(users.isActive, filter.isActive));

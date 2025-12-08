@@ -245,7 +245,8 @@ app.use((req, res, next) => {
       // Initialize HR agents in production
       if (process.env.NODE_ENV === 'production' && config.agents.enabled) {
         const { agentManager } = await import('./agents/agent-manager');
-        await agentManager.initialize();
+        // AgentManager initializes in constructor, run all agents
+        await agentManager.runAllAgents();
       }
       
       // Initialize enhanced Google synchronization

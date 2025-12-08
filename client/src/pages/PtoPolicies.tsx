@@ -304,7 +304,7 @@ export default function PtoPolicies() {
   );
 
   // Get unique departments from users
-  const departments = [...new Set((users as User[]).map((u: User) => u.department))].filter(Boolean) as string[];
+  const departments = Array.from(new Set((users as User[]).map((u: User) => u.department))).filter(Boolean) as string[];
 
   // Group policies by department
   const policiesByDepartment = (policies as PtoPolicy[]).reduce((acc: any, policy: PtoPolicy) => {

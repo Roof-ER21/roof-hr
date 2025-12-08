@@ -28,9 +28,12 @@ export function SearchModal() {
 
   const { data: searchResults = [], isLoading } = useQuery<SearchResult[]>({
     queryKey: ['/api/search', searchTerm],
-    queryFn: () => searchTerm.length >= 2
-      ? apiRequest<SearchResult[]>(`/api/search?q=${encodeURIComponent(searchTerm)}`)
-      : Promise.resolve([]),
+    queryFn: async () => {
+      if (searchTerm.length >= 2) {
+        return apiRequest<SearchResult[]>(`/api/search?q=${encodeURIComponent(searchTerm)}`, 'GET');
+      }
+      return [];
+    },
     enabled: searchTerm.length >= 2,
   });
 

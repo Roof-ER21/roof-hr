@@ -99,16 +99,15 @@ export default function Documents() {
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['/api/documents', { category: filterCategory, status: filterStatus, visibility: filterVisibility, search: searchTerm }],
     queryFn: async () => {
-      const response = await apiRequest(`/api/documents?category=${filterCategory}&status=${filterStatus}&visibility=${filterVisibility}&search=${searchTerm}`, {
+      return apiRequest<Document[]>(`/api/documents?category=${filterCategory}&status=${filterStatus}&visibility=${filterVisibility}&search=${searchTerm}`, {
         method: 'GET'
       });
-      return response.json();
     }
   });
 
   const downloadMutation = useMutation({
-    mutationFn: (documentId: string) => apiRequest(`/api/documents/${documentId}/download`),
-    onSuccess: (data, documentId) => {
+    mutationFn: (documentId: string) => apiRequest<any>(`/api/documents/${documentId}/download`, 'GET'),
+    onSuccess: (data: any, documentId) => {
       // Open download URL
       window.open(data.fileUrl, '_blank');
       toast({

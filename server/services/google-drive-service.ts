@@ -350,8 +350,8 @@ export async function uploadToGoogleDrive(
     
     if (folderType === 'recruiting') {
       // Try to find or create recruiting folder
-      const folders = await googleDriveService.listFolders();
-      const recruitingFolder = folders.find((f: any) => f.name === 'Recruiting');
+      const allFiles = await googleDriveService.listFiles({ q: "mimeType='application/vnd.google-apps.folder'" });
+      const recruitingFolder = allFiles.find((f: any) => f.name === 'Recruiting');
       
       if (recruitingFolder) {
         parentFolderId = recruitingFolder.id;

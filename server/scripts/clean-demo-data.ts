@@ -37,7 +37,7 @@ async function cleanDemoData() {
       console.log('✓ Deleted demo PTO requests');
       
       // Delete employee reviews
-      await db.delete(employeeReviews).where(inArray(employeeReviews.employeeId, demoUserIds));
+      await db.delete(employeeReviews).where(inArray(employeeReviews.revieweeId, demoUserIds));
       console.log('✓ Deleted demo employee reviews');
       
       // Delete users

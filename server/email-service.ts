@@ -306,7 +306,7 @@ class EmailService {
         return false;
       }
 
-      const interviewer = await storage.getUserById(interview.interviewerId);
+      const interviewer = interview.interviewerId ? await storage.getUserById(interview.interviewerId) : null;
 
       const subject = `Interview Scheduled - ${candidate.position} Position`;
 

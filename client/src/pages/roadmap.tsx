@@ -301,10 +301,10 @@ export default function Roadmap() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-3">
                 {(() => {
-                  const Icon = phases[selectedPhase - 1].icon;
+                  const Icon = phases[selectedPhase - 1]?.icon;
                   return Icon ? <Icon className="h-6 w-6 text-primary" /> : null;
                 })()}
-                Phase {selectedPhase}: {phases[selectedPhase - 1].title}
+                Phase {selectedPhase}: {phases[selectedPhase - 1]?.title}
               </CardTitle>
               <div className="flex gap-2">
                 <Badge className={getPriorityColor(phases[selectedPhase - 1].priority)}>
@@ -357,9 +357,9 @@ export default function Roadmap() {
               </TabsContent>
               
               <TabsContent value="metrics" className="mt-4">
-                {phases[selectedPhase - 1].metrics ? (
+                {phases[selectedPhase - 1]?.metrics ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {phases[selectedPhase - 1].metrics.map((metric, index) => (
+                    {phases[selectedPhase - 1]?.metrics?.map((metric, index) => (
                       <div key={index} className="p-4 rounded-lg border">
                         <div className="text-2xl font-bold text-primary">
                           {metric.value}

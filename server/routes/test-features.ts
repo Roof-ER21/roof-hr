@@ -300,16 +300,14 @@ router.post('/api/test/create-interview', requireAuth, async (req: any, res) => 
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    // Create interview
+    // Create interview - combine date and time into scheduledDate
+    const scheduledDate = new Date(`${interviewDate}T${interviewTime || '09:00'}`);
     const interview = await storage.createInterview({
       candidateId,
-      interviewDate,
-      interviewTime,
-      interviewType: interviewType || 'IN_PERSON',
-      interviewers: interviewers || [req.user.email],
+      scheduledDate,
+      type: (interviewType as 'PHONE' | 'VIDEO' | 'IN_PERSON' | 'TECHNICAL' | 'PANEL') || 'IN_PERSON',
       status: 'SCHEDULED',
-      notes: `Interview scheduled by ${req.user.firstName} ${req.user.lastName}`,
-      createdBy: req.user.id,
+      notes: `Interview scheduled by ${req.user.firstName} ${req.user.lastName}. Interviewers: ${(interviewers || [req.user.email]).join(', ')}`,
     });
 
     // Send email notification

@@ -91,7 +91,10 @@ router.get('/api/territories/manager/:managerId', authMiddleware, async (req, re
 router.post('/api/territories', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const data = insertTerritorySchema.parse(req.body);
-    const territory = await storage.createTerritory(data);
+    const territory = await storage.createTerritory({
+      id: uuidv4(),
+      ...data,
+    });
     res.json(territory);
   } catch (error: any) {
     console.error('Error creating territory:', error);

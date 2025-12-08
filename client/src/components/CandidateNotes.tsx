@@ -51,7 +51,7 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
   });
 
   // Fetch users to get author names
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
     queryKey: ['/api/users']
   });
 

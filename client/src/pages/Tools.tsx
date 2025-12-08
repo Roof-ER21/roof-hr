@@ -391,9 +391,9 @@ export function Tools() {
   });
 
   // Import from Google Sheets mutation
-  const importSheetsMutation = useMutation({
+  const importSheetsMutation = useMutation<{ total: number; created: number; updated: number }, Error, string>({
     mutationFn: async (spreadsheetId: string) => {
-      return await apiRequest('/api/tools/import-sheets', 'POST', { spreadsheetId });
+      return await apiRequest<{ total: number; created: number; updated: number }>('/api/tools/import-sheets', 'POST', { spreadsheetId });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
