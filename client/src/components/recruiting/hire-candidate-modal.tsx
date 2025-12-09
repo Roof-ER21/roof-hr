@@ -385,12 +385,12 @@ export function HireCandidateModal({
                 <Package className="w-4 h-4" />
                 Welcome Package
               </h3>
-              <Select value={welcomePackageId} onValueChange={setWelcomePackageId}>
+              <Select value={welcomePackageId || 'none'} onValueChange={(val) => setWelcomePackageId(val === 'none' ? '' : val)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select welcome package..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No package</SelectItem>
+                  <SelectItem value="none">No package</SelectItem>
                   {bundles.map((bundle) => (
                     <SelectItem key={bundle.id} value={bundle.id}>
                       {bundle.name}

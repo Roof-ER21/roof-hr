@@ -3092,6 +3092,45 @@ export function registerRoutes(app: express.Application) {
     }
   });
 
+  // ===== TOOL INVENTORY & BUNDLES FOR HIRE MODAL =====
+
+  // Get all available tools for hire modal
+  app.get('/api/tool-inventory', requireAuth, async (req: any, res) => {
+    try {
+      const tools = await db.select({
+        id: toolInventory.id,
+        name: toolInventory.name,
+        category: toolInventory.category,
+        availableQuantity: toolInventory.availableQuantity,
+      })
+        .from(toolInventory)
+        .where(eq(toolInventory.isActive, true));
+
+      res.json(tools);
+    } catch (error) {
+      console.error('Error fetching tool inventory:', error);
+      res.status(500).json({ error: 'Failed to fetch tool inventory' });
+    }
+  });
+
+  // Get all welcome pack bundles for hire modal
+  app.get('/api/bundles', requireAuth, async (req: any, res) => {
+    try {
+      const bundles = await db.select({
+        id: welcomePackBundles.id,
+        name: welcomePackBundles.name,
+        description: welcomePackBundles.description,
+      })
+        .from(welcomePackBundles)
+        .where(eq(welcomePackBundles.isActive, true));
+
+      res.json(bundles);
+    } catch (error) {
+      console.error('Error fetching bundles:', error);
+      res.status(500).json({ error: 'Failed to fetch bundles' });
+    }
+  });
+
   // Add a catch-all for undefined API routes in production
   if (process.env.NODE_ENV === 'production') {
     app.use('/api/*', (req, res) => {
