@@ -40,6 +40,7 @@ import { CandidateNotes } from '@/components/CandidateNotes';
 import { ChatbotWidget } from '@/components/recruitment/chatbot-widget';
 import { AIInsightsPanel } from '@/components/ai-enhancements/ai-insights-panel';
 import { InPersonInterviewScreening, type ScreeningData } from '@/components/recruiting/in-person-interview-screening';
+import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-candidate-modal';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
 import { format } from 'date-fns';
@@ -698,6 +699,9 @@ export default function EnhancedRecruiting() {
   // Dead type selection modal
   const [showDeadTypeModal, setShowDeadTypeModal] = useState(false);
   const [candidateForDeadType, setCandidateForDeadType] = useState<Candidate | null>(null);
+  // Hire modal
+  const [showHireModal, setShowHireModal] = useState(false);
+  const [candidateToHire, setCandidateToHire] = useState<Candidate | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [selectedCandidateForNotes, setSelectedCandidateForNotes] = useState<Candidate | null>(null);
   const [showScreeningConfirmation, setShowScreeningConfirmation] = useState(false);
@@ -924,13 +928,37 @@ export default function EnhancedRecruiting() {
   }, [location, candidates, toast]);
 
   const updateCandidateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
       apiRequest(`/api/candidates/${id}`, 'PATCH', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
       toast({
         title: 'Success',
         description: 'Candidate updated successfully',
+      });
+    },
+  });
+
+  // Hire candidate mutation (full onboarding)
+  const hireCandidateMutation = useMutation({
+    mutationFn: ({ candidateId, hireData }: { candidateId: string; hireData: HireData }) =>
+      apiRequest(`/api/candidates/${candidateId}/hire`, 'POST', hireData),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tool-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      setShowHireModal(false);
+      setCandidateToHire(null);
+      toast({
+        title: 'Hired Successfully!',
+        description: `${data.employee?.firstName || 'Employee'} has been hired and ${data.emailSent ? 'welcome email sent' : 'added to the system'}.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Hire Failed',
+        description: error.message || 'Failed to hire candidate',
+        variant: 'destructive',
       });
     },
   });
@@ -1177,6 +1205,13 @@ export default function EnhancedRecruiting() {
       } else {
         console.log('Skipping screening - candidate passed all requirements previously');
       }
+    }
+
+    // Check if moving to HIRED - show hire confirmation modal
+    if (newStatus === 'HIRED') {
+      setCandidateToHire(currentCandidate);
+      setShowHireModal(true);
+      return;
     }
 
     // Check if moving to DEAD - show type selection modal
@@ -1768,6 +1803,24 @@ export default function EnhancedRecruiting() {
       </Dialog>
 
       {/* Questionnaire modal removed - no longer showing popup when moving to Hired */}
+
+      {/* Hire Candidate Modal */}
+      {showHireModal && candidateToHire && (
+        <HireCandidateModal
+          candidate={candidateToHire}
+          onConfirm={(hireData) => {
+            hireCandidateMutation.mutate({
+              candidateId: candidateToHire.id,
+              hireData,
+            });
+          }}
+          onCancel={() => {
+            setShowHireModal(false);
+            setCandidateToHire(null);
+          }}
+          isLoading={hireCandidateMutation.isPending}
+        />
+      )}
 
       {/* Dead Type Selection Modal */}
       <Dialog open={showDeadTypeModal} onOpenChange={setShowDeadTypeModal}>

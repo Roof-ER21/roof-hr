@@ -1265,6 +1265,272 @@ router.delete('/api/candidates/:id', requireAuth, requireManager, async (req, re
   }
 });
 
+// Hire candidate with full onboarding
+router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const user = req.user!;
+    const candidateId = req.params.id;
+    const {
+      startDate,
+      department,
+      role,
+      employmentType,
+      shirtSize,
+      toolIds = [],
+      welcomePackageId,
+      vacationDays = 10,
+      sickDays = 5,
+      personalDays = 3,
+      sendWelcomeEmail = true
+    } = req.body;
+
+    console.log(`[HIRE] Starting hire process for candidate ${candidateId}`);
+
+    // Get candidate
+    const candidate = await storage.getCandidateById(candidateId);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    // Check if user already exists
+    const existingUser = await storage.getUserByEmail(candidate.email);
+    if (existingUser) {
+      return res.status(400).json({ error: 'A user with this email already exists' });
+    }
+
+    // Create employee account
+    const tempPassword = `Welcome${new Date().getFullYear()}!`;
+    const bcrypt = await import('bcrypt');
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    const newEmployee = await storage.createUser({
+      email: candidate.email,
+      passwordHash: hashedPassword,
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      role: role || 'REP',
+      employmentType: employmentType || 'W2',
+      department: department || 'Sales',
+      position: candidate.position || 'Sales Representative',
+      phone: candidate.phone || '',
+      hireDate: startDate || new Date().toISOString().split('T')[0],
+      mustChangePassword: true,
+    });
+
+    console.log(`[HIRE] Created employee ${newEmployee.id} for ${candidate.firstName} ${candidate.lastName}`);
+
+    // Create PTO policy
+    try {
+      const totalDays = vacationDays + sickDays + personalDays;
+      await storage.createPtoPolicy({
+        employeeId: newEmployee.id,
+        policyLevel: 'INDIVIDUAL',
+        totalDays,
+        baseDays: totalDays,
+        vacationDays,
+        sickDays,
+        personalDays,
+        additionalDays: 0,
+        usedDays: 0,
+        remainingDays: totalDays,
+        notes: 'Initial PTO allocation from hiring'
+      });
+      console.log(`[HIRE] Created PTO policy for ${newEmployee.id}`);
+    } catch (ptoError) {
+      console.error('[HIRE] Failed to create PTO policy:', ptoError);
+    }
+
+    // Assign tools
+    let toolsAssigned = 0;
+    if (toolIds && toolIds.length > 0) {
+      try {
+        for (const toolId of toolIds) {
+          const tools = await db
+            .select()
+            .from(toolInventory)
+            .where(eq(toolInventory.id, toolId));
+
+          const tool = tools[0];
+          if (tool && tool.availableQuantity > 0) {
+            await db.insert(toolAssignments).values({
+              id: uuidv4(),
+              toolId: tool.id,
+              employeeId: newEmployee.id,
+              assignedBy: user.id,
+              assignedDate: new Date(),
+              status: 'ASSIGNED',
+              condition: tool.condition,
+              notes: `Assigned during hiring for ${candidate.position} position`
+            });
+
+            await db
+              .update(toolInventory)
+              .set({
+                availableQuantity: tool.availableQuantity - 1,
+                updatedAt: new Date()
+              })
+              .where(eq(toolInventory.id, tool.id));
+
+            toolsAssigned++;
+          }
+        }
+        console.log(`[HIRE] Assigned ${toolsAssigned} tools to ${newEmployee.id}`);
+      } catch (toolError) {
+        console.error('[HIRE] Failed to assign tools:', toolError);
+      }
+    }
+
+    // Assign welcome package
+    if (welcomePackageId) {
+      try {
+        const bundleItemsList = await db
+          .select()
+          .from(bundleItems)
+          .where(eq(bundleItems.bundleId, welcomePackageId));
+
+        const assignmentId = uuidv4();
+        await db.insert(bundleAssignments).values({
+          id: assignmentId,
+          bundleId: welcomePackageId,
+          employeeId: newEmployee.id,
+          assignedBy: user.id,
+          assignedDate: new Date(),
+          status: 'FULFILLED' as const
+        });
+
+        for (const item of bundleItemsList) {
+          await db.insert(bundleAssignmentItems).values({
+            id: uuidv4(),
+            assignmentId,
+            bundleItemId: item.id,
+            quantity: item.quantity,
+            size: item.requiresSize ? shirtSize : null,
+            status: 'ASSIGNED'
+          });
+        }
+        console.log(`[HIRE] Assigned welcome package to ${newEmployee.id}`);
+      } catch (bundleError) {
+        console.error('[HIRE] Failed to assign welcome package:', bundleError);
+      }
+    }
+
+    // Create onboarding tasks
+    const onboardingTasks = [
+      {
+        employeeId: newEmployee.id,
+        title: 'Complete I-9 Form',
+        description: 'Complete employment eligibility verification',
+        dueDate: new Date(startDate),
+        status: 'PENDING'
+      },
+      {
+        employeeId: newEmployee.id,
+        title: 'Sign Employment Contract',
+        description: 'Review and sign your employment agreement',
+        dueDate: new Date(startDate),
+        status: 'PENDING'
+      },
+      {
+        employeeId: newEmployee.id,
+        title: 'Complete Safety Training',
+        description: 'Complete mandatory safety orientation',
+        dueDate: new Date(new Date(startDate).getTime() + 3 * 24 * 60 * 60 * 1000),
+        status: 'PENDING'
+      },
+      {
+        employeeId: newEmployee.id,
+        title: 'Tools & Equipment Assignment',
+        description: 'Receive and acknowledge assigned tools and equipment',
+        dueDate: new Date(startDate),
+        status: toolsAssigned > 0 ? 'COMPLETED' : 'PENDING'
+      },
+      {
+        employeeId: newEmployee.id,
+        title: 'Benefits Enrollment',
+        description: 'Enroll in company benefits programs',
+        dueDate: new Date(new Date(startDate).getTime() + 7 * 24 * 60 * 60 * 1000),
+        status: 'PENDING'
+      },
+      {
+        employeeId: newEmployee.id,
+        title: 'Complete Online Training',
+        description: 'Complete required online training before first day',
+        dueDate: new Date(new Date(startDate).getTime() - 1 * 24 * 60 * 60 * 1000),
+        status: 'PENDING'
+      }
+    ];
+
+    for (const task of onboardingTasks) {
+      try {
+        await storage.createOnboardingTask(task);
+      } catch (taskError) {
+        console.error('[HIRE] Failed to create onboarding task:', taskError);
+      }
+    }
+    console.log(`[HIRE] Created ${onboardingTasks.length} onboarding tasks`);
+
+    // Update candidate status to HIRED
+    await storage.updateCandidate(candidateId, { status: 'HIRED' });
+    console.log(`[HIRE] Updated candidate ${candidateId} status to HIRED`);
+
+    // Send welcome email
+    let emailSent = false;
+    if (sendWelcomeEmail) {
+      try {
+        const { EmailService } = await import('./email-service');
+        const emailService = new EmailService();
+        await emailService.initialize();
+
+        emailSent = await emailService.sendWelcomeEmail(
+          {
+            firstName: candidate.firstName,
+            lastName: candidate.lastName,
+            email: candidate.email,
+            position: candidate.position || 'Sales Representative',
+          },
+          tempPassword,
+          user.email,
+          {
+            includeAttachments: true,
+            includeEquipmentChecklist: true,
+          }
+        );
+
+        if (emailSent) {
+          console.log(`[HIRE] Welcome email sent to ${candidate.email}`);
+        } else {
+          console.error(`[HIRE] Failed to send welcome email to ${candidate.email}`);
+        }
+      } catch (emailError) {
+        console.error('[HIRE] Email service error:', emailError);
+      }
+    }
+
+    res.json({
+      success: true,
+      employee: {
+        id: newEmployee.id,
+        firstName: newEmployee.firstName,
+        lastName: newEmployee.lastName,
+        email: newEmployee.email,
+        position: newEmployee.position,
+        department: newEmployee.department,
+        hireDate: startDate
+      },
+      toolsAssigned,
+      emailSent,
+      onboardingTasksCreated: onboardingTasks.length
+    });
+
+  } catch (error: any) {
+    console.error('[HIRE] Error hiring candidate:', error);
+    res.status(500).json({
+      error: 'Failed to hire candidate',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
 // Candidate Notes routes
 router.get('/api/candidates/:candidateId/notes', requireAuth, async (req, res) => {
   try {
