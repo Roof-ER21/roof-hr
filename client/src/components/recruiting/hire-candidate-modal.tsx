@@ -189,15 +189,15 @@ export function HireCandidateModal({
 
   return (
     <Dialog open={true} onOpenChange={() => onCancel()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <PartyPopper className="w-6 h-6 text-green-600" />
             Hire {candidate.firstName} {candidate.lastName}
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           <div className="space-y-6 py-4">
             {/* Candidate Info Section */}
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
@@ -522,7 +522,7 @@ export function HireCandidateModal({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="pt-4 border-t">
+        <DialogFooter className="flex-shrink-0 pt-4 border-t">
           <Button variant="outline" onClick={onCancel} disabled={isLoading}>
             Cancel
           </Button>
