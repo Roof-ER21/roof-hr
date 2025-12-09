@@ -1,5 +1,7 @@
 import express from 'express';
 import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { storage } from '../storage';
 import { insertCoiDocumentSchema } from '../../shared/schema';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,6 +9,17 @@ import { googleDriveService } from '../services/google-drive-service';
 import { googleSyncEnhanced } from '../services/google-sync-enhanced';
 import { parseCOIDocument, COIParsedData } from '../services/document-parser';
 import { matchEmployeeFromName, MatchResult } from '../services/employee-matcher';
+
+// Local storage path for COI documents when Google Drive is not configured
+const COI_LOCAL_STORAGE_PATH = path.join(process.cwd(), 'uploads', 'coi');
+
+// Ensure local storage directory exists
+function ensureLocalStorageDir(): void {
+  if (!fs.existsSync(COI_LOCAL_STORAGE_PATH)) {
+    fs.mkdirSync(COI_LOCAL_STORAGE_PATH, { recursive: true });
+    console.log('[COI] Created local storage directory:', COI_LOCAL_STORAGE_PATH);
+  }
+}
 
 const router = express.Router();
 
@@ -701,31 +714,54 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       targetFolderId = externalFolders?.folderId || null;
     }
 
-    // Upload file to Google Drive
+    // Build file name
     const coiType = type || 'GENERAL_LIABILITY';
     const safeName = (employee?.lastName || externalName || 'External').replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `COI_${coiType}_${safeName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
 
-    let driveFile;
-    if (targetFolderId) {
-      driveFile = await googleDriveService.uploadFile({
-        name: fileName,
-        mimeType: req.file.mimetype,
-        content: req.file.buffer,
-        parentFolderId: targetFolderId,
-        description: `COI Document - ${coiType} - ${displayName}`
-      });
-    } else {
-      // Fallback: upload to root if no folder
-      driveFile = await googleDriveService.uploadFile({
-        name: fileName,
-        mimeType: req.file.mimetype,
-        content: req.file.buffer,
-        description: `COI Document - ${coiType} - ${displayName}`
-      });
+    let driveFile: { id: string | null; webViewLink: string | null } | null = null;
+    let documentUrl: string;
+    let googleDriveId: string | null = null;
+
+    // Check if Google Drive is configured
+    if (googleDriveService.isConfigured()) {
+      try {
+        // Try to upload to Google Drive
+        if (targetFolderId) {
+          driveFile = await googleDriveService.uploadFile({
+            name: fileName,
+            mimeType: req.file.mimetype,
+            content: req.file.buffer,
+            parentFolderId: targetFolderId,
+            description: `COI Document - ${coiType} - ${displayName}`
+          });
+        } else {
+          // Fallback: upload to root if no folder
+          driveFile = await googleDriveService.uploadFile({
+            name: fileName,
+            mimeType: req.file.mimetype,
+            content: req.file.buffer,
+            description: `COI Document - ${coiType} - ${displayName}`
+          });
+        }
+        documentUrl = driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`;
+        googleDriveId = driveFile.id;
+        console.log('[COI Confirm] Uploaded to Google Drive:', driveFile.id);
+      } catch (driveError: any) {
+        console.error('[COI Confirm] Google Drive upload failed, falling back to local storage:', driveError.message);
+        // Fall through to local storage
+      }
     }
 
-    console.log('[COI Confirm] Uploaded to Google Drive:', driveFile.id);
+    // If no Google Drive upload, save locally
+    if (!driveFile) {
+      console.log('[COI Confirm] Using local storage (Google Drive not configured or upload failed)');
+      ensureLocalStorageDir();
+      const localFilePath = path.join(COI_LOCAL_STORAGE_PATH, fileName);
+      fs.writeFileSync(localFilePath, req.file.buffer);
+      documentUrl = `/api/coi-documents/local/${fileName}`;
+      console.log('[COI Confirm] Saved to local storage:', localFilePath);
+    }
 
     // Parse dates or use defaults
     const today = new Date();
@@ -766,14 +802,14 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       externalName: externalName || null,
       parsedInsuredName: parsedInsuredName || null,
       type: coiType as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
-      documentUrl: driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
+      documentUrl: documentUrl,
       issueDate: finalIssueDate,
       expirationDate: finalExpirationDate,
       notes: notes || `Policy: ${policyNumber || 'Unknown'}. Insurer: ${insurerName || 'Unknown'}`,
       uploadedBy: currentUser.id,
       status,
       alertFrequency,
-      googleDriveId: driveFile.id // Store Drive ID for deduplication
+      googleDriveId: googleDriveId // Store Drive ID for deduplication (null if stored locally)
     });
 
     console.log('[COI Confirm] Document saved successfully:', document.id);
@@ -876,6 +912,43 @@ router.get('/api/coi-documents/:id/preview', requireAuth, async (req, res) => {
   } catch (error: any) {
     console.error('[COI Preview] Error:', error.message);
     res.status(500).json({ error: 'Failed to get preview URL', details: error.message });
+  }
+});
+
+// Serve locally stored COI files
+router.get('/api/coi-documents/local/:filename', requireAuth, async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Sanitize filename to prevent directory traversal
+    const sanitizedFilename = path.basename(filename);
+    const filePath = path.join(COI_LOCAL_STORAGE_PATH, sanitizedFilename);
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Determine content type
+    const ext = path.extname(sanitizedFilename).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif'
+    };
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${sanitizedFilename}"`);
+
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+
+  } catch (error: any) {
+    console.error('[COI Local File] Error:', error.message);
+    res.status(500).json({ error: 'Failed to serve file', details: error.message });
   }
 });
 

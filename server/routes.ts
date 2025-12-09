@@ -46,6 +46,8 @@ import googleDriveUploadRoutes from './routes/google-drive-uploads';
 import attendanceRoutes from './routes/attendance';
 import equipmentReceiptRoutes from './routes/equipment-receipts';
 import employeePortalRoutes from './routes/employee-portal';
+import { googleDriveService } from './services/google-drive-service';
+import { serviceAccountAuth } from './services/service-account-auth';
 
 const router = express.Router();
 
@@ -974,14 +976,21 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
   try {
     let ptoRequests;
     if (req.user.role === 'ADMIN' || req.user.role === 'MANAGER') {
-      ptoRequests = await storage.getAllPtoRequests();
+      ptoRequests = await storage.getAllPtoRequests().catch((err) => {
+        console.error('[PTO] Failed to fetch all PTO requests:', err.message);
+        return [];
+      });
     } else {
-      ptoRequests = await storage.getPtoRequestsByEmployeeId(req.user.id);
+      ptoRequests = await storage.getPtoRequestsByEmployeeId(req.user.id).catch((err) => {
+        console.error('[PTO] Failed to fetch PTO requests for user:', err.message);
+        return [];
+      });
     }
     res.json(ptoRequests);
   } catch (error) {
     console.error('Error fetching PTO requests:', error);
-    res.status(500).json({ error: 'Failed to fetch PTO requests' });
+    // Return empty array instead of 500 error
+    res.json([]);
   }
 });
 
@@ -2302,9 +2311,21 @@ Company Representative                  Date
 // Dashboard routes
 router.get('/api/dashboard/metrics', requireAuth, async (req, res) => {
   try {
-    const users = await storage.getAllUsers();
-    const ptoRequests = await storage.getAllPtoRequests();
-    const candidates = await storage.getAllCandidates();
+    // Use Promise.all with individual catch handlers for graceful degradation
+    const [users, ptoRequests, candidates] = await Promise.all([
+      storage.getAllUsers().catch((err) => {
+        console.error('[Dashboard] Failed to fetch users:', err.message);
+        return [];
+      }),
+      storage.getAllPtoRequests().catch((err) => {
+        console.error('[Dashboard] Failed to fetch PTO requests:', err.message);
+        return [];
+      }),
+      storage.getAllCandidates().catch((err) => {
+        console.error('[Dashboard] Failed to fetch candidates:', err.message);
+        return [];
+      }),
+    ]);
 
     const metrics = {
       activeEmployees: users.filter(u => u.isActive).length,
@@ -2317,7 +2338,49 @@ router.get('/api/dashboard/metrics', requireAuth, async (req, res) => {
     res.json(metrics);
   } catch (error) {
     console.error('Error fetching dashboard metrics:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard metrics' });
+    // Return empty metrics instead of failing completely
+    res.json({
+      activeEmployees: 0,
+      pendingPTO: 0,
+      activeCandidates: 0,
+      totalDocuments: 0,
+      pendingReviews: 0,
+      _error: 'Some metrics may be unavailable'
+    });
+  }
+});
+
+// Google Integration Status endpoint
+router.get('/api/google/status', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const status = {
+      serviceAccountConfigured: serviceAccountAuth.isConfigured(),
+      driveConfigured: googleDriveService.isConfigured(),
+      driveInitialized: googleDriveService.isInitialized(),
+      oauthConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN),
+      emailMode: serviceAccountAuth.isConfigured() ? 'service_account_impersonation' :
+                 (process.env.GOOGLE_REFRESH_TOKEN ? 'oauth2' :
+                 (process.env.GOOGLE_APP_PASSWORD ? 'app_password' : 'development')),
+      configuredFeatures: {
+        email: !!(process.env.GOOGLE_REFRESH_TOKEN || process.env.GOOGLE_APP_PASSWORD || serviceAccountAuth.isConfigured()),
+        drive: googleDriveService.isConfigured(),
+        calendar: serviceAccountAuth.isConfigured(),
+        sheets: serviceAccountAuth.isConfigured(),
+      },
+      environmentVariables: {
+        GOOGLE_SERVICE_ACCOUNT_KEY: !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 'SET' : 'NOT SET',
+        GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID ? 'SET' : 'NOT SET',
+        GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET ? 'SET' : 'NOT SET',
+        GOOGLE_REFRESH_TOKEN: !!process.env.GOOGLE_REFRESH_TOKEN ? 'SET' : 'NOT SET',
+        GOOGLE_APP_PASSWORD: !!process.env.GOOGLE_APP_PASSWORD ? 'SET' : 'NOT SET',
+        GOOGLE_USER_EMAIL: process.env.GOOGLE_USER_EMAIL || 'NOT SET',
+      }
+    };
+
+    res.json(status);
+  } catch (error) {
+    console.error('[Google Status] Error:', error);
+    res.status(500).json({ error: 'Failed to get Google status' });
   }
 });
 

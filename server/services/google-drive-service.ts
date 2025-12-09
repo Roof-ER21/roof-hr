@@ -28,6 +28,36 @@ class GoogleDriveService {
     return this.initialized;
   }
 
+  // Check if Google Drive service can be configured (has required credentials)
+  isConfigured(): boolean {
+    try {
+      const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+      if (!serviceAccountKey) {
+        return false;
+      }
+      // Try to parse to verify it's valid JSON
+      JSON.parse(serviceAccountKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Safe initialization that doesn't throw
+  async safeInitialize(): Promise<boolean> {
+    try {
+      if (!this.isConfigured()) {
+        console.warn('[Google Drive] Service account not configured - Drive features disabled');
+        return false;
+      }
+      await this.initialize();
+      return true;
+    } catch (error) {
+      console.error('[Google Drive] Failed to initialize:', error);
+      return false;
+    }
+  }
+
   async createFolder(name: string, parentFolderId?: string) {
     try {
       const fileMetadata = {
