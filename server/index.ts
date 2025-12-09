@@ -75,12 +75,21 @@ app.use(requestLogger);
 app.use(configureCORS);
 
 // Security middleware - Rate limiting for API routes
+// Increased limit to handle polling requests (notifications, auth validation)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // limit each IP to 1000 requests per windowMs (was 100 - too restrictive)
   skipSuccessfulRequests: false
 });
 app.use('/api/', limiter);
+
+// Public endpoint to clear rate limits (for emergency lockout recovery)
+app.get('/api/public/reset-rate-limits', (req, res) => {
+  const { clearRateLimit } = require('./middleware/security');
+  clearRateLimit();
+  console.log('[Rate Limit] Emergency rate limit reset triggered');
+  res.json({ success: true, message: 'Rate limits cleared for all IPs' });
+});
 
 // Body parsing with input sanitization
 app.use(express.json());

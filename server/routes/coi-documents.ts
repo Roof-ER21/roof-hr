@@ -698,20 +698,29 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       displayName = `${employee.firstName} ${employee.lastName}`;
       console.log('[COI Confirm] Employee found:', displayName);
 
-      // Get or create employee folder structure
-      const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
-      if (employeeFolders?.coiFolderId) {
-        targetFolderId = employeeFolders.coiFolderId;
+      // Get or create employee folder structure (skip if Google Drive not configured)
+      if (googleDriveService.isConfigured()) {
+        try {
+          const employeeFolders = await googleSyncEnhanced.getOrCreateEmployeeFolder(employee);
+          if (employeeFolders?.coiFolderId) {
+            targetFolderId = employeeFolders.coiFolderId;
+          }
+        } catch (folderError: any) {
+          console.warn('[COI Confirm] Could not get employee folder, will use fallback:', folderError.message);
+        }
       }
     }
 
-    // If no employee folder, use a general "External COI" folder
-    if (!targetFolderId) {
+    // If no employee folder, try external COI folder (only if Google Drive is configured)
+    if (!targetFolderId && googleDriveService.isConfigured()) {
       // For external contractors, upload to a general COI folder
-      console.log('[COI Confirm] Using external COI folder for:', externalName);
-      // Try to get/create an "External COI" folder at root level
-      const externalFolders = await googleSyncEnhanced.getOrCreateExternalCoiFolder();
-      targetFolderId = externalFolders?.folderId || null;
+      console.log('[COI Confirm] Using external COI folder for:', externalName || displayName);
+      try {
+        const externalFolders = await googleSyncEnhanced.getOrCreateExternalCoiFolder();
+        targetFolderId = externalFolders?.folderId || null;
+      } catch (folderError: any) {
+        console.warn('[COI Confirm] Could not get external COI folder, will use fallback:', folderError.message);
+      }
     }
 
     // Build file name
