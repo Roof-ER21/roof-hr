@@ -82,6 +82,10 @@ class EmailService {
         console.log('[Email] Gmail transporter initialized with App Password');
       } else if (clientId && clientSecret && refreshToken && userEmail) {
         // Use Google OAuth for Gmail
+        console.log('[Email] Attempting OAuth2 initialization...');
+        console.log('[Email] Client ID:', clientId?.substring(0, 20) + '...');
+        console.log('[Email] User Email:', userEmail);
+
         const oauth2Client = new OAuth2(
           clientId,
           clientSecret,
@@ -92,7 +96,14 @@ class EmailService {
           refresh_token: refreshToken,
         });
 
+        console.log('[Email] Getting access token...');
         const accessToken = await oauth2Client.getAccessToken();
+
+        if (!accessToken.token) {
+          throw new Error('Failed to get access token - token is null/empty');
+        }
+
+        console.log('[Email] Access token obtained successfully');
 
         this.transporter = nodemailer.createTransport({
           service: 'gmail',
@@ -107,7 +118,7 @@ class EmailService {
         } as any);
 
         this.isDevelopmentMode = false;
-        console.log('[Email] Gmail OAuth2 transporter initialized successfully');
+        console.log('[Email] ✅ Gmail OAuth2 transporter initialized successfully for:', userEmail);
       } else {
         // Fallback to development mode (log emails instead of sending)
         this.isDevelopmentMode = true;
@@ -119,8 +130,9 @@ class EmailService {
           buffer: true,
         });
       }
-    } catch (error) {
-      console.error('[Email] Failed to initialize email service:', error);
+    } catch (error: any) {
+      console.error('[Email] ❌ Failed to initialize email service:', error?.message || error);
+      console.error('[Email] Error stack:', error?.stack);
       // Use development transporter as fallback
       this.isDevelopmentMode = true;
       console.warn('[Email] ⚠️ DEVELOPMENT MODE: Email initialization failed, using stream transport');
