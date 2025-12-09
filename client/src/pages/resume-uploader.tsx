@@ -107,7 +107,12 @@ export default function ResumeUploaderPage() {
   const { data: recentData, isLoading: isLoadingRecent, refetch: refetchRecent } = useQuery({
     queryKey: ['/api/resumes/recent', activeCategory],
     queryFn: async () => {
-      const res = await fetch(`/api/resumes/recent?category=${activeCategory}&limit=20`);
+      const res = await fetch(`/api/resumes/recent?category=${activeCategory}&limit=20`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error('Failed to fetch recent resumes');
       return res.json();
     }
@@ -122,6 +127,10 @@ export default function ResumeUploaderPage() {
 
       const response = await fetch('/api/resumes/upload', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
         body: formData,
       });
 
@@ -153,7 +162,11 @@ export default function ResumeUploaderPage() {
     mutationFn: async ({ category, sourceFolderId }: { category: CategoryId; sourceFolderId?: string }) => {
       const response = await fetch('/api/resumes/sync-from-drive', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
         body: JSON.stringify({ category, sourceFolderId }),
       });
 
