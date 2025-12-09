@@ -12,14 +12,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
 import { apiRequest } from '@/lib/queryClient';
-import { 
-  Laptop, Package, Car, HardHat, Shirt, Wrench, Plus, 
-  Send, Edit, Trash2, CheckCircle, XCircle, Clock, 
+import {
+  Laptop, Package, Car, HardHat, Shirt, Wrench, Plus,
+  Send, Edit, Trash2, CheckCircle, XCircle, Clock,
   AlertCircle, Mail, FileSignature, ArrowLeft, Search,
-  Upload, Download, RefreshCw
+  Upload, Download, RefreshCw, ChevronDown, ChevronRight, User
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -520,6 +521,36 @@ export function Tools() {
     }
   });
 
+  // Group assignments by employee for grouped view
+  const groupedAssignments = activeAssignments.reduce((groups, assignment) => {
+    const key = assignment.employeeId;
+    if (!groups[key]) {
+      groups[key] = {
+        employeeId: assignment.employeeId,
+        employeeName: assignment.employeeName,
+        employeeEmail: assignment.employeeEmail,
+        assignments: []
+      };
+    }
+    groups[key].assignments.push(assignment);
+    return groups;
+  }, {} as Record<string, { employeeId: string; employeeName: string; employeeEmail: string; assignments: Assignment[] }>);
+
+  // State for expanded employees in grouped view
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+
+  const toggleEmployeeExpand = (employeeId: string) => {
+    setExpandedEmployees(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(employeeId)) {
+        newSet.delete(employeeId);
+      } else {
+        newSet.add(employeeId);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -816,74 +847,89 @@ export function Tools() {
                   No active assignments
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tool</TableHead>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Assigned Date</TableHead>
-                      <TableHead>Condition</TableHead>
-                      <TableHead>Signature</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeAssignments.map((assignment: Assignment) => (
-                      <TableRow key={assignment.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {categoryIcons[assignment.toolCategory as keyof typeof categoryIcons]}
+                <div className="space-y-2">
+                  {Object.values(groupedAssignments).map((group) => (
+                    <Collapsible
+                      key={group.employeeId}
+                      open={expandedEmployees.has(group.employeeId)}
+                      onOpenChange={() => toggleEmployeeExpand(group.employeeId)}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100">
+                              <User className="h-5 w-5 text-blue-600" />
+                            </div>
                             <div>
-                              <div className="font-medium">{assignment.toolName}</div>
-                              {assignment.toolSerialNumber && (
-                                <div className="text-sm text-gray-500">
-                                  SN: {assignment.toolSerialNumber}
+                              <div className="font-semibold text-gray-900">{group.employeeName}</div>
+                              <div className="text-sm text-gray-500">{group.employeeEmail}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant="secondary" className="text-sm">
+                              {group.assignments.length} {group.assignments.length === 1 ? 'item' : 'items'}
+                            </Badge>
+                            {expandedEmployees.has(group.employeeId) ? (
+                              <ChevronDown className="h-5 w-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-gray-400" />
+                            )}
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="ml-6 mt-2 border-l-2 border-gray-200 pl-4 space-y-2">
+                          {group.assignments.map((assignment: Assignment) => (
+                            <div
+                              key={assignment.id}
+                              className="flex items-center justify-between p-3 bg-white border rounded-lg hover:shadow-sm transition-shadow"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center justify-center w-8 h-8 rounded bg-gray-100">
+                                  {categoryIcons[assignment.toolCategory as keyof typeof categoryIcons]}
                                 </div>
-                              )}
+                                <div>
+                                  <div className="font-medium text-gray-900">{assignment.toolName}</div>
+                                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                                    {assignment.toolSerialNumber && (
+                                      <span>SN: {assignment.toolSerialNumber}</span>
+                                    )}
+                                    <span>•</span>
+                                    <span>Assigned {format(new Date(assignment.assignedDate), 'MMM d, yyyy')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge className={conditionColors[assignment.condition as keyof typeof conditionColors]}>
+                                  {assignment.condition}
+                                </Badge>
+                                {assignment.signatureReceived ? (
+                                  <div className="flex items-center gap-1 text-green-600">
+                                    <CheckCircle className="h-4 w-4" />
+                                    <span className="text-xs">Signed</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-orange-600">
+                                    <Clock className="h-4 w-4" />
+                                    <span className="text-xs">Pending</span>
+                                  </div>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleReturnTool(assignment.id)}
+                                >
+                                  <ArrowLeft className="mr-1 h-3 w-3" />
+                                  Return
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{assignment.employeeName}</div>
-                            <div className="text-sm text-gray-500">{assignment.employeeEmail}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(assignment.assignedDate), 'MMM d, yyyy')}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={conditionColors[assignment.condition as keyof typeof conditionColors]}>
-                            {assignment.condition}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {assignment.signatureReceived ? (
-                            <div className="flex items-center gap-1 text-green-600">
-                              <CheckCircle className="h-4 w-4" />
-                              <span className="text-sm">Signed</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 text-orange-600">
-                              <Clock className="h-4 w-4" />
-                              <span className="text-sm">Pending</span>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleReturnTool(assignment.id)}
-                          >
-                            <ArrowLeft className="mr-1 h-3 w-3" />
-                            Return
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

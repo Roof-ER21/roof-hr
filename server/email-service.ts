@@ -58,6 +58,7 @@ function formatStartDate(date: Date): string {
 
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
+  private isDevelopmentMode: boolean = false;
 
   async initialize() {
     try {
@@ -77,8 +78,8 @@ class EmailService {
             pass: appPassword,
           },
         });
-
-        console.log('Gmail transporter initialized with App Password');
+        this.isDevelopmentMode = false;
+        console.log('[Email] Gmail transporter initialized with App Password');
       } else if (clientId && clientSecret && refreshToken && userEmail) {
         // Use Google OAuth for Gmail
         const oauth2Client = new OAuth2(
@@ -105,10 +106,13 @@ class EmailService {
           },
         } as any);
 
-        console.log('Gmail OAuth2 transporter initialized successfully');
+        this.isDevelopmentMode = false;
+        console.log('[Email] Gmail OAuth2 transporter initialized successfully');
       } else {
         // Fallback to development mode (log emails instead of sending)
-        console.log('Gmail credentials not found, using development mode (emails will be logged)');
+        this.isDevelopmentMode = true;
+        console.warn('[Email] ⚠️ DEVELOPMENT MODE: No Gmail credentials found. Emails will be logged but NOT actually sent!');
+        console.warn('[Email] Missing: GOOGLE_APP_PASSWORD or (GOOGLE_REFRESH_TOKEN + OAuth credentials)');
         this.transporter = nodemailer.createTransport({
           streamTransport: true,
           newline: 'unix',
@@ -116,8 +120,10 @@ class EmailService {
         });
       }
     } catch (error) {
-      console.error('Failed to initialize email service:', error);
+      console.error('[Email] Failed to initialize email service:', error);
       // Use development transporter as fallback
+      this.isDevelopmentMode = true;
+      console.warn('[Email] ⚠️ DEVELOPMENT MODE: Email initialization failed, using stream transport');
       this.transporter = nodemailer.createTransport({
         streamTransport: true,
         newline: 'unix',
@@ -270,7 +276,16 @@ class EmailService {
         }
       }
 
-      console.log('Email sent successfully:', {
+      if (this.isDevelopmentMode) {
+        console.warn('[Email] ⚠️ DEV MODE: Email logged but NOT actually sent:', {
+          to: config.to,
+          subject: config.subject,
+        });
+        // Return false in development mode so caller knows email wasn't sent
+        return false;
+      }
+
+      console.log('[Email] ✅ Email sent successfully:', {
         to: config.to,
         subject: config.subject,
         messageId: result.messageId,
