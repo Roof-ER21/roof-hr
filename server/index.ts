@@ -11,7 +11,7 @@ import { storage } from "./storage";
 import { testConnection } from "./db";
 import bcrypt from 'bcrypt';
 import { config, validateConfig } from './config';
-import { rateLimit, sanitizeInput, configureCORS, securityLogger } from './middleware/security';
+import { rateLimit, sanitizeInput, configureCORS, securityLogger, clearRateLimit } from './middleware/security';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { requestLogger, logger } from './middleware/logger';
 
@@ -85,7 +85,6 @@ app.use('/api/', limiter);
 
 // Public endpoint to clear rate limits (for emergency lockout recovery)
 app.get('/api/public/reset-rate-limits', (req, res) => {
-  const { clearRateLimit } = require('./middleware/security');
   clearRateLimit();
   console.log('[Rate Limit] Emergency rate limit reset triggered');
   res.json({ success: true, message: 'Rate limits cleared for all IPs' });

@@ -1033,6 +1033,47 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
       employeeId: user.id,
       status: 'PENDING' as const,
     });
+
+    // Send notifications to PTO managers (non-blocking)
+    const PTO_MANAGER_EMAILS = [
+      'ford.barsi@theroofdocs.com',
+      'oliver.brown@theroofdocs.com',
+      'reese.samala@theroofdocs.com',
+      'ahmed.mahmoud@theroofdocs.com'
+    ];
+
+    // Send notifications asynchronously without blocking the response
+    (async () => {
+      try {
+        const emailService = new EmailService();
+        await emailService.initialize();
+
+        for (const managerEmail of PTO_MANAGER_EMAILS) {
+          try {
+            await emailService.sendEmail({
+              to: managerEmail,
+              subject: `New PTO Request: ${user.firstName} ${user.lastName}`,
+              html: `
+                <h2>New PTO Request Submitted</h2>
+                <p><strong>${user.firstName} ${user.lastName}</strong> has requested PTO:</p>
+                <ul>
+                  <li><strong>Start Date:</strong> ${new Date(req.body.startDate).toLocaleDateString()}</li>
+                  <li><strong>End Date:</strong> ${new Date(req.body.endDate).toLocaleDateString()}</li>
+                  <li><strong>Days:</strong> ${days}</li>
+                  <li><strong>Reason:</strong> ${req.body.reason || 'Not specified'}</li>
+                </ul>
+                <p>Please review and approve/deny this request in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
+              `
+            });
+          } catch (emailErr) {
+            console.error(`[PTO] Failed to notify manager ${managerEmail}:`, emailErr);
+          }
+        }
+      } catch (notifyError) {
+        console.error('[PTO] Error sending manager notifications:', notifyError);
+      }
+    })();
+
     res.json(ptoRequest);
   } catch (error: any) {
     console.error('PTO request error:', error);

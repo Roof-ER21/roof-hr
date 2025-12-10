@@ -564,6 +564,35 @@ export class SusanPTOManager {
         } catch (emailError) {
           console.error('[SUSAN-PTO] Email error (non-fatal):', emailError);
         }
+
+        // Notify PTO managers
+        const PTO_MANAGER_EMAILS = [
+          'ford.barsi@theroofdocs.com',
+          'oliver.brown@theroofdocs.com',
+          'reese.samala@theroofdocs.com',
+          'ahmed.mahmoud@theroofdocs.com'
+        ];
+
+        for (const managerEmail of PTO_MANAGER_EMAILS) {
+          try {
+            await this.emailService.sendEmail({
+              to: managerEmail,
+              subject: `New PTO Request: ${employee.firstName} ${employee.lastName}`,
+              html: `
+                <h2>New PTO Request Submitted</h2>
+                <p><strong>${employee.firstName} ${employee.lastName}</strong> has requested PTO:</p>
+                <ul>
+                  <li><strong>Dates:</strong> ${data.startDate.toLocaleDateString()} - ${data.endDate.toLocaleDateString()}</li>
+                  <li><strong>Days:</strong> ${days}</li>
+                  <li><strong>Reason:</strong> ${data.reason}</li>
+                </ul>
+                <p>Please review and approve/deny this request in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
+              `
+            });
+          } catch (managerEmailError) {
+            console.error(`[SUSAN-PTO] Failed to notify manager ${managerEmail}:`, managerEmailError);
+          }
+        }
       }
 
       return { success: true, requestId };
