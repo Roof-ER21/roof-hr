@@ -68,20 +68,35 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // In production, the build output is at dist/public (copied from server/public after build)
-  const distPath = path.resolve(import.meta.dirname, "public");
-  // Also check the root dist/public folder as fallback
-  const rootDistPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  // In production, try multiple paths to find the build output
+  const possiblePaths = [
+    path.resolve(import.meta.dirname, "public"),           // /app/dist/public when running from dist/index.js
+    path.resolve(process.cwd(), "dist", "public"),         // /app/dist/public using cwd
+    path.resolve(import.meta.dirname, "..", "dist", "public"), // fallback
+  ];
 
-  let servePath = distPath;
-  if (!fs.existsSync(distPath) && fs.existsSync(rootDistPath)) {
-    servePath = rootDistPath;
+  let servePath = "";
+  for (const p of possiblePaths) {
+    console.log(`[Static] Checking path: ${p}, exists: ${fs.existsSync(p)}`);
+    if (fs.existsSync(p)) {
+      servePath = p;
+      break;
+    }
   }
 
-  if (!fs.existsSync(servePath)) {
+  if (!servePath) {
     throw new Error(
-      `Could not find the build directory: ${servePath}, make sure to build the client first`,
+      `Could not find the build directory. Checked: ${possiblePaths.join(", ")}`,
     );
+  }
+
+  // Log what files are in the directory
+  try {
+    const files = fs.readdirSync(servePath);
+    console.log(`[Static] Serving from: ${servePath}`);
+    console.log(`[Static] Files in directory: ${files.join(", ")}`);
+  } catch (e) {
+    console.error(`[Static] Error reading directory:`, e);
   }
 
   app.use(express.static(servePath));

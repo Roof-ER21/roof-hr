@@ -26,7 +26,9 @@ LOGIN_CREDENTIALS*.md
 # Uploads and logs
 uploads/
 *.log
-public/
+# Ignore root public folder but not client/public (which has the logo)
+/public/
+!client/public/
 
 # Scripts that may contain secrets
 scripts/fetch-email.ts
