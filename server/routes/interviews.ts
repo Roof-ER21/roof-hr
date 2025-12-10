@@ -652,7 +652,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       html: candidateHtml,
       candidateId: candidate.id,
       interviewId: interview.id,
-      fromUserEmail,
+      fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
     });
 
     // Email HTML to interviewer
@@ -688,7 +688,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       subject: `Interview Scheduled - ${candidate.firstName} ${candidate.lastName}`,
       html: interviewerHtml,
       interviewId: interview.id,
-      fromUserEmail,
+      fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
     });
 
     console.log('[INTERVIEW] Confirmation emails sent to candidate and interviewer');

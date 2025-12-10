@@ -432,7 +432,8 @@ export class SusanPTOManager {
       await this.emailService.sendEmail({
         to: employee.email,
         subject,
-        html
+        html,
+        fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
       });
     } catch (error) {
       console.error('[SUSAN-PTO] Error sending email:', error);
@@ -559,7 +560,8 @@ export class SusanPTOManager {
                 <li>Reason: ${data.reason}</li>
               </ul>
               <p>You will be notified when your request is reviewed.</p>
-            `
+            `,
+            fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
           });
         } catch (emailError) {
           console.error('[SUSAN-PTO] Email error (non-fatal):', emailError);
@@ -587,7 +589,8 @@ export class SusanPTOManager {
                   <li><strong>Reason:</strong> ${data.reason}</li>
                 </ul>
                 <p>Please review and approve/deny this request in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
-              `
+              `,
+              fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
             });
           } catch (managerEmailError) {
             console.error(`[SUSAN-PTO] Failed to notify manager ${managerEmail}:`, managerEmailError);
