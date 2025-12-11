@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   User,
   Mail,
@@ -189,15 +188,15 @@ export function HireCandidateModal({
 
   return (
     <Dialog open={true} onOpenChange={() => onCancel()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-2xl max-h-[85vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0 pb-2">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <PartyPopper className="w-6 h-6 text-green-600" />
             Hire {candidate.firstName} {candidate.lastName}
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 pr-4">
+        <div className="flex-1 overflow-y-auto min-h-0 pr-2" style={{ maxHeight: 'calc(85vh - 140px)' }}>
           <div className="space-y-6 py-4">
             {/* Candidate Info Section */}
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
@@ -520,7 +519,7 @@ export function HireCandidateModal({
               </Collapsible>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="flex-shrink-0 pt-4 border-t">
           <Button variant="outline" onClick={onCancel} disabled={isLoading}>
