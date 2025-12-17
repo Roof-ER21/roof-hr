@@ -1340,11 +1340,14 @@ export default function EnhancedRecruiting() {
                   Workflows
                 </Button>
                 <Button
-                  variant={viewMode === 'resume-uploads' ? 'default' : 'outline'}
-                  size="sm"
+                  variant="default"
+                  size="default"
                   onClick={() => setViewMode('resume-uploads')}
+                  className={viewMode === 'resume-uploads'
+                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg'
+                    : 'bg-green-500 hover:bg-green-600 text-white shadow-md'}
                 >
-                  <Upload className="mr-1 h-3 w-3" />
+                  <Upload className="mr-2 h-4 w-4" />
                   Upload Resumes
                 </Button>
               </div>
