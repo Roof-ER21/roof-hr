@@ -14,7 +14,9 @@ import {
   Building,
   Briefcase,
   Users,
-  Filter
+  Filter,
+  ArrowDownAZ,
+  ArrowUpZA
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
@@ -42,6 +44,7 @@ function TeamDirectory() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Fetch team directory
   const { data: teamMembers = [], isLoading } = useQuery<TeamMember[]>({
@@ -83,7 +86,7 @@ function TeamDirectory() {
     });
   }, [teamMembers, searchQuery, departmentFilter]);
 
-  // Group by department
+  // Group by department and sort members alphabetically
   const groupedMembers = useMemo(() => {
     const groups: Record<string, TeamMember[]> = {};
 
@@ -91,6 +94,15 @@ function TeamDirectory() {
       const dept = member.department || 'No Department';
       if (!groups[dept]) groups[dept] = [];
       groups[dept].push(member);
+    });
+
+    // Sort members within each department alphabetically by name
+    Object.keys(groups).forEach(dept => {
+      groups[dept].sort((a, b) => {
+        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+        return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      });
     });
 
     // Sort departments, putting user's department first
@@ -103,7 +115,7 @@ function TeamDirectory() {
     });
 
     return { groups, sortedDepts };
-  }, [filteredMembers, user?.department]);
+  }, [filteredMembers, user?.department, sortOrder]);
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
@@ -165,6 +177,23 @@ function TeamDirectory() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+          className="w-full sm:w-auto"
+        >
+          {sortOrder === 'asc' ? (
+            <>
+              <ArrowDownAZ className="w-4 h-4 mr-2" />
+              A-Z
+            </>
+          ) : (
+            <>
+              <ArrowUpZA className="w-4 h-4 mr-2" />
+              Z-A
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Team Members */}
