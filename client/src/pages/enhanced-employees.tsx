@@ -13,7 +13,8 @@ import { Progress } from '@/components/ui/progress';
 import {
   UserPlus, Search, Edit, Trash2, Users, Building, Calendar,
   Phone, Mail, MapPin, Clock, TrendingUp, Award, Filter,
-  Download, Upload, MoreVertical, Eye, Key, AlertTriangle, Send
+  Download, Upload, MoreVertical, Eye, Key, AlertTriangle, Send,
+  ArrowDownAZ, ArrowUpZA
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
@@ -82,6 +83,7 @@ function EnhancedEmployees() {
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'analytics'>('grid');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -375,19 +377,25 @@ function EnhancedEmployees() {
     event.target.value = '';
   };
 
-  // Filter employees
-  const filteredEmployees = employees.filter((employee: Employee) => {
-    const matchesSearch = 
-      employee.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.position.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDepartment = departmentFilter === 'ALL' || employee.department === departmentFilter;
-    const matchesRole = roleFilter === 'ALL' || employee.role === roleFilter;
-    
-    return matchesSearch && matchesDepartment && matchesRole;
-  });
+  // Filter and sort employees
+  const filteredEmployees = employees
+    .filter((employee: Employee) => {
+      const matchesSearch =
+        employee.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employee.position.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesDepartment = departmentFilter === 'ALL' || employee.department === departmentFilter;
+      const matchesRole = roleFilter === 'ALL' || employee.role === roleFilter;
+
+      return matchesSearch && matchesDepartment && matchesRole;
+    })
+    .sort((a: Employee, b: Employee) => {
+      const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+      const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+      return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+    });
 
   // Get unique departments and calculate analytics
   const departments = Array.from(new Set(employees.map((emp: Employee) => emp.department)));
@@ -806,6 +814,23 @@ function EnhancedEmployees() {
                 <SelectItem value="CONTRACTOR">Contractor</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="whitespace-nowrap"
+            >
+              {sortOrder === 'asc' ? (
+                <>
+                  <ArrowDownAZ className="w-4 h-4 mr-2" />
+                  A-Z
+                </>
+              ) : (
+                <>
+                  <ArrowUpZA className="w-4 h-4 mr-2" />
+                  Z-A
+                </>
+              )}
+            </Button>
           </div>
 
           {viewMode === 'analytics' ? (
