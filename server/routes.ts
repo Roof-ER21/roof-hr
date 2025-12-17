@@ -1092,10 +1092,25 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
   }
 });
 
+// PTO Approvers - Only these users can approve/deny PTO requests
+const PTO_APPROVER_EMAILS = [
+  'ford.barsi@theroofdocs.com',
+  'ahmed.mahmoud@theroofdocs.com',
+  'reese.samala@theroofdocs.com',
+  'oliver.brown@theroofdocs.com'
+];
+
 router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) => {
   try {
     const user = req.user!;
     const { status, reviewNotes } = req.body;
+
+    // Only designated approvers can approve/deny PTO requests
+    if ((status === 'APPROVED' || status === 'DENIED') && !PTO_APPROVER_EMAILS.includes(user.email)) {
+      return res.status(403).json({
+        error: 'Only Ford Barsi, Ahmed, Reese, or Oliver can approve or deny PTO requests'
+      });
+    }
 
     // Get the current PTO request to know which employee and how many days
     const currentRequest = await storage.getPtoRequestById(req.params.id);

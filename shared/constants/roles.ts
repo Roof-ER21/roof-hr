@@ -80,10 +80,24 @@ const POLICY_ADMIN_EMAILS = [
   'ahmed.mahmoud@theroofdocs.com'
 ];
 
+// PTO Approvers - Only these users can approve/deny PTO requests
+export const PTO_APPROVER_EMAILS = [
+  'ford.barsi@theroofdocs.com',
+  'ahmed.mahmoud@theroofdocs.com',
+  'reese.samala@theroofdocs.com',
+  'oliver.brown@theroofdocs.com'
+];
+
 export function canEditPtoPolicies(user: { role?: string; email?: string } | null): boolean {
   if (!user) return false;
   if (isAdmin(user.role)) return true;
   if (user.email && POLICY_ADMIN_EMAILS.includes(user.email)) return true;
+  return false;
+}
+
+export function canApprovePtoRequests(user: { role?: string; email?: string } | null): boolean {
+  if (!user) return false;
+  if (user.email && PTO_APPROVER_EMAILS.includes(user.email)) return true;
   return false;
 }
 

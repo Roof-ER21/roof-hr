@@ -42,9 +42,18 @@ function PTO() {
   const { user } = useAuth();
   
   // Check if user can edit PTO policies (Ford Barsi or Ahmed Admin)
-  const canEditPolicies = user?.email === 'ford.barsi@theroofdocs.com' || 
+  const canEditPolicies = user?.email === 'ford.barsi@theroofdocs.com' ||
                          user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
                          user?.role === 'ADMIN';
+
+  // PTO Approvers - Only these users can approve/deny PTO requests
+  const PTO_APPROVER_EMAILS = [
+    'ford.barsi@theroofdocs.com',
+    'ahmed.mahmoud@theroofdocs.com',
+    'reese.samala@theroofdocs.com',
+    'oliver.brown@theroofdocs.com'
+  ];
+  const canApprovePto = user?.email ? PTO_APPROVER_EMAILS.includes(user.email) : false;
 
   const { data: ptoRequests, isLoading } = useQuery({
     queryKey: ['/api/pto'],
@@ -688,7 +697,7 @@ function PTO() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
-                        {request.status === 'PENDING' && (
+                        {request.status === 'PENDING' && canApprovePto && (
                           <div className="flex space-x-2">
                             <Button
                               variant="outline"
@@ -709,6 +718,9 @@ function PTO() {
                               Deny
                             </Button>
                           </div>
+                        )}
+                        {request.status === 'PENDING' && !canApprovePto && (
+                          <span className="text-sm text-muted-foreground">Pending approval</span>
                         )}
                       </td>
                     </tr>
