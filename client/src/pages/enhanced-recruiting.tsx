@@ -64,15 +64,15 @@ function DroppableColumn({ status, children }: { status: string; children: React
 }
 
 const stages = {
-  APPLIED: { name: 'Application Review', next: 'SCREENING', color: 'bg-blue-100 text-blue-800' },
-  SCREENING: { name: 'Phone Screening', next: 'INTERVIEW', color: 'bg-yellow-100 text-yellow-800' },
-  INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-purple-100 text-purple-800' },
-  OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-green-100 text-green-800' },
-  HIRED: { name: 'Hired', next: null, color: 'bg-green-600 text-white' },
-  DEAD: { name: 'Dead', next: null, color: 'bg-red-100 text-red-800' },
+  APPLIED: { name: 'Application Review', next: 'SCREENING', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
+  SCREENING: { name: 'Phone Screening', next: 'INTERVIEW', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
+  INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
+  OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
+  HIRED: { name: 'Hired', next: null, color: 'bg-green-600 text-white dark:bg-green-700 dark:text-white' },
+  DEAD: { name: 'Dead', next: null, color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
   // Keep these for internal status but combine in display
-  DEAD_BY_US: { name: 'DEAD by us', next: null, color: 'bg-red-100 text-red-800' },
-  DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-800' }
+  DEAD_BY_US: { name: 'DEAD by us', next: null, color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
+  DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' }
 };
 
 // Display stages for Kanban view (combines DEAD_BY_US and DEAD_BY_CANDIDATE into one column)

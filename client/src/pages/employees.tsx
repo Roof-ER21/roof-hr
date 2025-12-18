@@ -170,16 +170,16 @@ function Employees() {
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'ADMIN': return 'bg-red-100 text-red-800';
-      case 'MANAGER': return 'bg-blue-100 text-blue-800';
-      case 'EMPLOYEE': return 'bg-green-100 text-green-800';
-      case 'CONTRACTOR': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'ADMIN': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      case 'MANAGER': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+      case 'EMPLOYEE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'CONTRACTOR': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     }
   };
 
   const getStatusColor = (isActive: boolean) => {
-    return isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+    return isActive ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
   };
 
   if (isLoading) {
@@ -190,8 +190,8 @@ function Employees() {
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-secondary-950">Employees</h1>
-          <p className="mt-2 text-sm text-secondary-600">
+          <h1 className="text-2xl font-semibold text-secondary-950 dark:text-white">Employees</h1>
+          <p className="mt-2 text-sm text-secondary-600 dark:text-gray-400">
             Manage your team members and their information
           </p>
         </div>
@@ -410,17 +410,17 @@ function Employees() {
               </thead>
               <tbody>
                 {filteredEmployees.map((employee: any) => (
-                  <tr key={employee.id} className="border-b hover:bg-gray-50">
+                  <tr key={employee.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="py-3 px-4">
                       <div className="flex items-center">
-                        <div className="w-10 h-10 bg-secondary-200 rounded-full flex items-center justify-center mr-3">
-                          <span className="text-sm font-medium">
+                        <div className="w-10 h-10 bg-secondary-200 dark:bg-gray-700 rounded-full flex items-center justify-center mr-3">
+                          <span className="text-sm font-medium text-secondary-700 dark:text-gray-200">
                             {employee.firstName?.[0]}{employee.lastName?.[0]}
                           </span>
                         </div>
                         <div>
-                          <div className="font-medium">{employee.firstName} {employee.lastName}</div>
-                          <div className="text-sm text-secondary-500">{employee.email}</div>
+                          <div className="font-medium text-gray-900 dark:text-white">{employee.firstName} {employee.lastName}</div>
+                          <div className="text-sm text-secondary-500 dark:text-gray-400">{employee.email}</div>
                         </div>
                       </div>
                     </td>

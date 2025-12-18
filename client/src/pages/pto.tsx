@@ -389,10 +389,10 @@ function PTO() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'APPROVED': return 'bg-green-100 text-green-800';
-      case 'DENIED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'PENDING': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      case 'APPROVED': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'DENIED': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     }
   };
 
@@ -473,8 +473,8 @@ function PTO() {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-secondary-950">PTO Management</h1>
-        <p className="mt-2 text-sm text-secondary-600">
+        <h1 className="text-2xl font-semibold text-secondary-950 dark:text-white">PTO Management</h1>
+        <p className="mt-2 text-sm text-secondary-600 dark:text-gray-400">
           Manage time off requests and PTO policies at company, department, and individual levels
         </p>
       </div>
@@ -541,9 +541,9 @@ function PTO() {
 
             {/* Check for department-specific policy */}
             {user && departmentSettings?.find((d: any) => d.department === user.department) && (
-              <Alert className="border-blue-200 bg-blue-50">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertDescription>
+              <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-800 dark:text-blue-200">
                   <strong>Note:</strong> Your department has a custom PTO policy that overrides the company policy.
                 </AlertDescription>
               </Alert>
@@ -551,9 +551,9 @@ function PTO() {
 
             {/* Check for individual policy */}
             {user && individualPolicies?.find((p: any) => p.employeeId === user.id) && (
-              <Alert className="border-green-200 bg-green-50">
-                <Info className="h-4 w-4 text-green-600" />
-                <AlertDescription>
+              <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+                <Info className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <AlertDescription className="text-green-800 dark:text-green-200">
                   <strong>Note:</strong> You have a custom individual PTO policy that overrides department and company policies.
                 </AlertDescription>
               </Alert>
@@ -663,17 +663,17 @@ function PTO() {
                 {ptoRequests?.map((request: any) => {
                   const employee = getUserById(request.employeeId);
                   return (
-                    <tr key={request.id} className="border-b hover:bg-gray-50">
+                    <tr key={request.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="py-3 px-4">
                         <div className="flex items-center">
-                          <div className="w-8 h-8 bg-secondary-200 rounded-full flex items-center justify-center mr-3">
-                            <span className="text-xs font-medium">
+                          <div className="w-8 h-8 bg-secondary-200 dark:bg-gray-700 rounded-full flex items-center justify-center mr-3">
+                            <span className="text-xs font-medium text-secondary-700 dark:text-gray-200">
                               {employee?.firstName?.[0]}{employee?.lastName?.[0]}
                             </span>
                           </div>
                           <div>
-                            <div className="font-medium">{employee?.firstName} {employee?.lastName}</div>
-                            <div className="text-sm text-secondary-500">{employee?.position}</div>
+                            <div className="font-medium text-gray-900 dark:text-white">{employee?.firstName} {employee?.lastName}</div>
+                            <div className="text-sm text-secondary-500 dark:text-gray-400">{employee?.position}</div>
                           </div>
                         </div>
                       </td>
