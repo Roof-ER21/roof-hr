@@ -434,8 +434,8 @@ function EnhancedEmployees() {
       {/* Header */}
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Employee Management</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Employee Management</h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-300">
             Comprehensive employee directory with {totalEmployees} total employees
           </p>
         </div>
@@ -702,8 +702,8 @@ function EnhancedEmployees() {
             <div className="flex items-center">
               <Users className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Employees</p>
-                <p className="text-2xl font-bold text-gray-900">{totalEmployees}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Total Employees</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalEmployees}</p>
               </div>
             </div>
           </CardContent>
@@ -713,8 +713,8 @@ function EnhancedEmployees() {
             <div className="flex items-center">
               <TrendingUp className="h-8 w-8 text-green-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active</p>
-                <p className="text-2xl font-bold text-gray-900">{activeEmployees}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Active</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{activeEmployees}</p>
               </div>
             </div>
           </CardContent>
@@ -724,8 +724,8 @@ function EnhancedEmployees() {
             <div className="flex items-center">
               <Building className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Departments</p>
-                <p className="text-2xl font-bold text-gray-900">{departments.length}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Departments</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{departments.length}</p>
               </div>
             </div>
           </CardContent>
@@ -735,8 +735,8 @@ function EnhancedEmployees() {
             <div className="flex items-center">
               <Award className="h-8 w-8 text-yellow-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">New This Month</p>
-                <p className="text-2xl font-bold text-gray-900">3</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">New This Month</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">3</p>
               </div>
             </div>
           </CardContent>
@@ -867,10 +867,10 @@ function EnhancedEmployees() {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <h3 className="font-semibold text-gray-900">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">
                             {employee.firstName} {employee.lastName}
                           </h3>
-                          <p className="text-sm text-gray-600">{employee.position}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">{employee.position}</p>
                         </div>
                       </div>
                       <DropdownMenu>

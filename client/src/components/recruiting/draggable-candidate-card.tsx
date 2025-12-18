@@ -103,7 +103,7 @@ export function DraggableCandidateCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center justify-between px-3 py-2 bg-white border rounded-lg cursor-pointer hover:bg-gray-50 hover:shadow-sm transition-all duration-150 border-l-4 ${positionColor.border} ${
+      className={`flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 hover:shadow-sm transition-all duration-150 border-l-4 ${positionColor.border} ${
         isDragging ? 'opacity-50 shadow-lg scale-105 z-50' : ''
       }`}
       onClick={handleCardClick}
@@ -111,7 +111,7 @@ export function DraggableCandidateCard({
     >
       {/* Name and dead type badge */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
-        <span className="text-sm font-medium text-gray-900 truncate">
+        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
           {candidate.firstName} {candidate.lastName}
         </span>
         {/* Show dead type badge if applicable */}

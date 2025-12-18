@@ -64,15 +64,15 @@ function DroppableColumn({ status, children }: { status: string; children: React
 }
 
 const stages = {
-  APPLIED: { name: 'Application Review', next: 'SCREENING', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  SCREENING: { name: 'Phone Screening', next: 'INTERVIEW', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-  INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
-  OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  HIRED: { name: 'Hired', next: null, color: 'bg-green-600 text-white dark:bg-green-700 dark:text-white' },
-  DEAD: { name: 'Dead', next: null, color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
+  APPLIED: { name: 'Application Review', next: 'SCREENING', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  SCREENING: { name: 'Phone Screening', next: 'INTERVIEW', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  HIRED: { name: 'Hired', next: null, color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 font-semibold' },
+  DEAD: { name: 'Dead', next: null, color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 font-semibold' },
   // Keep these for internal status but combine in display
-  DEAD_BY_US: { name: 'DEAD by us', next: null, color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
-  DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' }
+  DEAD_BY_US: { name: 'DEAD by us', next: null, color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 font-semibold' }
 };
 
 // Display stages for Kanban view (combines DEAD_BY_US and DEAD_BY_CANDIDATE into one column)
@@ -1393,8 +1393,8 @@ export default function EnhancedRecruiting() {
               <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                 {kanbanStages.map(status => (
                   <DroppableColumn key={status} status={status}>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="font-medium mb-3 flex items-center justify-between">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                      <h3 className="font-medium mb-3 flex items-center justify-between text-gray-900 dark:text-white">
                         {stages[status].name}
                         <Badge className={stages[status].color}>
                           {candidatesByStatus[status as keyof typeof candidatesByStatus]?.length || 0}

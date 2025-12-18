@@ -191,7 +191,7 @@ function Employees() {
       <div className="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-secondary-950 dark:text-white">Employees</h1>
-          <p className="mt-2 text-sm text-secondary-600 dark:text-gray-400">
+          <p className="mt-2 text-sm text-secondary-600 dark:text-white">
             Manage your team members and their information
           </p>
         </div>
@@ -420,7 +420,7 @@ function Employees() {
                         </div>
                         <div>
                           <div className="font-medium text-gray-900 dark:text-white">{employee.firstName} {employee.lastName}</div>
-                          <div className="text-sm text-secondary-500 dark:text-gray-400">{employee.email}</div>
+                          <div className="text-sm text-secondary-500 dark:text-white">{employee.email}</div>
                         </div>
                       </div>
                     </td>
