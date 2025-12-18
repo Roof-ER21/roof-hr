@@ -821,8 +821,8 @@ export function Tools() {
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Tools & Equipment {isManager ? 'Management' : ''}</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tools & Equipment {isManager ? 'Management' : ''}</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-1">
             {isManager ? 'Manage company tools and equipment assignments' : 'View your assigned tools and equipment'}
           </p>
         </div>
@@ -1121,14 +1121,14 @@ export function Tools() {
                       onOpenChange={() => toggleEmployeeExpand(group.employeeId)}
                     >
                       <CollapsibleTrigger asChild>
-                        <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors">
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg cursor-pointer transition-colors">
                           <div className="flex items-center gap-3">
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100">
-                              <User className="h-5 w-5 text-blue-600" />
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900">
+                              <User className="h-5 w-5 text-blue-600 dark:text-blue-300" />
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-900">{group.employeeName}</div>
-                              <div className="text-sm text-gray-500">{group.employeeEmail}</div>
+                              <div className="font-semibold text-gray-900 dark:text-white">{group.employeeName}</div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">{group.employeeEmail}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
@@ -1148,15 +1148,15 @@ export function Tools() {
                           {group.assignments.map((assignment: Assignment) => (
                             <div
                               key={assignment.id}
-                              className="flex items-center justify-between p-3 bg-white border rounded-lg hover:shadow-sm transition-shadow"
+                              className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg hover:shadow-sm transition-shadow"
                             >
                               <div className="flex items-center gap-3">
-                                <div className="flex items-center justify-center w-8 h-8 rounded bg-gray-100">
+                                <div className="flex items-center justify-center w-8 h-8 rounded bg-gray-100 dark:bg-gray-700">
                                   {categoryIcons[assignment.toolCategory as keyof typeof categoryIcons]}
                                 </div>
                                 <div>
-                                  <div className="font-medium text-gray-900">{assignment.toolName}</div>
-                                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <div className="font-medium text-gray-900 dark:text-white">{assignment.toolName}</div>
+                                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                                     {assignment.toolSerialNumber && (
                                       <span>SN: {assignment.toolSerialNumber}</span>
                                     )}
@@ -1237,7 +1237,7 @@ export function Tools() {
                       <Fragment key={group.key}>
                         {/* Category header row */}
                         <TableRow
-                          className="cursor-pointer hover:bg-blue-50/50 bg-gray-50/80"
+                          className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-gray-700 bg-gray-50/80 dark:bg-gray-800"
                           onClick={() => toggleClothingGroup(group.key)}
                         >
                           <TableCell className="font-semibold">
@@ -1245,10 +1245,10 @@ export function Tools() {
                               {expandedClothingGroups.has(group.key) ? (
                                 <ChevronDown className="h-5 w-5 text-blue-600" />
                               ) : (
-                                <ChevronRight className="h-5 w-5 text-gray-500" />
+                                <ChevronRight className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                               )}
                               {categoryIcons[group.icon]}
-                              <span className="text-base">{group.label}</span>
+                              <span className="text-base text-gray-900 dark:text-white">{group.label}</span>
                               <Badge variant="outline" className="text-xs ml-2">
                                 {group.itemCount} items
                               </Badge>
@@ -1369,8 +1369,8 @@ export function Tools() {
 
                             {/* Filtered clothing items */}
                             {filteredClothingItems.map((tool) => (
-                              <TableRow key={tool.id} className="bg-white hover:bg-gray-50">
-                                <TableCell className="font-medium pl-10">
+                              <TableRow key={tool.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <TableCell className="font-medium pl-10 text-gray-900 dark:text-white">
                                   {tool.name}
                                 </TableCell>
                                 <TableCell>
@@ -1464,8 +1464,8 @@ export function Tools() {
 
                         {/* Expanded items for non-clothing categories (tech, equipment) */}
                         {expandedClothingGroups.has(group.key) && group.key !== 'clothing' && group.items.map((tool) => (
-                          <TableRow key={tool.id} className="bg-white hover:bg-gray-50">
-                            <TableCell className="font-medium pl-10">
+                          <TableRow key={tool.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <TableCell className="font-medium pl-10 text-gray-900 dark:text-white">
                               {tool.name}
                             </TableCell>
                             <TableCell>

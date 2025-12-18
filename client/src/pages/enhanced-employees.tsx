@@ -1063,10 +1063,10 @@ function EnhancedEmployees() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-gray-900">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     {selectedEmployee.firstName} {selectedEmployee.lastName}
                   </h2>
-                  <p className="text-lg text-gray-600">{selectedEmployee.position}</p>
+                  <p className="text-lg text-gray-600 dark:text-gray-300">{selectedEmployee.position}</p>
                   <div className="flex gap-2 mt-2">
                     <Badge className={getRoleColor(selectedEmployee.role)} variant="secondary">
                       {selectedEmployee.role}
@@ -1088,27 +1088,27 @@ function EnhancedEmployees() {
                 <TabsContent value="details" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Email</Label>
-                      <p className="text-sm text-gray-900">{selectedEmployee.email}</p>
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</Label>
+                      <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.email}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Department</Label>
-                      <p className="text-sm text-gray-900">{selectedEmployee.department}</p>
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Department</Label>
+                      <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.department}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Hire Date</Label>
-                      <p className="text-sm text-gray-900">
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Hire Date</Label>
+                      <p className="text-sm text-gray-900 dark:text-white">
                         {new Date(selectedEmployee.hireDate).toLocaleDateString()}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Employment Type</Label>
-                      <p className="text-sm text-gray-900">{selectedEmployee.employmentType}</p>
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Employment Type</Label>
+                      <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.employmentType}</p>
                     </div>
                     {selectedEmployee.shirtSize && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">Shirt Size</Label>
-                        <p className="text-sm text-gray-900">{selectedEmployee.shirtSize}</p>
+                        <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Shirt Size</Label>
+                        <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.shirtSize}</p>
                       </div>
                     )}
                   </div>
@@ -1118,26 +1118,26 @@ function EnhancedEmployees() {
                   <div className="grid grid-cols-1 gap-4">
                     {selectedEmployee.phone && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">Phone</Label>
-                        <p className="text-sm text-gray-900">{selectedEmployee.phone}</p>
+                        <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</Label>
+                        <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.phone}</p>
                       </div>
                     )}
                     {selectedEmployee.address && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">Address</Label>
-                        <p className="text-sm text-gray-900">{selectedEmployee.address}</p>
+                        <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Address</Label>
+                        <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.address}</p>
                       </div>
                     )}
                     {selectedEmployee.emergencyContact && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">Emergency Contact</Label>
-                        <p className="text-sm text-gray-900">{selectedEmployee.emergencyContact}</p>
+                        <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Emergency Contact</Label>
+                        <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.emergencyContact}</p>
                       </div>
                     )}
                     {selectedEmployee.emergencyPhone && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">Emergency Phone</Label>
-                        <p className="text-sm text-gray-900">{selectedEmployee.emergencyPhone}</p>
+                        <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Emergency Phone</Label>
+                        <p className="text-sm text-gray-900 dark:text-white">{selectedEmployee.emergencyPhone}</p>
                       </div>
                     )}
                   </div>
@@ -1146,23 +1146,23 @@ function EnhancedEmployees() {
                 <TabsContent value="employment" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Employee ID</Label>
-                      <p className="text-sm text-gray-900 font-mono">{selectedEmployee.id}</p>
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Employee ID</Label>
+                      <p className="text-sm text-gray-900 dark:text-white font-mono">{selectedEmployee.id}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Account Created</Label>
-                      <p className="text-sm text-gray-900">
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Account Created</Label>
+                      <p className="text-sm text-gray-900 dark:text-white">
                         {new Date(selectedEmployee.createdAt).toLocaleDateString()}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Last Updated</Label>
-                      <p className="text-sm text-gray-900">
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</Label>
+                      <p className="text-sm text-gray-900 dark:text-white">
                         {new Date(selectedEmployee.updatedAt).toLocaleDateString()}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Status</Label>
+                      <Label className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</Label>
                       <Badge className={getStatusColor(selectedEmployee.isActive)} variant="secondary">
                         {selectedEmployee.isActive ? 'Active' : 'Inactive'}
                       </Badge>

@@ -537,13 +537,13 @@ export function EquipmentAgreementsSection() {
 
             <div className="space-y-2">
               <Label>Equipment Items</Label>
-              <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+              <div className="border dark:border-gray-600 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto bg-white dark:bg-gray-800">
                 {newItems.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-2">No items added</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No items added</p>
                 ) : (
                   newItems.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                      <span className="text-sm">
+                    <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-2 rounded">
+                      <span className="text-sm text-gray-900 dark:text-white">
                         {item.name} {item.quantity > 1 && `(x${item.quantity})`}
                       </span>
                       <Button
@@ -564,7 +564,7 @@ export function EquipmentAgreementsSection() {
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
                 placeholder="Add new item..."
-                className="flex-1"
+                className="flex-1 dark:bg-gray-700 dark:text-white dark:border-gray-600"
                 onKeyPress={(e) => e.key === 'Enter' && handleAddItem()}
               />
               <Input
@@ -572,7 +572,7 @@ export function EquipmentAgreementsSection() {
                 min={1}
                 value={newItemQuantity}
                 onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
-                className="w-20"
+                className="w-20 dark:bg-gray-700 dark:text-white dark:border-gray-600"
               />
               <Button variant="outline" onClick={handleAddItem}>
                 <Plus className="h-4 w-4" />
