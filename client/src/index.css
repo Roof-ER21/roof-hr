@@ -29,25 +29,42 @@
   }
 
   .dark {
-    --background: hsl(0, 0%, 4%);
-    --foreground: hsl(0, 0%, 98%);
-    --card: hsl(0, 0%, 4%);
-    --card-foreground: hsl(0, 0%, 98%);
-    --popover: hsl(0, 0%, 4%);
-    --popover-foreground: hsl(0, 0%, 98%);
-    --primary: hsl(0, 97%, 36%);
-    --primary-foreground: hsl(0, 0%, 98%);
-    --secondary: hsl(0, 0%, 19%);
-    --secondary-foreground: hsl(0, 0%, 98%);
-    --muted: hsl(0, 0%, 10%);
-    --muted-foreground: hsl(0, 0%, 65%);
-    --accent: hsl(0, 0%, 10%);
-    --accent-foreground: hsl(0, 0%, 98%);
-    --destructive: hsl(0, 62%, 30%);
-    --destructive-foreground: hsl(0, 0%, 98%);
-    --border: hsl(0, 0%, 15%);
-    --input: hsl(0, 0%, 15%);
-    --ring: hsl(0, 97%, 36%);
+    /* Pure black/charcoal backgrounds - NO blue tones */
+    --background: 0 0% 7%;           /* #121212 - Main background */
+    --foreground: 0 0% 98%;          /* #FAFAFA - Primary text */
+
+    --card: 0 0% 10%;                /* #1A1A1A - Cards, elevated surfaces */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Keep red primary - brand color */
+    --primary: 0 97% 36%;            /* Red accent */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 18%;           /* #2E2E2E - Secondary elements */
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 15%;               /* #262626 - Muted backgrounds */
+    --muted-foreground: 0 0% 65%;    /* Better contrast for muted text */
+
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 22%;              /* #383838 - Visible borders */
+    --input: 0 0% 22%;
+    --ring: 0 97% 36%;               /* Red ring for focus */
+
+    /* Sidebar specific */
+    --sidebar-background: 0 0% 9%;   /* #171717 - Sidebar bg */
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
   }
 }
 

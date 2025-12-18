@@ -32,7 +32,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const toggleDarkMode = () => setIsDark(!isDark);
 
   return (
-    <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
+    <header className="bg-white dark:bg-[#171717] shadow-sm border-b border-gray-200 dark:border-[#2E2E2E] transition-colors">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
@@ -47,7 +47,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             </Button>
             <div className="ml-4 md:ml-0">
               <h1 className="text-2xl font-semibold text-secondary-950 dark:text-white">Dashboard</h1>
-              <p className="text-sm text-secondary-600 dark:text-gray-400">
+              <p className="text-sm text-secondary-600 dark:text-gray-300">
                 Welcome back, {user?.firstName}. Here's what's happening today.
               </p>
             </div>
@@ -59,7 +59,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               size="icon"
               onClick={toggleDarkMode}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className="text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#262626]"
             >
               {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </Button>
@@ -68,7 +68,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             <Button
               variant="ghost"
               onClick={logout}
-              className="text-sm dark:text-gray-300"
+              className="text-sm dark:text-gray-200"
             >
               Logout
             </Button>
