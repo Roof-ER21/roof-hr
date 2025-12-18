@@ -259,6 +259,23 @@ export function EquipmentAgreementsSection() {
     }
   };
 
+  // Get summary of received items (e.g., "3/5 received" or "5 items" for pending)
+  const getReceivedSummary = (itemsJson: string | null): string => {
+    if (!itemsJson) return '0 items';
+    try {
+      const parsedItems = JSON.parse(itemsJson);
+      const total = parsedItems.length;
+      const received = parsedItems.filter((item: EquipmentItem) => item.received === true).length;
+      // Only show received count if agreement has been signed (has received data)
+      if (parsedItems.some((item: EquipmentItem) => item.received !== undefined)) {
+        return `${received}/${total} received`;
+      }
+      return `${total} items`;
+    } catch {
+      return '0 items';
+    }
+  };
+
   const filteredAgreements = agreements.filter(agreement => {
     const matchesSearch = !searchTerm ||
       agreement.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -397,7 +414,7 @@ export function EquipmentAgreementsSection() {
                             </div>
                             <p className="text-sm text-gray-600">{agreement.employeeEmail}</p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {items.length} items • Created {new Date(agreement.createdAt).toLocaleDateString()}
+                              {getReceivedSummary(agreement.items)} • Created {new Date(agreement.createdAt).toLocaleDateString()}
                               {agreement.signedAt && ` • Signed ${new Date(agreement.signedAt).toLocaleDateString()}`}
                             </p>
                           </div>

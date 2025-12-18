@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle2, AlertCircle, Eraser, Package, Clock, Lock, CalendarClock } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Eraser, Package, Clock, Lock, CalendarClock, Eye, PenLine } from 'lucide-react';
 
 interface EquipmentItem {
   name: string;
@@ -141,6 +141,7 @@ export default function EquipmentAgreementForm() {
   const [signature, setSignature] = useState<string | null>(null);
   const [items, setItems] = useState<EquipmentItem[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
 
   // Fetch agreement data
   const { data: agreement, isLoading, error } = useQuery<AgreementData>({
@@ -333,6 +334,24 @@ export default function EquipmentAgreementForm() {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* Review Mode Banner - when start date reached but not yet reviewed */}
+          {isStartDateReached && !hasReviewed && (
+            <Card className="mb-6 bg-green-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="text-lg text-green-800 flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Review Your Equipment Agreement
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-green-900">
+                <p>
+                  Please carefully review the equipment items listed below and the return policy.
+                  Once you've reviewed everything, click the button at the bottom to proceed to signing.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Equipment Items */}
           <Card className="mb-6">
             <CardHeader>
@@ -341,13 +360,16 @@ export default function EquipmentAgreementForm() {
                 <CardTitle className="text-lg">Equipment Provided</CardTitle>
               </div>
               <CardDescription>
-                Please check each item you have received from the company
+                {isStartDateReached && hasReviewed
+                  ? 'Please check each item you have received from the company'
+                  : 'Review the equipment items you will receive'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {items.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No equipment items listed</p>
-              ) : (
+              ) : isStartDateReached && hasReviewed ? (
+                // Sign mode - with checkboxes
                 <div className="space-y-3">
                   {items.map((item, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -360,6 +382,27 @@ export default function EquipmentAgreementForm() {
                         <Label htmlFor={`item-${index}`} className="font-medium cursor-pointer">
                           {item.name}
                         </Label>
+                      </div>
+                      {item.quantity > 1 && (
+                        <span className="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                          Qty: {item.quantity}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                // Review mode - read-only list (no checkboxes)
+                <div className="space-y-3">
+                  {items.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-4 h-4 rounded border border-gray-300 bg-white flex items-center justify-center">
+                          <Package className="w-3 h-3 text-gray-400" />
+                        </div>
+                        <span className="font-medium text-gray-700">
+                          {item.name}
+                        </span>
                       </div>
                       {item.quantity > 1 && (
                         <span className="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded">
@@ -454,10 +497,14 @@ export default function EquipmentAgreementForm() {
           )}
 
           {/* Signature Section */}
-          {isStartDateReached ? (
+          {isStartDateReached && hasReviewed ? (
+            // Sign mode - show signature canvas
             <Card className="mb-6">
               <CardHeader>
-                <CardTitle className="text-lg">Sign Below</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <PenLine className="h-5 w-5 text-primary" />
+                  Sign Below
+                </CardTitle>
                 <CardDescription>
                   Please sign to confirm you have received the equipment items listed above
                 </CardDescription>
@@ -492,7 +539,24 @@ export default function EquipmentAgreementForm() {
                 </div>
               </CardContent>
             </Card>
+          ) : isStartDateReached && !hasReviewed ? (
+            // Review mode - show message about signing after review
+            <Card className="mb-6 bg-gray-50 border-gray-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-gray-600">
+                  <PenLine className="h-5 w-5" />
+                  Signature (After Review)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm">
+                  After reviewing the equipment list and return policy above, click the button below
+                  to proceed to signing.
+                </p>
+              </CardContent>
+            </Card>
           ) : (
+            // Locked mode - before start date
             <Card className="mb-6 opacity-60">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-gray-500">
@@ -509,31 +573,49 @@ export default function EquipmentAgreementForm() {
             </Card>
           )}
 
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            disabled={!isStartDateReached || submitMutation.isPending || !signature}
-          >
-            {!isStartDateReached ? (
-              <>
-                <Lock className="h-4 w-4 mr-2" />
-                Available on Start Date
-              </>
-            ) : submitMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              'Sign Agreement'
-            )}
-          </Button>
+          {/* Action Buttons */}
+          {isStartDateReached && !hasReviewed ? (
+            // Review mode - show "Continue to Sign" button
+            <Button
+              type="button"
+              className="w-full bg-green-600 hover:bg-green-700"
+              size="lg"
+              onClick={() => setHasReviewed(true)}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              I've Reviewed - Continue to Sign
+            </Button>
+          ) : (
+            // Submit button (locked or sign mode)
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={!isStartDateReached || !hasReviewed || submitMutation.isPending || !signature}
+            >
+              {!isStartDateReached ? (
+                <>
+                  <Lock className="h-4 w-4 mr-2" />
+                  Available on Start Date
+                </>
+              ) : submitMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <PenLine className="h-4 w-4 mr-2" />
+                  Sign Agreement
+                </>
+              )}
+            </Button>
+          )}
 
           <p className="text-center text-sm text-gray-500 mt-4">
-            By signing and submitting this form, you acknowledge receipt of the equipment items listed above
-            and agree to the Equipment Return Policy.
+            {isStartDateReached && !hasReviewed
+              ? 'Review the equipment list and return policy, then click above to proceed to signing.'
+              : 'By signing and submitting this form, you acknowledge receipt of the equipment items listed above and agree to the Equipment Return Policy.'}
           </p>
         </form>
       </div>

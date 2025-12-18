@@ -595,8 +595,142 @@ router.get('/api/users', requireAuth, async (req, res) => {
 
 router.patch('/api/users/:id', requireAuth, requireManager, async (req, res) => {
   try {
+    // Get current user to check if terminationDate is being set
+    const currentUser = await storage.getUser(req.params.id);
+    const isTerminating = req.body.terminationDate && !currentUser?.terminationDate;
+
     const user = await storage.updateUser(req.params.id, req.body);
     const { passwordHash, ...safeUser } = user;
+
+    // Auto-trigger termination workflow if terminationDate is being set for the first time
+    if (isTerminating && user.email) {
+      try {
+        console.log(`[Termination] Auto-triggering workflow for ${user.firstName} ${user.lastName}`);
+
+        // Create equipment return checklist
+        const accessToken = uuidv4();
+        const checklist = await storage.createEquipmentChecklist({
+          employeeId: user.id,
+          employeeName: `${user.firstName} ${user.lastName}`,
+          employeeEmail: user.email,
+          accessToken,
+          type: 'RETURNED',
+          status: 'PENDING',
+        });
+
+        // Create termination reminder linked to checklist
+        const reminder = await storage.createTerminationReminder({
+          employeeId: user.id,
+          employeeName: `${user.firstName} ${user.lastName}`,
+          employeeEmail: user.email,
+          terminationDate: new Date(req.body.terminationDate),
+          equipmentChecklistId: checklist.id,
+          formSentAt: new Date(),
+        });
+
+        // Send equipment return email
+        const baseUrl = process.env.APP_URL || 'http://localhost:5050';
+        const scheduleUrl = `${baseUrl}/equipment-return/${accessToken}`;
+        const checklistUrl = `${baseUrl}/equipment-checklist/${accessToken}`;
+
+        const emailService = new EmailService();
+        await emailService.initialize();
+
+        const termDate = new Date(req.body.terminationDate);
+        const formattedTermDate = termDate.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+
+        await emailService.sendEmail({
+          to: user.email,
+          cc: ['careers@theroofdocs.com', 'support@theroofdocs.com'],
+          subject: 'Equipment Return Required - Schedule Your Dropoff',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+              <div style="background-color: #1e3a5f; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">Equipment Return Required</h1>
+              </div>
+
+              <div style="padding: 30px;">
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
+
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  As part of your offboarding process (effective ${formattedTermDate}), you are required to return all company equipment.
+                </p>
+
+                <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                  <strong style="color: #92400e;">⚠️ Important:</strong>
+                  <p style="margin: 10px 0 0 0; color: #78350f;">
+                    All equipment must be returned within <strong>15 days</strong> of your termination date.
+                    Unreturned items will result in paycheck deductions per the equipment agreement you signed.
+                  </p>
+                </div>
+
+                <h3 style="color: #1e3a5f; margin-top: 25px;">Step 1: Schedule Your Dropoff</h3>
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  Select a convenient date and time to drop off your equipment at the office.
+                </p>
+                <div style="text-align: center; margin: 20px 0;">
+                  <a href="${scheduleUrl}"
+                     style="display: inline-block; background-color: #2563eb; color: white; padding: 14px 28px;
+                            text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                    📅 Schedule Dropoff Time
+                  </a>
+                </div>
+
+                <h3 style="color: #1e3a5f; margin-top: 25px;">Step 2: Bring Your Equipment</h3>
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  On your scheduled day, bring all company equipment to the office.
+                </p>
+
+                <h3 style="color: #1e3a5f; margin-top: 25px;">Step 3: Sign Equipment Return Form</h3>
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  After returning your items, complete the equipment return checklist.
+                </p>
+                <div style="text-align: center; margin: 20px 0;">
+                  <a href="${checklistUrl}"
+                     style="display: inline-block; background-color: #059669; color: white; padding: 14px 28px;
+                            text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                    ✅ Complete Return Checklist
+                  </a>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+                <p style="font-size: 13px; color: #666;">
+                  <strong>Schedule Link:</strong> <a href="${scheduleUrl}" style="color: #2563eb;">${scheduleUrl}</a><br>
+                  <strong>Checklist Link:</strong> <a href="${checklistUrl}" style="color: #059669;">${checklistUrl}</a>
+                </p>
+
+                <p style="font-size: 15px; line-height: 1.7; color: #333; margin-top: 20px;">
+                  If you have any questions, please contact HR at careers@theroofdocs.com
+                </p>
+
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  Thank you,<br>
+                  <strong>Roof-ER HR Team</strong>
+                </p>
+              </div>
+
+              <div style="background-color: #f9fafb; padding: 15px; text-align: center;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                  This is an automated message from the Roof-ER HR system.
+                </p>
+              </div>
+            </div>
+          `,
+        });
+
+        console.log(`[Termination] Equipment return email sent to ${user.email}`);
+      } catch (termError) {
+        console.error('[Termination] Error triggering workflow:', termError);
+        // Don't fail the user update if termination workflow fails
+      }
+    }
+
     res.json(safeUser);
   } catch (error) {
     res.status(400).json({ error: 'Failed to update user' });
@@ -3060,18 +3194,11 @@ export function registerRoutes(app: express.Application) {
         return res.status(400).json({ error: 'Employee ID, name, email, and termination date are required' });
       }
 
-      // Create termination reminder
-      const reminder = await storage.createTerminationReminder({
-        employeeId,
-        employeeName,
-        employeeEmail,
-        terminationDate: new Date(terminationDate),
-        formSentAt: sendEquipmentForm ? new Date() : null,
-      });
+      let checklistId = null;
+      let scheduleUrl = null;
+      let checklistUrl = null;
 
-      let formUrl = null;
-
-      // Create equipment return checklist if requested
+      // Create equipment return checklist FIRST if requested (so we can link it to reminder)
       if (sendEquipmentForm) {
         const accessToken = uuidv4();
         const checklist = await storage.createEquipmentChecklist({
@@ -3083,29 +3210,116 @@ export function registerRoutes(app: express.Application) {
           status: 'PENDING',
         });
 
-        // Generate form URL
+        checklistId = checklist.id;
         const baseUrl = process.env.APP_URL || 'http://localhost:5050';
-        formUrl = `${baseUrl}/equipment-checklist/${accessToken}`;
+        scheduleUrl = `${baseUrl}/equipment-return/${accessToken}`;  // Schedule dropoff
+        checklistUrl = `${baseUrl}/equipment-checklist/${accessToken}`;  // Sign checklist
+      }
 
-        // Send email to terminated employee
+      // Create termination reminder with link to checklist
+      const reminder = await storage.createTerminationReminder({
+        employeeId,
+        employeeName,
+        employeeEmail,
+        terminationDate: new Date(terminationDate),
+        equipmentChecklistId: checklistId,
+        formSentAt: sendEquipmentForm ? new Date() : null,
+      });
+
+      // Send email to terminated employee with scheduling option
+      if (sendEquipmentForm && scheduleUrl && checklistUrl) {
         const emailService = new EmailService();
         await emailService.initialize();
 
+        const termDate = new Date(terminationDate);
+        const formattedTermDate = termDate.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+
         await emailService.sendEmail({
           to: employeeEmail,
-          subject: 'Equipment Return Required - Roof-ER',
+          cc: ['careers@theroofdocs.com', 'support@theroofdocs.com'],
+          subject: 'Equipment Return Required - Schedule Your Dropoff',
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1e3a5f;">Equipment Return Required</h2>
-              <p>Hello ${employeeName},</p>
-              <p>As part of your offboarding process, please complete the equipment return form to indicate which items you will be returning.</p>
-              <p><a href="${formUrl}" style="background-color: #1e3a5f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Complete Equipment Return Form</a></p>
-              <p>Or copy this link: ${formUrl}</p>
-              <p>Please return all company equipment within 15 days of your termination date.</p>
-              <p>Thank you,<br>Roof-ER HR Team</p>
+            <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+              <div style="background-color: #1e3a5f; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">Equipment Return Required</h1>
+              </div>
+
+              <div style="padding: 30px;">
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${employeeName},</p>
+
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  As part of your offboarding process (effective ${formattedTermDate}), you are required to return all company equipment.
+                </p>
+
+                <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                  <strong style="color: #92400e;">⚠️ Important:</strong>
+                  <p style="margin: 10px 0 0 0; color: #78350f;">
+                    All equipment must be returned within <strong>15 days</strong> of your termination date.
+                    Unreturned items will result in paycheck deductions per the equipment agreement you signed.
+                  </p>
+                </div>
+
+                <h3 style="color: #1e3a5f; margin-top: 25px;">Step 1: Schedule Your Dropoff</h3>
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  Select a convenient date and time to drop off your equipment at the office.
+                </p>
+                <div style="text-align: center; margin: 20px 0;">
+                  <a href="${scheduleUrl}"
+                     style="display: inline-block; background-color: #2563eb; color: white; padding: 14px 28px;
+                            text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                    📅 Schedule Dropoff Time
+                  </a>
+                </div>
+
+                <h3 style="color: #1e3a5f; margin-top: 25px;">Step 2: Bring Your Equipment</h3>
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  On your scheduled day, bring all company equipment to the office.
+                </p>
+
+                <h3 style="color: #1e3a5f; margin-top: 25px;">Step 3: Sign Equipment Return Form</h3>
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  After returning your items, complete the equipment return checklist.
+                </p>
+                <div style="text-align: center; margin: 20px 0;">
+                  <a href="${checklistUrl}"
+                     style="display: inline-block; background-color: #059669; color: white; padding: 14px 28px;
+                            text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                    ✅ Complete Return Checklist
+                  </a>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+                <p style="font-size: 13px; color: #666;">
+                  <strong>Schedule Link:</strong> <a href="${scheduleUrl}" style="color: #2563eb;">${scheduleUrl}</a><br>
+                  <strong>Checklist Link:</strong> <a href="${checklistUrl}" style="color: #059669;">${checklistUrl}</a>
+                </p>
+
+                <p style="font-size: 15px; line-height: 1.7; color: #333; margin-top: 20px;">
+                  If you have any questions, please contact HR at careers@theroofdocs.com
+                </p>
+
+                <p style="font-size: 15px; line-height: 1.7; color: #333;">
+                  Thank you,<br>
+                  <strong>Roof-ER HR Team</strong>
+                </p>
+              </div>
+
+              <div style="background-color: #f9fafb; padding: 15px; text-align: center;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                  This is an automated message from the Roof-ER HR system.
+                </p>
+              </div>
             </div>
           `,
         });
+
+        console.log(`[Termination] Equipment return email sent to ${employeeEmail}`);
       }
 
       res.json({
@@ -3114,8 +3328,10 @@ export function registerRoutes(app: express.Application) {
           id: reminder.id,
           employeeName: reminder.employeeName,
           terminationDate: reminder.terminationDate,
+          equipmentChecklistId: checklistId,
         },
-        formUrl,
+        scheduleUrl,
+        checklistUrl,
       });
     } catch (error) {
       console.error('Error creating termination reminder:', error);

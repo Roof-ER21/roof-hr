@@ -1492,6 +1492,7 @@ export const terminationReminders = pgTable('termination_reminders', {
   employeeName: text('employee_name').notNull(),
   employeeEmail: text('employee_email').notNull(),
   terminationDate: timestamp('termination_date').notNull(),
+  equipmentChecklistId: text('equipment_checklist_id').references(() => equipmentChecklists.id),  // Link to the equipment return checklist
   formSentAt: timestamp('form_sent_at'),
   reminderSentAt: timestamp('reminder_sent_at'),
   alertSentAt: timestamp('alert_sent_at'),  // 15-day alert sent

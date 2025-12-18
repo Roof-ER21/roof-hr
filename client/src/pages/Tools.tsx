@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import {
   Laptop, Package, Car, HardHat, Shirt, Wrench, Plus,
   Send, Edit, Trash2, CheckCircle, XCircle, Clock,
   AlertCircle, Mail, FileSignature, ArrowLeft, Search,
-  Upload, Download, RefreshCw, ChevronDown, ChevronRight, User
+  Upload, Download, RefreshCw, ChevronDown, ChevronRight, User, PenTool
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -82,6 +82,7 @@ const categoryIcons = {
   POLO: <Shirt className="h-4 w-4" />,
   LADDER: <Wrench className="h-4 w-4" />,
   IPAD: <Package className="h-4 w-4" />,
+  OFFICE: <PenTool className="h-4 w-4" />,
   OTHER: <Package className="h-4 w-4" />
 };
 
@@ -120,6 +121,16 @@ export function Tools() {
     adjustment: number;
     notes: string;
   } | null>(null);
+
+  // State for expanded clothing groups in inventory
+  const [expandedClothingGroups, setExpandedClothingGroups] = useState<Set<string>>(new Set());
+
+  // State for clothing filter selections (style, size, color)
+  const [clothingFilters, setClothingFilters] = useState<{
+    style: string;
+    size: string;
+    color: string;
+  }>({ style: '', size: '', color: '' });
 
   // New tool form state
   const [newTool, setNewTool] = useState({
@@ -464,9 +475,24 @@ export function Tools() {
   const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '3X', '4X'];
   
   // Helper function to extract size from tool name
+  // Handles multiple formats:
+  // - "Black Polo (Size 3X)" -> "3X"
+  // - "Grey Polo - Size M" -> "M"
+  // - "Black Light Quarter Zip (Used Size XXL)" -> "XXL"
   const extractSize = (toolName: string): string | null => {
-    const sizeMatch = toolName.match(/ - Size ([A-Z0-9]+)$/);
-    return sizeMatch ? sizeMatch[1] : null;
+    // Try (Used Size X) format first
+    const usedSizeMatch = toolName.match(/\(Used\s*Size\s*([A-Z0-9]+)\)/i);
+    if (usedSizeMatch) return usedSizeMatch[1];
+
+    // Try (Size X) format
+    const parenSizeMatch = toolName.match(/\(Size\s*([A-Z0-9]+)\)/i);
+    if (parenSizeMatch) return parenSizeMatch[1];
+
+    // Try " - Size X" format
+    const dashSizeMatch = toolName.match(/-\s*Size\s*([A-Z0-9]+)\s*$/i);
+    if (dashSizeMatch) return dashSizeMatch[1];
+
+    return null;
   };
   
   // Helper function to get size order index
@@ -509,6 +535,234 @@ export function Tools() {
       // For non-clothing items, sort alphabetically
       return a.name.localeCompare(b.name);
     });
+
+  // Category type definitions for grouping
+  const categoryTypes: Record<string, { label: string; icon: keyof typeof categoryIcons; categories: string[] }> = {
+    tech: {
+      label: 'Technology',
+      icon: 'LAPTOP',
+      categories: ['LAPTOP', 'IPAD']
+    },
+    clothing: {
+      label: 'Clothing & Apparel',
+      icon: 'POLO',
+      categories: ['POLO', 'OTHER']
+    },
+    equipment: {
+      label: 'Equipment & Tools',
+      icon: 'LADDER',
+      categories: ['LADDER', 'CAR', 'BOOTS']
+    },
+    office: {
+      label: 'Office Supplies',
+      icon: 'OFFICE',
+      categories: ['OFFICE']
+    }
+  };
+
+  // Get category type for a tool
+  const getCategoryType = (category: string): string => {
+    for (const [type, config] of Object.entries(categoryTypes)) {
+      if (config.categories.includes(category)) {
+        return type;
+      }
+    }
+    return 'other';
+  };
+
+  // Helper function to extract base name from clothing item
+  // Handles multiple formats:
+  // - "Black Polo (Size 3X)" -> "Black Polo"
+  // - "Grey Polo - Size M" -> "Grey Polo"
+  // - "Black Light Quarter Zip (Used Size XXL)" -> "Black Light Quarter Zip"
+  // - "Black Under Armor Zip Up - Shell & Lining (Size L)" -> "Black Under Armor Zip Up - Shell & Lining"
+  const extractBaseName = (toolName: string): string => {
+    return toolName
+      .replace(/\s*\(Used\s*Size\s*[A-Z0-9]+\)\s*$/i, '')  // (Used Size XXL)
+      .replace(/\s*\(Size\s*[A-Z0-9]+\)\s*$/i, '')         // (Size 3X)
+      .replace(/\s*-\s*Size\s*[A-Z0-9]+\s*$/i, '')         // - Size M
+      .trim();
+  };
+
+  // Helper function to extract color from clothing item name (e.g., "Grey Polo - Size M" -> "Grey")
+  const extractColor = (toolName: string): string => {
+    const baseName = extractBaseName(toolName);
+    // Common color words to look for
+    const colorPatterns = ['Grey', 'Gray', 'Black', 'White', 'Navy', 'Blue', 'Red', 'Green'];
+    for (const color of colorPatterns) {
+      if (baseName.toLowerCase().includes(color.toLowerCase())) {
+        return color;
+      }
+    }
+    return '';
+  };
+
+  // Helper function to extract style type from clothing item (e.g., "Grey Polo - Size M" -> "Polo")
+  const extractStyleType = (toolName: string): string => {
+    const baseName = extractBaseName(toolName);
+    // Remove color words to get the style type
+    const stylePatterns = ['Polo', 'Quarter Zip', 'T-Shirt', 'Jacket', 'Hoodie', 'Vest'];
+    for (const style of stylePatterns) {
+      if (baseName.toLowerCase().includes(style.toLowerCase())) {
+        return style;
+      }
+    }
+    // Fallback to category or full name
+    return baseName;
+  };
+
+  // Group items by category type (Tech, Clothing, Equipment, Office)
+  const groupedInventory = useMemo(() => {
+    const typeGroups: Record<string, Tool[]> = {
+      tech: [],
+      clothing: [],
+      equipment: [],
+      office: [],
+      other: []
+    };
+
+    filteredTools.forEach(tool => {
+      const type = getCategoryType(tool.category);
+      typeGroups[type].push(tool);
+    });
+
+    // Sort items within each group
+    Object.values(typeGroups).forEach(group => {
+      group.sort((a, b) => {
+        // Sort by category first, then by name
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category);
+        }
+        // For clothing with sizes, sort by base name then size
+        const aBase = extractBaseName(a.name);
+        const bBase = extractBaseName(b.name);
+        if (aBase !== bBase) {
+          return aBase.localeCompare(bBase);
+        }
+        return getSizeIndex(extractSize(a.name)) - getSizeIndex(extractSize(b.name));
+      });
+    });
+
+    // Build category groups array with totals
+    const groups = Object.entries(typeGroups)
+      .filter(([_, items]) => items.length > 0)
+      .map(([type, items]) => {
+        const config = categoryTypes[type] || { label: 'Other', icon: 'OTHER' as keyof typeof categoryIcons };
+        const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+        const availableQty = items.reduce((sum, item) => sum + item.availableQuantity, 0);
+        return {
+          key: type,
+          label: config.label,
+          icon: config.icon,
+          items,
+          totalQty,
+          availableQty,
+          assignedQty: totalQty - availableQty,
+          itemCount: items.length
+        };
+      });
+
+    return groups;
+  }, [filteredTools]);
+
+  // Compute unique styles, sizes, and colors for clothing items
+  const clothingOptions = useMemo(() => {
+    const clothingGroup = groupedInventory.find(g => g.key === 'clothing');
+    if (!clothingGroup) {
+      return { styles: [], sizes: [], colors: [], items: [] };
+    }
+
+    const items = clothingGroup.items;
+    const stylesSet = new Set<string>();
+    const sizesSet = new Set<string>();
+    const colorsSet = new Set<string>();
+
+    items.forEach(item => {
+      const baseName = extractBaseName(item.name);
+      stylesSet.add(baseName);
+
+      const size = extractSize(item.name);
+      if (size) sizesSet.add(size);
+
+      const color = extractColor(item.name);
+      if (color) colorsSet.add(color);
+    });
+
+    // Sort sizes by size order
+    const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '2XL', '3X', '3XL', '4X', '4XL'];
+    const sortedSizes = Array.from(sizesSet).sort((a, b) => {
+      const aIdx = sizeOrder.indexOf(a);
+      const bIdx = sizeOrder.indexOf(b);
+      if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+
+    return {
+      styles: Array.from(stylesSet).sort(),
+      sizes: sortedSizes,
+      colors: Array.from(colorsSet).sort(),
+      items
+    };
+  }, [groupedInventory]);
+
+  // Filter clothing items based on selected filters
+  const filteredClothingItems = useMemo(() => {
+    let items = clothingOptions.items;
+
+    if (clothingFilters.style) {
+      items = items.filter(item => extractBaseName(item.name) === clothingFilters.style);
+    }
+    if (clothingFilters.size) {
+      items = items.filter(item => extractSize(item.name) === clothingFilters.size);
+    }
+    if (clothingFilters.color) {
+      items = items.filter(item => {
+        const color = extractColor(item.name);
+        return color.toLowerCase() === clothingFilters.color.toLowerCase();
+      });
+    }
+
+    return items;
+  }, [clothingOptions.items, clothingFilters]);
+
+  // Compute available sizes based on selected style
+  const availableSizes = useMemo(() => {
+    if (!clothingFilters.style) {
+      return clothingOptions.sizes; // Show all sizes if no style selected
+    }
+    // Get sizes only for the selected style
+    const sizes = clothingOptions.items
+      .filter(item => extractBaseName(item.name) === clothingFilters.style)
+      .map(item => extractSize(item.name))
+      .filter((size): size is string => size !== null);
+
+    // Deduplicate and sort by size order
+    const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '2XL', '3X', '3XL', '4X', '4XL'];
+    const uniqueSizes = [...new Set(sizes)];
+    return uniqueSizes.sort((a, b) => {
+      const aIdx = sizeOrder.indexOf(a);
+      const bIdx = sizeOrder.indexOf(b);
+      if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+  }, [clothingFilters.style, clothingOptions.items, clothingOptions.sizes]);
+
+  // Toggle expand/collapse for category groups
+  const toggleClothingGroup = (key: string) => {
+    setExpandedClothingGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   // Filter active assignments based on role
   const activeAssignments = (assignments as Assignment[]).filter((a: Assignment) => {
@@ -966,95 +1220,339 @@ export function Tools() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTools.map((tool: Tool) => (
-                      <TableRow key={tool.id}>
-                        <TableCell className="font-medium">{tool.name}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {categoryIcons[tool.category as keyof typeof categoryIcons]}
-                            <span>{tool.category}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            {tool.serialNumber && (
-                              <div className="text-sm">SN: {tool.serialNumber}</div>
-                            )}
-                            {tool.model && (
-                              <div className="text-sm text-gray-500">{tool.model}</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={conditionColors[tool.condition as keyof typeof conditionColors]}>
-                            {tool.condition}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{tool.quantity}</span>
-                            {isManager && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setQuantityAdjustment({
-                                    toolId: tool.id,
-                                    toolName: tool.name,
-                                    currentQuantity: tool.quantity,
-                                    currentAvailable: tool.availableQuantity,
-                                    adjustment: 0,
-                                    notes: ''
-                                  });
-                                  setShowAdjustQuantityDialog(true);
-                                }}
-                              >
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {tool.availableQuantity > 0 ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <XCircle className="h-4 w-4 text-red-600" />
-                            )}
-                            <span className="font-medium">{tool.availableQuantity}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-muted-foreground">
-                            {tool.quantity - tool.availableQuantity}
-                          </span>
-                        </TableCell>
-                        <TableCell>{tool.location || '-'}</TableCell>
-                        {isManager && (
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedTool(tool);
-                                  setShowEditToolDialog(true);
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteTool(tool.id)}
-                                disabled={tool.availableQuantity < tool.quantity}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                    {/* Category groups: Tech, Clothing, Equipment */}
+                    {groupedInventory.map((group) => (
+                      <Fragment key={group.key}>
+                        {/* Category header row */}
+                        <TableRow
+                          className="cursor-pointer hover:bg-blue-50/50 bg-gray-50/80"
+                          onClick={() => toggleClothingGroup(group.key)}
+                        >
+                          <TableCell className="font-semibold">
+                            <div className="flex items-center gap-2">
+                              {expandedClothingGroups.has(group.key) ? (
+                                <ChevronDown className="h-5 w-5 text-blue-600" />
+                              ) : (
+                                <ChevronRight className="h-5 w-5 text-gray-500" />
+                              )}
+                              {categoryIcons[group.icon]}
+                              <span className="text-base">{group.label}</span>
+                              <Badge variant="outline" className="text-xs ml-2">
+                                {group.itemCount} items
+                              </Badge>
                             </div>
                           </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-500">Various</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-500">-</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-500">-</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-bold text-lg">{group.totalQty}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {group.availableQty > 0 ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-red-600" />
+                              )}
+                              <span className="font-bold text-lg">{group.availableQty}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium text-orange-600">{group.assignedQty}</span>
+                          </TableCell>
+                          <TableCell>-</TableCell>
+                          {isManager && <TableCell></TableCell>}
+                        </TableRow>
+
+                        {/* Expanded items within category - Clothing with filters */}
+                        {expandedClothingGroups.has(group.key) && group.key === 'clothing' && (
+                          <>
+                            {/* Dropdown filters row for clothing */}
+                            <TableRow className="bg-blue-50/30">
+                              <TableCell colSpan={isManager ? 9 : 8} className="py-4">
+                                <div className="flex flex-wrap items-center gap-4 pl-6">
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-sm font-medium whitespace-nowrap">Style:</Label>
+                                    <Select
+                                      value={clothingFilters.style}
+                                      onValueChange={(value) => setClothingFilters(prev => ({ ...prev, style: value === 'all' ? '' : value }))}
+                                    >
+                                      <SelectTrigger className="w-[180px] h-9 bg-white">
+                                        <SelectValue placeholder="All styles" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All styles</SelectItem>
+                                        {clothingOptions.styles.map(style => (
+                                          <SelectItem key={style} value={style}>{style}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-sm font-medium whitespace-nowrap">Size:</Label>
+                                    <Select
+                                      value={clothingFilters.size}
+                                      onValueChange={(value) => setClothingFilters(prev => ({ ...prev, size: value === 'all' ? '' : value }))}
+                                    >
+                                      <SelectTrigger className="w-[100px] h-9 bg-white">
+                                        <SelectValue placeholder="All sizes" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All sizes</SelectItem>
+                                        {availableSizes.map(size => (
+                                          <SelectItem key={size} value={size}>{size}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  {clothingOptions.colors.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                      <Label className="text-sm font-medium whitespace-nowrap">Color:</Label>
+                                      <Select
+                                        value={clothingFilters.color}
+                                        onValueChange={(value) => setClothingFilters(prev => ({ ...prev, color: value === 'all' ? '' : value }))}
+                                      >
+                                        <SelectTrigger className="w-[120px] h-9 bg-white">
+                                          <SelectValue placeholder="All colors" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">All colors</SelectItem>
+                                          {clothingOptions.colors.map(color => (
+                                            <SelectItem key={color} value={color}>{color}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
+
+                                  {(clothingFilters.style || clothingFilters.size || clothingFilters.color) && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-9 text-blue-600"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setClothingFilters({ style: '', size: '', color: '' });
+                                      }}
+                                    >
+                                      Clear filters
+                                    </Button>
+                                  )}
+
+                                  <Badge variant="secondary" className="ml-auto">
+                                    {filteredClothingItems.length} of {clothingOptions.items.length} items
+                                  </Badge>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+
+                            {/* Filtered clothing items */}
+                            {filteredClothingItems.map((tool) => (
+                              <TableRow key={tool.id} className="bg-white hover:bg-gray-50">
+                                <TableCell className="font-medium pl-10">
+                                  {tool.name}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {categoryIcons[tool.category as keyof typeof categoryIcons]}
+                                    <span className="text-sm">{tool.category}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-sm text-gray-400">-</span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={conditionColors[tool.condition as keyof typeof conditionColors]}>
+                                    {tool.condition}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{tool.quantity}</span>
+                                    {isManager && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setQuantityAdjustment({
+                                            toolId: tool.id,
+                                            toolName: tool.name,
+                                            currentQuantity: tool.quantity,
+                                            currentAvailable: tool.availableQuantity,
+                                            adjustment: 0,
+                                            notes: ''
+                                          });
+                                          setShowAdjustQuantityDialog(true);
+                                        }}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    {tool.availableQuantity > 0 ? (
+                                      <CheckCircle className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <XCircle className="h-4 w-4 text-red-600" />
+                                    )}
+                                    <span className="font-medium">{tool.availableQuantity}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-muted-foreground">
+                                    {tool.quantity - tool.availableQuantity}
+                                  </span>
+                                </TableCell>
+                                <TableCell>{tool.location || '-'}</TableCell>
+                                {isManager && (
+                                  <TableCell>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedTool(tool);
+                                          setShowEditToolDialog(true);
+                                        }}
+                                      >
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteTool(tool.id);
+                                        }}
+                                        disabled={tool.availableQuantity < tool.quantity}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                )}
+                              </TableRow>
+                            ))}
+                          </>
                         )}
-                      </TableRow>
+
+                        {/* Expanded items for non-clothing categories (tech, equipment) */}
+                        {expandedClothingGroups.has(group.key) && group.key !== 'clothing' && group.items.map((tool) => (
+                          <TableRow key={tool.id} className="bg-white hover:bg-gray-50">
+                            <TableCell className="font-medium pl-10">
+                              {tool.name}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {categoryIcons[tool.category as keyof typeof categoryIcons]}
+                                <span className="text-sm">{tool.category}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                {tool.serialNumber && (
+                                  <div className="text-sm">SN: {tool.serialNumber}</div>
+                                )}
+                                {tool.model && (
+                                  <div className="text-sm text-gray-500">{tool.model}</div>
+                                )}
+                                {!tool.serialNumber && !tool.model && (
+                                  <span className="text-sm text-gray-400">-</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={conditionColors[tool.condition as keyof typeof conditionColors]}>
+                                {tool.condition}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{tool.quantity}</span>
+                                {isManager && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setQuantityAdjustment({
+                                        toolId: tool.id,
+                                        toolName: tool.name,
+                                        currentQuantity: tool.quantity,
+                                        currentAvailable: tool.availableQuantity,
+                                        adjustment: 0,
+                                        notes: ''
+                                      });
+                                      setShowAdjustQuantityDialog(true);
+                                    }}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {tool.availableQuantity > 0 ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <XCircle className="h-4 w-4 text-red-600" />
+                                )}
+                                <span className="font-medium">{tool.availableQuantity}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">
+                                {tool.quantity - tool.availableQuantity}
+                              </span>
+                            </TableCell>
+                            <TableCell>{tool.location || '-'}</TableCell>
+                            {isManager && (
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedTool(tool);
+                                      setShowEditToolDialog(true);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteTool(tool.id);
+                                    }}
+                                    disabled={tool.availableQuantity < tool.quantity}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </Fragment>
                     ))}
                   </TableBody>
                 </Table>
