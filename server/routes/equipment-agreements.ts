@@ -84,7 +84,7 @@ router.post('/api/equipment-agreements', async (req: any, res) => {
     });
 
     // Send the equipment agreement email
-    const formUrl = `${process.env.APP_URL || 'https://roof-er-hr-production.up.railway.app'}/equipment-agreement/${accessToken}`;
+    const formUrl = `${process.env.APP_URL || 'https://roofhr.up.railway.app'}/equipment-agreement/${accessToken}`;
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
 
     try {
@@ -187,7 +187,7 @@ router.post('/api/equipment-agreements/:id/resend', async (req: any, res) => {
     }
 
     // Send the equipment agreement email
-    const formUrl = `${process.env.APP_URL || 'https://roof-er-hr-production.up.railway.app'}/equipment-agreement/${accessToken}`;
+    const formUrl = `${process.env.APP_URL || 'https://roofhr.up.railway.app'}/equipment-agreement/${accessToken}`;
     const parsedItems = agreement.items ? (typeof agreement.items === 'string' ? JSON.parse(agreement.items) : agreement.items) : [];
 
     try {

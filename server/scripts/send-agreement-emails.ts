@@ -55,7 +55,7 @@ async function sendAgreementEmail(agreement: AgreementData) {
   const credentials = JSON.parse(serviceAccountKey);
   const fromEmail = 'ahmed.mahmoud@theroofdocs.com';
 
-  const formUrl = `https://roof-er-hr-production.up.railway.app/equipment-agreement/${agreement.accessToken}`;
+  const formUrl = `https://roofhr.up.railway.app/equipment-agreement/${agreement.accessToken}`;
 
   const itemsHtml = agreement.items.map(item =>
     `<tr>
