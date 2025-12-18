@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle2, AlertCircle, Eraser, Package, Clock } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Eraser, Package, Clock, Lock, CalendarClock } from 'lucide-react';
 
 interface EquipmentItem {
   name: string;
@@ -20,6 +20,7 @@ interface AgreementData {
   employeeName: string;
   employeeEmail: string;
   employeeRole?: string;
+  employeeStartDate?: string;
   items: string;
   status: string;
   createdAt: string;
@@ -169,6 +170,16 @@ export default function EquipmentAgreementForm() {
       }
     }
   }, [agreement?.items]);
+
+  // Check if the start date has been reached (for locking the form)
+  const isStartDateReached = useMemo(() => {
+    if (!agreement?.employeeStartDate) return true; // No start date means no lock
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDate = new Date(agreement.employeeStartDate);
+    startDate.setHours(0, 0, 0, 0);
+    return today >= startDate;
+  }, [agreement?.employeeStartDate]);
 
   // Submit mutation
   const submitMutation = useMutation({
@@ -413,53 +424,104 @@ export default function EquipmentAgreementForm() {
             </CardContent>
           </Card>
 
-          {/* Signature Section */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg">Sign Below</CardTitle>
-              <CardDescription>
-                Please sign to confirm you have received the equipment items listed above
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <SignatureCanvas
-                signature={signature}
-                onSignatureChange={setSignature}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Employee Name</Label>
-                  <Input
-                    value={agreement?.employeeName || ''}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input
-                    value={new Date().toLocaleDateString('en-US', {
+          {/* Locked State Notice - Show when start date not reached */}
+          {!isStartDateReached && agreement?.employeeStartDate && (
+            <Card className="mb-6 bg-sky-50 border-sky-200">
+              <CardHeader>
+                <CardTitle className="text-lg text-sky-800 flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5" />
+                  Scheduled for Review on Your Start Date
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-sky-900 space-y-3">
+                <p>
+                  You can review your equipment agreement now, but signing will be available on your start date:{' '}
+                  <strong>
+                    {new Date(agreement.employeeStartDate).toLocaleDateString('en-US', {
+                      weekday: 'long',
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric'
                     })}
-                    disabled
-                    className="bg-gray-50"
-                  />
+                  </strong>
+                </p>
+                <p>
+                  On your start date, you will review all equipment and tools with your manager
+                  before signing to confirm receipt.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Signature Section */}
+          {isStartDateReached ? (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Sign Below</CardTitle>
+                <CardDescription>
+                  Please sign to confirm you have received the equipment items listed above
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <SignatureCanvas
+                  signature={signature}
+                  onSignatureChange={setSignature}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Employee Name</Label>
+                    <Input
+                      value={agreement?.employeeName || ''}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date</Label>
+                    <Input
+                      value={new Date().toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="mb-6 opacity-60">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-gray-500">
+                  <Lock className="h-4 w-4" />
+                  Signature (Available on Start Date)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm">
+                  The signature section will be unlocked on your start date when you
+                  will review the equipment with your manager.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Submit Button */}
           <Button
             type="submit"
             className="w-full"
             size="lg"
-            disabled={submitMutation.isPending || !signature}
+            disabled={!isStartDateReached || submitMutation.isPending || !signature}
           >
-            {submitMutation.isPending ? (
+            {!isStartDateReached ? (
+              <>
+                <Lock className="h-4 w-4 mr-2" />
+                Available on Start Date
+              </>
+            ) : submitMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Submitting...

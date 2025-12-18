@@ -22,7 +22,8 @@ import {
   RefreshCw,
   Search,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  CalendarDays
 } from 'lucide-react';
 
 interface EquipmentItem {
@@ -109,6 +110,7 @@ export function EquipmentAgreementsSection() {
   const [newEmployeeName, setNewEmployeeName] = useState('');
   const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
   const [newEmployeeRole, setNewEmployeeRole] = useState('EMPLOYEE');
+  const [newEmployeeStartDate, setNewEmployeeStartDate] = useState('');
   const [newItems, setNewItems] = useState<EquipmentItem[]>(DEFAULT_EQUIPMENT_BY_ROLE['EMPLOYEE']);
   const [newItemName, setNewItemName] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
@@ -189,6 +191,7 @@ export function EquipmentAgreementsSection() {
     setNewEmployeeName('');
     setNewEmployeeEmail('');
     setNewEmployeeRole('EMPLOYEE');
+    setNewEmployeeStartDate('');
     setNewItems(DEFAULT_EQUIPMENT_BY_ROLE['EMPLOYEE']);
     setNewItemName('');
     setNewItemQuantity(1);
@@ -234,6 +237,7 @@ export function EquipmentAgreementsSection() {
       employeeName: newEmployeeName,
       employeeEmail: newEmployeeEmail,
       employeeRole: newEmployeeRole,
+      employeeStartDate: newEmployeeStartDate || null,
       items: newItems,
     });
   };
@@ -496,6 +500,22 @@ export function EquipmentAgreementsSection() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">Role determines default equipment items</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" />
+                Employee Start Date
+              </Label>
+              <Input
+                type="date"
+                value={newEmployeeStartDate}
+                onChange={(e) => setNewEmployeeStartDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+              />
+              <p className="text-xs text-gray-500">
+                Agreement will be viewable but locked until this date. Employee will review equipment with their manager on their start date.
+              </p>
             </div>
 
             <div className="space-y-2">

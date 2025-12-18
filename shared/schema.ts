@@ -1534,6 +1534,9 @@ export const equipmentAgreements = pgTable('equipment_agreements', {
   employeeEmail: text('employee_email').notNull(),
   employeeRole: text('employee_role'),
 
+  // Start date for locking (employee can view but not sign until this date)
+  employeeStartDate: text('employee_start_date'),  // Format: YYYY-MM-DD
+
   // Public form access (no login required)
   accessToken: text('access_token').notNull().unique(),
   tokenExpiry: timestamp('token_expiry'),

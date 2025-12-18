@@ -56,7 +56,7 @@ router.post('/api/equipment-agreements', async (req: any, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const { employeeId, employeeName, employeeEmail, employeeRole, items } = req.body;
+    const { employeeId, employeeName, employeeEmail, employeeRole, items, employeeStartDate } = req.body;
 
     if (!employeeName || !employeeEmail || !items) {
       return res.status(400).json({ error: 'Missing required fields: employeeName, employeeEmail, items' });
@@ -74,6 +74,7 @@ router.post('/api/equipment-agreements', async (req: any, res) => {
       employeeName,
       employeeEmail,
       employeeRole: employeeRole || null,
+      employeeStartDate: employeeStartDate || null,
       accessToken,
       tokenExpiry,
       items: typeof items === 'string' ? items : JSON.stringify(items),
@@ -318,6 +319,7 @@ router.get('/api/public/equipment-agreement/:token', async (req, res) => {
       employeeName: agreement.employeeName,
       employeeEmail: agreement.employeeEmail,
       employeeRole: agreement.employeeRole,
+      employeeStartDate: agreement.employeeStartDate,
       items: agreement.items,
       status: agreement.status,
       createdAt: agreement.createdAt
@@ -352,6 +354,22 @@ router.post('/api/public/equipment-agreement/:token', async (req, res) => {
     // Check if already signed
     if (agreement.status === 'SIGNED') {
       return res.status(400).json({ error: 'This equipment agreement has already been signed' });
+    }
+
+    // Check if signing is allowed based on start date
+    if (agreement.employeeStartDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDate = new Date(agreement.employeeStartDate);
+      startDate.setHours(0, 0, 0, 0);
+
+      if (today < startDate) {
+        return res.status(403).json({
+          error: 'Cannot sign agreement before your start date',
+          startDate: agreement.employeeStartDate,
+          message: 'You can view this agreement, but signing will be available on your start date.'
+        });
+      }
     }
 
     // Get client IP

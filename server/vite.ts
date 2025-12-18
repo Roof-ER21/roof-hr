@@ -67,6 +67,13 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
+// Store servePath globally so notFoundHandler can access it
+let staticServePath: string | null = null;
+
+export function getStaticServePath(): string | null {
+  return staticServePath;
+}
+
 export function serveStatic(app: Express) {
   // In production, try multiple paths to find the build output
   const possiblePaths = [
@@ -90,6 +97,9 @@ export function serveStatic(app: Express) {
     );
   }
 
+  // Store for use by other modules
+  staticServePath = servePath;
+
   // Log what files are in the directory
   try {
     const files = fs.readdirSync(servePath);
@@ -101,8 +111,23 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(servePath));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  // SPA fallback: serve index.html for ALL non-API GET requests
+  // This must come AFTER express.static so actual files are served first
+  app.get("*", (req, res, next) => {
+    // Skip API routes - let them go to the 404 handler
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+
+    // Skip socket.io
+    if (req.path.startsWith('/socket.io')) {
+      return next();
+    }
+
+    // Log SPA fallback for debugging
+    console.log(`[Static] SPA fallback: ${req.path} -> index.html`);
+
+    // Serve index.html for all other routes (SPA routing)
     res.sendFile(path.resolve(servePath, "index.html"));
   });
 }
