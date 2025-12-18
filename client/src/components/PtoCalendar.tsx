@@ -142,7 +142,7 @@ export function PtoCalendar() {
         <div className="grid grid-cols-7 gap-2">
           {/* Day headers */}
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
+            <div key={day} className="text-center text-sm font-medium text-gray-600 dark:text-gray-300 py-2">
               {day}
             </div>
           ))}
@@ -158,12 +158,12 @@ export function PtoCalendar() {
                 key={index}
                 className={`
                   min-h-[100px] p-2 border rounded-lg transition-colors
-                  ${!isCurrentMonth ? 'bg-gray-50 text-gray-400' : 'bg-white'}
-                  ${isTodayDate ? 'border-blue-500 border-2' : 'border-gray-200'}
-                  ${dayPtos.length > 0 ? 'hover:bg-gray-50' : ''}
+                  ${!isCurrentMonth ? 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500' : 'bg-white dark:bg-gray-800'}
+                  ${isTodayDate ? 'border-blue-500 border-2' : 'border-gray-200 dark:border-gray-600'}
+                  ${dayPtos.length > 0 ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ''}
                 `}
               >
-                <div className="text-sm font-medium mb-1">
+                <div className="text-sm font-medium mb-1 text-gray-900 dark:text-white">
                   {format(day, 'd')}
                 </div>
                 
@@ -173,7 +173,7 @@ export function PtoCalendar() {
                       {dayPtos.slice(0, 3).map((pto, ptoIndex) => (
                         <div
                           key={`${pto.id}-${ptoIndex}`}
-                          className="text-xs p-1 rounded bg-blue-50 border border-blue-200"
+                          className="text-xs p-1 rounded bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200"
                           title={`${pto.employee?.firstName} ${pto.employee?.lastName} - ${pto.type}`}
                         >
                           <div className="flex items-center gap-1">
@@ -185,7 +185,7 @@ export function PtoCalendar() {
                         </div>
                       ))}
                       {dayPtos.length > 3 && (
-                        <div className="text-xs text-gray-500 text-center">
+                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
                           +{dayPtos.length - 3} more
                         </div>
                       )}
@@ -198,20 +198,20 @@ export function PtoCalendar() {
         </div>
 
         {/* Legend */}
-        <div className="mt-6 pt-4 border-t">
-          <h3 className="text-sm font-medium mb-3">Time Off Summary</h3>
+        <div className="mt-6 pt-4 border-t dark:border-gray-700">
+          <h3 className="text-sm font-medium mb-3 text-gray-900 dark:text-white">Time Off Summary</h3>
           <div className="space-y-2">
             {ptosWithEmployees.map(pto => (
-              <div key={pto.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+              <div key={pto.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-blue-600" />
+                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center">
+                    <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm">
+                    <p className="font-medium text-sm text-gray-900 dark:text-white">
                       {pto.employee?.firstName} {pto.employee?.lastName}
                     </p>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       {pto.employee?.department}
                     </p>
                   </div>
@@ -220,14 +220,14 @@ export function PtoCalendar() {
                   <Badge className={typeColors[pto.type]} variant="secondary">
                     {pto.type}
                   </Badge>
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
                     {format(parseISO(pto.startDate), 'MMM d')} - {format(parseISO(pto.endDate), 'MMM d')}
                   </span>
                 </div>
               </div>
             ))}
             {ptosWithEmployees.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No approved time off for {format(currentDate, 'MMMM yyyy')}
               </p>
             )}
