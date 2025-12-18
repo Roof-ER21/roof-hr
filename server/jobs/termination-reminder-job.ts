@@ -5,18 +5,31 @@ import { logger } from '../middleware/logger';
 let isRunning = false;
 let jobInterval: NodeJS.Timeout | null = null;
 
+interface ReminderJobResult {
+  weekRemindersSent: number;
+  fifteenDayAlertsSent: number;
+  thirtyDayRemindersSent: number;
+  errors: number;
+}
+
 /**
- * Check termination reminders and send 15-day alerts
- * This job runs daily to check for terminated employees whose equipment hasn't been returned
+ * Check termination reminders and send alerts at various intervals:
+ * - 7 days: If no equipment return has been scheduled
+ * - 15 days: If equipment hasn't been returned (existing)
+ * - 30 days: If no signed return form received
+ *
+ * This job runs daily to check for terminated employees
  */
-export async function checkTerminationReminders(): Promise<{ alertsSent: number; errors: number }> {
+export async function checkTerminationReminders(): Promise<ReminderJobResult> {
   if (isRunning) {
     logger.warn('[Termination Reminder Job] Already running, skipping...');
-    return { alertsSent: 0, errors: 0 };
+    return { weekRemindersSent: 0, fifteenDayAlertsSent: 0, thirtyDayRemindersSent: 0, errors: 0 };
   }
 
   isRunning = true;
-  let alertsSent = 0;
+  let weekRemindersSent = 0;
+  let fifteenDayAlertsSent = 0;
+  let thirtyDayRemindersSent = 0;
   let errors = 0;
 
   try {
@@ -25,20 +38,53 @@ export async function checkTerminationReminders(): Promise<{ alertsSent: number;
     const reminders = await storage.getPendingTerminationReminders();
     logger.info(`[Termination Reminder Job] Found ${reminders.length} pending reminders`);
 
+    const emailService = new EmailService();
+    await emailService.initialize();
+
     for (const reminder of reminders) {
       try {
         const daysSinceTermination = Math.floor(
           (new Date().getTime() - new Date(reminder.terminationDate).getTime()) / (1000 * 60 * 60 * 24)
         );
 
-        // Check if 15 days passed and alert not already sent
+        // Get the associated equipment checklist to check scheduling status
+        let equipmentChecklist = null;
+        if (reminder.equipmentChecklistId) {
+          equipmentChecklist = await storage.getEquipmentChecklistById(reminder.equipmentChecklistId);
+        }
+
+        // ========================================
+        // 7-DAY REMINDER: No scheduling yet
+        // ========================================
+        if (daysSinceTermination >= 7 && !reminder.weekReminderSentAt) {
+          // Check if equipment return has been scheduled
+          const hasScheduled = equipmentChecklist?.scheduledDate || equipmentChecklist?.scheduledTime;
+
+          if (!hasScheduled) {
+            logger.info(`[Termination Reminder Job] Sending 7-day reminder for ${reminder.employeeName}`);
+
+            // Use the proper email service method for 7-day reminders
+            await emailService.sendWeekNoScheduleReminderEmail(
+              reminder.employeeName,
+              reminder.employeeEmail || '',
+              new Date(reminder.terminationDate)
+            );
+
+            await storage.updateTerminationReminder(reminder.id, {
+              weekReminderSentAt: new Date(),
+            });
+
+            weekRemindersSent++;
+            logger.info(`[Termination Reminder Job] 7-day reminder sent for ${reminder.employeeName}`);
+          }
+        }
+
+        // ========================================
+        // 15-DAY ALERT: Equipment not returned (existing)
+        // ========================================
         if (daysSinceTermination >= 15 && !reminder.alertSentAt) {
           logger.info(`[Termination Reminder Job] Sending 15-day alert for ${reminder.employeeName}`);
 
-          const emailService = new EmailService();
-          await emailService.initialize();
-
-          // Send alert to HR team
           await emailService.sendEmail({
             to: 'careers@theroofdocs.com',
             cc: ['support@theroofdocs.com', 'info@theroofdocs.com'],
@@ -64,22 +110,48 @@ export async function checkTerminationReminders(): Promise<{ alertsSent: number;
             `,
           });
 
-          // Update reminder to mark alert as sent
           await storage.updateTerminationReminder(reminder.id, {
             alertSentAt: new Date(),
           });
 
-          alertsSent++;
-          logger.info(`[Termination Reminder Job] Alert sent for ${reminder.employeeName}`);
+          fifteenDayAlertsSent++;
+          logger.info(`[Termination Reminder Job] 15-day alert sent for ${reminder.employeeName}`);
         }
+
+        // ========================================
+        // 30-DAY REMINDER: No signed return form
+        // ========================================
+        if (daysSinceTermination >= 30 && !reminder.thirtyDayReminderSentAt) {
+          // Check if return form has been signed
+          const hasSignedReturnForm = equipmentChecklist?.signedAt || equipmentChecklist?.status === 'SIGNED';
+
+          if (!hasSignedReturnForm) {
+            logger.info(`[Termination Reminder Job] Sending 30-day URGENT reminder for ${reminder.employeeName}`);
+
+            // Use the proper email service method for 30-day URGENT reminders
+            await emailService.sendThirtyDayReminderEmail(
+              reminder.employeeName,
+              reminder.employeeEmail || '',
+              new Date(reminder.terminationDate)
+            );
+
+            await storage.updateTerminationReminder(reminder.id, {
+              thirtyDayReminderSentAt: new Date(),
+            });
+
+            thirtyDayRemindersSent++;
+            logger.info(`[Termination Reminder Job] 30-day URGENT reminder sent for ${reminder.employeeName}`);
+          }
+        }
+
       } catch (error) {
         errors++;
         logger.error(`[Termination Reminder Job] Error processing reminder for ${reminder.employeeName}:`, error);
       }
     }
 
-    logger.info(`[Termination Reminder Job] Complete. Alerts sent: ${alertsSent}, Errors: ${errors}`);
-    return { alertsSent, errors };
+    logger.info(`[Termination Reminder Job] Complete. 7-day: ${weekRemindersSent}, 15-day: ${fifteenDayAlertsSent}, 30-day: ${thirtyDayRemindersSent}, Errors: ${errors}`);
+    return { weekRemindersSent, fifteenDayAlertsSent, thirtyDayRemindersSent, errors };
   } catch (error) {
     logger.error('[Termination Reminder Job] Fatal error:', error);
     throw error;

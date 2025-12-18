@@ -65,6 +65,10 @@ import {
   // Equipment Checklist and Termination
   equipmentChecklists, terminationReminders,
   InsertEquipmentChecklist, InsertTerminationReminder,
+  // Equipment Agreements
+  equipmentAgreements, roleEquipmentDefaults,
+  EquipmentAgreement, RoleEquipmentDefault,
+  InsertEquipmentAgreement, InsertRoleEquipmentDefault,
   // Susan AI Chat Sessions
   SusanChatSession, InsertSusanChatSession, susanChatSessions
 } from '@shared/schema';
@@ -2408,6 +2412,105 @@ class DrizzleStorage implements IStorage {
       itemsReturned,
       resolvedAt: new Date()
     });
+  }
+
+  // ============================================
+  // Equipment Agreement Methods
+  // ============================================
+
+  async createEquipmentAgreement(data: any): Promise<EquipmentAgreement> {
+    const id = uuidv4();
+    const [agreement] = await db.insert(equipmentAgreements).values({ ...data, id } as any).returning();
+    return agreement;
+  }
+
+  async getEquipmentAgreementById(id: string): Promise<EquipmentAgreement | null> {
+    const [agreement] = await db.select().from(equipmentAgreements)
+      .where(eq(equipmentAgreements.id, id));
+    return agreement || null;
+  }
+
+  async getEquipmentAgreementByToken(token: string): Promise<EquipmentAgreement | null> {
+    const [agreement] = await db.select().from(equipmentAgreements)
+      .where(eq(equipmentAgreements.accessToken, token));
+    return agreement || null;
+  }
+
+  async getEquipmentAgreementsByEmployee(employeeId: string): Promise<EquipmentAgreement[]> {
+    return db.select().from(equipmentAgreements)
+      .where(eq(equipmentAgreements.employeeId, employeeId));
+  }
+
+  async getAllEquipmentAgreements(): Promise<EquipmentAgreement[]> {
+    return db.select().from(equipmentAgreements);
+  }
+
+  async getPendingEquipmentAgreements(): Promise<EquipmentAgreement[]> {
+    return db.select().from(equipmentAgreements)
+      .where(eq(equipmentAgreements.status, 'PENDING'));
+  }
+
+  async updateEquipmentAgreement(id: string, data: Partial<EquipmentAgreement>): Promise<EquipmentAgreement> {
+    const [agreement] = await db.update(equipmentAgreements)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(equipmentAgreements.id, id))
+      .returning();
+    return agreement;
+  }
+
+  async signEquipmentAgreement(id: string, signatureData: string, signatureIp: string): Promise<EquipmentAgreement> {
+    return this.updateEquipmentAgreement(id, {
+      signatureData,
+      signatureIp,
+      signedAt: new Date(),
+      status: 'SIGNED'
+    });
+  }
+
+  async deleteEquipmentAgreement(id: string): Promise<void> {
+    await db.delete(equipmentAgreements)
+      .where(eq(equipmentAgreements.id, id));
+  }
+
+  // ============================================
+  // Role Equipment Defaults Methods
+  // ============================================
+
+  async createRoleEquipmentDefault(data: any): Promise<RoleEquipmentDefault> {
+    const id = uuidv4();
+    const [defaults] = await db.insert(roleEquipmentDefaults).values({ ...data, id } as any).returning();
+    return defaults;
+  }
+
+  async getRoleEquipmentDefaultByRole(role: string): Promise<RoleEquipmentDefault | null> {
+    const [defaults] = await db.select().from(roleEquipmentDefaults)
+      .where(eq(roleEquipmentDefaults.role, role));
+    return defaults || null;
+  }
+
+  async getAllRoleEquipmentDefaults(): Promise<RoleEquipmentDefault[]> {
+    return db.select().from(roleEquipmentDefaults);
+  }
+
+  async updateRoleEquipmentDefault(id: string, data: Partial<RoleEquipmentDefault>): Promise<RoleEquipmentDefault> {
+    const [defaults] = await db.update(roleEquipmentDefaults)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(roleEquipmentDefaults.id, id))
+      .returning();
+    return defaults;
+  }
+
+  async upsertRoleEquipmentDefault(role: string, items: string): Promise<RoleEquipmentDefault> {
+    const existing = await this.getRoleEquipmentDefaultByRole(role);
+    if (existing) {
+      return this.updateRoleEquipmentDefault(existing.id, { items });
+    }
+    return this.createRoleEquipmentDefault({ role, items });
+  }
+
+  async deleteRoleEquipmentDefault(id: string): Promise<void> {
+    await db.delete(roleEquipmentDefaults)
+      .where(eq(roleEquipmentDefaults.id, id));
   }
 }
 

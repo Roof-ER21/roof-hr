@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  FileText, 
-  Upload, 
-  Download, 
-  Eye, 
+import {
+  FileText,
+  Upload,
+  Download,
+  Eye,
   Filter,
   Search,
   Calendar,
@@ -31,11 +31,13 @@ import {
   BarChart3,
   FileImage,
   FileSpreadsheet,
-  File
+  File,
+  Package
 } from 'lucide-react';
 import { DocumentUploader } from '@/components/documents/document-uploader';
 import { DocumentViewer } from '@/components/documents/document-viewer';
 import { DocumentAnalytics } from '@/components/documents/document-analytics';
+import { EquipmentAgreementsSection } from '@/components/equipment-agreements-section';
 
 interface Document {
   id: string;
@@ -95,6 +97,7 @@ export default function Documents() {
   const [showUploader, setShowUploader] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [activeTab, setActiveTab] = useState('documents');
 
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ['/api/documents', { category: filterCategory, status: filterStatus, visibility: filterVisibility, search: searchTerm }],
@@ -224,17 +227,35 @@ export default function Documents() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Document Management</h1>
           <p className="text-gray-600 mt-2">
-            Manage company documents, policies, and training materials
+            Manage company documents, policies, and equipment agreements
           </p>
         </div>
-        
-        {canManageDocuments && (
-          <Button onClick={() => setShowUploader(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Upload Document
-          </Button>
-        )}
       </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="documents" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="equipment" className="flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Equipment Agreements
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Documents Tab */}
+        <TabsContent value="documents" className="space-y-6 mt-6">
+          {/* Upload Button for Documents Tab */}
+          {canManageDocuments && (
+            <div className="flex justify-end">
+              <Button onClick={() => setShowUploader(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Document
+              </Button>
+            </div>
+          )}
 
       {/* Document Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -561,6 +582,13 @@ export default function Documents() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Equipment Agreements Tab */}
+        <TabsContent value="equipment" className="mt-6">
+          <EquipmentAgreementsSection />
+        </TabsContent>
+      </Tabs>
 
       {/* Document Uploader Modal */}
       <Dialog open={showUploader} onOpenChange={setShowUploader}>

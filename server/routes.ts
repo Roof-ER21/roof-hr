@@ -46,6 +46,7 @@ import googleDriveUploadRoutes from './routes/google-drive-uploads';
 import attendanceRoutes from './routes/attendance';
 import equipmentReceiptRoutes from './routes/equipment-receipts';
 import employeePortalRoutes from './routes/employee-portal';
+import equipmentAgreementRoutes from './routes/equipment-agreements';
 import { googleDriveService } from './services/google-drive-service';
 import { serviceAccountAuth } from './services/service-account-auth';
 
@@ -2689,6 +2690,9 @@ export function registerRoutes(app: express.Application) {
 
   // Mount employee portal routes
   app.use(employeePortalRoutes);
+
+  // Mount equipment agreement routes
+  app.use(equipmentAgreementRoutes);
 
   // Mount LLM status routes
   app.use(llmStatusRoutes);

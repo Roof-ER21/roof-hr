@@ -598,6 +598,400 @@ class EmailService {
     });
   }
 
+  // ===========================================
+  // EQUIPMENT AGREEMENT EMAILS
+  // ===========================================
+
+  /**
+   * Send equipment agreement email to new hire (onboarding)
+   * Contains link to sign digital equipment receipt
+   */
+  async sendEquipmentAgreementEmail(
+    employeeName: string,
+    employeeEmail: string,
+    agreementUrl: string,
+    items: { name: string; quantity: number }[],
+    fromUserEmail?: string
+  ): Promise<boolean> {
+    try {
+      const subject = 'Equipment Agreement - Please Sign | Roof-ER';
+
+      // Build equipment list HTML
+      const itemsHtml = items.map(item =>
+        `<li style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+          ${item.name}${item.quantity > 1 ? ` (Qty: ${item.quantity})` : ''}
+        </li>`
+      ).join('');
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background-color: #2563eb; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Equipment Agreement</h1>
+          </div>
+
+          <div style="padding: 30px;">
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${employeeName},</p>
+
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">
+              Welcome to <strong>Roof-ER</strong>! As part of your onboarding, we need you to sign an equipment agreement
+              acknowledging the items you will receive from the company.
+            </p>
+
+            <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0284c7;">
+              <h3 style="margin-top: 0; color: #0369a1;">Equipment You'll Receive:</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                ${itemsHtml}
+              </ul>
+            </div>
+
+            <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+              <p style="margin: 0; color: #92400e; font-size: 14px;">
+                <strong>Important:</strong> By signing this agreement, you acknowledge receipt of these items and agree
+                to return them in good condition upon request or termination of employment.
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${agreementUrl}"
+                 style="display: inline-block; background-color: #2563eb; color: white; padding: 15px 40px;
+                        text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                Sign Equipment Agreement
+              </a>
+            </div>
+
+            <p style="font-size: 13px; color: #6b7280; text-align: center;">
+              This link will expire in 7 days. If you have any questions, please contact HR.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">Best regards,</p>
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">
+              <strong>The Roof-ER HR Team</strong><br>
+              <a href="mailto:careers@theroofdocs.com" style="color: #2563eb;">careers@theroofdocs.com</a>
+            </p>
+          </div>
+
+          <div style="background-color: #f9fafb; padding: 15px; text-align: center;">
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">
+              This is an automated message from the Roof HR system.
+            </p>
+          </div>
+        </div>
+      `;
+
+      console.log(`[Email] Sending equipment agreement email to: ${employeeEmail}`);
+
+      return await this.sendEmail({
+        to: employeeEmail,
+        subject,
+        html,
+        fromUserEmail,
+      });
+    } catch (error) {
+      console.error('Failed to send equipment agreement email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send equipment return scheduling email (termination/offboarding)
+   * Contains link to schedule equipment dropoff
+   */
+  async sendEquipmentReturnSchedulingEmail(
+    employeeName: string,
+    employeeEmail: string,
+    returnFormUrl: string,
+    items?: { name: string; quantity: number }[],
+    fromUserEmail?: string
+  ): Promise<boolean> {
+    try {
+      const subject = 'Schedule Equipment Return - Action Required | Roof-ER';
+
+      // Build items list if provided
+      const itemsHtml = items && items.length > 0
+        ? `<div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0284c7;">
+            <h3 style="margin-top: 0; color: #0369a1;">Items to Return:</h3>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+              ${items.map(item =>
+                `<li style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                  ${item.name}${item.quantity > 1 ? ` (Qty: ${item.quantity})` : ''}
+                </li>`
+              ).join('')}
+            </ul>
+          </div>`
+        : '';
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background-color: #dc2626; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Equipment Return Required</h1>
+          </div>
+
+          <div style="padding: 30px;">
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${employeeName},</p>
+
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">
+              As part of your departure from <strong>Roof-ER</strong>, you are required to return all company equipment.
+              Please schedule a time to drop off your equipment at our office.
+            </p>
+
+            ${itemsHtml}
+
+            <div style="background-color: #fef2f2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+              <p style="margin: 0; color: #991b1b; font-size: 14px;">
+                <strong>Important:</strong> Equipment must be returned within 7 days. Unreturned equipment may result
+                in charges per the Equipment Return Policy you signed.
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${returnFormUrl}"
+                 style="display: inline-block; background-color: #dc2626; color: white; padding: 15px 40px;
+                        text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                Schedule Equipment Return
+              </a>
+            </div>
+
+            <div style="background-color: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <h4 style="margin-top: 0; color: #374151;">Drop-off Location:</h4>
+              <p style="margin: 0; color: #4b5563;">
+                <strong>The Roof Docs Office</strong><br>
+                8100 Boone Blvd Suite 400<br>
+                Vienna, VA 22182
+              </p>
+            </div>
+
+            <p style="font-size: 13px; color: #6b7280; text-align: center;">
+              This link will expire in 14 days. If you have any questions, please contact HR.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">Best regards,</p>
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">
+              <strong>The Roof-ER HR Team</strong><br>
+              <a href="mailto:careers@theroofdocs.com" style="color: #2563eb;">careers@theroofdocs.com</a>
+            </p>
+          </div>
+
+          <div style="background-color: #f9fafb; padding: 15px; text-align: center;">
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">
+              This is an automated message from the Roof HR system.
+            </p>
+          </div>
+        </div>
+      `;
+
+      console.log(`[Email] Sending equipment return scheduling email to: ${employeeEmail}`);
+
+      return await this.sendEmail({
+        to: employeeEmail,
+        subject,
+        html,
+        fromUserEmail,
+      });
+    } catch (error) {
+      console.error('Failed to send equipment return scheduling email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send 7-day reminder when no equipment return scheduled (to HR/careers)
+   */
+  async sendWeekNoScheduleReminderEmail(
+    employeeName: string,
+    employeeEmail: string,
+    terminationDate: Date,
+    fromUserEmail?: string
+  ): Promise<boolean> {
+    try {
+      const subject = `Equipment Return Not Scheduled: ${employeeName} | 7-Day Alert`;
+
+      const formattedTermDate = terminationDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background-color: #f59e0b; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">⚠️ Equipment Return Alert</h1>
+          </div>
+
+          <div style="padding: 30px;">
+            <div style="background-color: #fef3c7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
+              <h2 style="margin-top: 0; color: #92400e;">7 Days Since Termination - No Return Scheduled</h2>
+              <p style="margin: 0; color: #92400e;">
+                The following employee has not scheduled their equipment return dropoff.
+              </p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #f9fafb; font-weight: bold; width: 40%;">Employee Name</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb;">${employeeName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #f9fafb; font-weight: bold;">Employee Email</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb;"><a href="mailto:${employeeEmail}">${employeeEmail}</a></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #f9fafb; font-weight: bold;">Termination Date</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb;">${formattedTermDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #f9fafb; font-weight: bold;">Days Since Termination</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; color: #dc2626; font-weight: bold;">7 days</td>
+              </tr>
+            </table>
+
+            <h3 style="color: #374151;">Recommended Actions:</h3>
+            <ol style="color: #4b5563; line-height: 1.8;">
+              <li>Contact the employee directly to remind them to schedule a return</li>
+              <li>Resend the equipment return scheduling link if needed</li>
+              <li>Document all communication attempts</li>
+            </ol>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+            <p style="color: #6b7280; font-size: 12px; text-align: center;">
+              This is an automated alert from the Roof HR system. A 30-day reminder will be sent if the equipment is still not returned.
+            </p>
+          </div>
+        </div>
+      `;
+
+      // Send to careers@ and support@
+      const hrEmails = ['careers@theroofdocs.com', 'support@theroofdocs.com'];
+      let success = true;
+
+      for (const email of hrEmails) {
+        console.log(`[Email] Sending 7-day equipment reminder to: ${email}`);
+        const result = await this.sendEmail({
+          to: email,
+          subject,
+          html,
+          fromUserEmail,
+        });
+        if (!result) success = false;
+      }
+
+      return success;
+    } catch (error) {
+      console.error('Failed to send week no-schedule reminder email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send 30-day URGENT reminder when no signed return form (to HR/careers)
+   */
+  async sendThirtyDayReminderEmail(
+    employeeName: string,
+    employeeEmail: string,
+    terminationDate: Date,
+    fromUserEmail?: string
+  ): Promise<boolean> {
+    try {
+      const subject = `🚨 URGENT: Equipment Not Returned - 30 Days: ${employeeName}`;
+
+      const formattedTermDate = terminationDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background-color: #dc2626; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">🚨 URGENT: Equipment Not Returned</h1>
+          </div>
+
+          <div style="padding: 30px;">
+            <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #dc2626;">
+              <h2 style="margin-top: 0; color: #991b1b;">30 Days Since Termination - Action Required</h2>
+              <p style="margin: 0; color: #991b1b;">
+                The following employee has not returned company equipment and has not signed a return form.
+                <strong>Immediate action is required.</strong>
+              </p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #fef2f2; font-weight: bold; width: 40%;">Employee Name</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb;">${employeeName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #fef2f2; font-weight: bold;">Employee Email</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb;"><a href="mailto:${employeeEmail}">${employeeEmail}</a></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #fef2f2; font-weight: bold;">Termination Date</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb;">${formattedTermDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; background-color: #fef2f2; font-weight: bold;">Days Since Termination</td>
+                <td style="padding: 10px; border: 1px solid #e5e7eb; color: #dc2626; font-weight: bold; font-size: 18px;">30+ days</td>
+              </tr>
+            </table>
+
+            <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+              <h3 style="margin-top: 0; color: #92400e;">Equipment Fee Schedule (Per Policy)</h3>
+              <ul style="color: #92400e; margin: 0; padding-left: 20px;">
+                <li>Ladder: <strong>$300</strong></li>
+                <li>iPad w/ keyboard set: <strong>$500</strong></li>
+                <li>High-powered Flashlight: <strong>$70</strong></li>
+                <li>Two Company Polos: <strong>$140 Total</strong></li>
+                <li>Company Winter Jacket: <strong>$250</strong></li>
+                <li>Company Long-sleeve shirt: <strong>$70</strong></li>
+              </ul>
+            </div>
+
+            <h3 style="color: #991b1b;">Immediate Actions Required:</h3>
+            <ol style="color: #4b5563; line-height: 1.8;">
+              <li><strong>Final Contact Attempt:</strong> Call the employee directly</li>
+              <li><strong>Formal Notice:</strong> Send written notice regarding equipment fees</li>
+              <li><strong>Invoice Preparation:</strong> Prepare invoice for unreturned equipment per fee schedule</li>
+              <li><strong>Legal Consultation:</strong> Consult with legal if employee is unresponsive</li>
+              <li><strong>Payroll Deduction:</strong> If applicable, coordinate with payroll for commission deduction</li>
+            </ol>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+            <p style="color: #6b7280; font-size: 12px; text-align: center;">
+              This is an automated URGENT alert from the Roof HR system. No further automated reminders will be sent.
+            </p>
+          </div>
+        </div>
+      `;
+
+      // Send to careers@ and support@
+      const hrEmails = ['careers@theroofdocs.com', 'support@theroofdocs.com'];
+      let success = true;
+
+      for (const email of hrEmails) {
+        console.log(`[Email] Sending 30-day URGENT equipment reminder to: ${email}`);
+        const result = await this.sendEmail({
+          to: email,
+          subject,
+          html,
+          fromUserEmail,
+        });
+        if (!result) success = false;
+      }
+
+      return success;
+    } catch (error) {
+      console.error('Failed to send 30-day reminder email:', error);
+      return false;
+    }
+  }
+
   async sendStatusUpdateEmail(candidateId: string, newStatus: string, oldStatus: string, fromUserEmail?: string) {
     try {
       const candidate = await storage.getCandidateById(candidateId);

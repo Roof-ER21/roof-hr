@@ -1466,6 +1466,11 @@ export const equipmentChecklists = pgTable('equipment_checklists', {
   // Return section (for RETURNED type)
   itemsNotReturned: text('items_not_returned'),
 
+  // Scheduling fields (for RETURNED type - equipment return dropoff)
+  scheduledDate: timestamp('scheduled_date'),
+  scheduledTime: text('scheduled_time'), // e.g., "10:00 AM - 11:00 AM"
+  schedulingNotes: text('scheduling_notes'),
+
   // Status
   status: text('status').$type<'PENDING' | 'SIGNED'>().default('PENDING'),
 
@@ -1490,6 +1495,8 @@ export const terminationReminders = pgTable('termination_reminders', {
   formSentAt: timestamp('form_sent_at'),
   reminderSentAt: timestamp('reminder_sent_at'),
   alertSentAt: timestamp('alert_sent_at'),  // 15-day alert sent
+  weekReminderSentAt: timestamp('week_reminder_sent_at'),  // 7-day no-schedule reminder
+  thirtyDayReminderSentAt: timestamp('thirty_day_reminder_sent_at'),  // 30-day no-return reminder
   itemsReturned: boolean('items_returned').default(false),
   resolvedAt: timestamp('resolved_at'),
   notes: text('notes'),
@@ -1516,6 +1523,76 @@ export const terminationRemindersRelations = relations(terminationReminders, ({ 
     references: [users.id]
   })
 }));
+
+// ============================================
+// Equipment Agreements (Onboarding - New Hire Equipment Sign-off)
+// ============================================
+export const equipmentAgreements = pgTable('equipment_agreements', {
+  id: text('id').primaryKey(),
+  employeeId: text('employee_id').references(() => users.id),
+  employeeName: text('employee_name').notNull(),
+  employeeEmail: text('employee_email').notNull(),
+  employeeRole: text('employee_role'),
+
+  // Public form access (no login required)
+  accessToken: text('access_token').notNull().unique(),
+  tokenExpiry: timestamp('token_expiry'),
+
+  // Equipment items (JSON array - HR can customize per role)
+  // Format: [{name: string, quantity: number, received: boolean}]
+  items: text('items').notNull(),
+
+  // Signature
+  signatureData: text('signature_data'),  // Base64 PNG
+  signedAt: timestamp('signed_at'),
+  signatureIp: text('signature_ip'),
+
+  // Status
+  status: text('status').$type<'PENDING' | 'SIGNED'>().default('PENDING'),
+
+  // Tracking
+  sentBy: text('sent_by').references(() => users.id),
+  sentAt: timestamp('sent_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const equipmentAgreementSchema = createInsertSchema(equipmentAgreements);
+export const insertEquipmentAgreementSchema = createInsertSchema(equipmentAgreements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const equipmentAgreementsRelations = relations(equipmentAgreements, ({ one }) => ({
+  employee: one(users, {
+    fields: [equipmentAgreements.employeeId],
+    references: [users.id]
+  }),
+  sentByUser: one(users, {
+    fields: [equipmentAgreements.sentBy],
+    references: [users.id]
+  })
+}));
+
+// ============================================
+// Role Equipment Defaults (Default equipment list per role)
+// ============================================
+export const roleEquipmentDefaults = pgTable('role_equipment_defaults', {
+  id: text('id').primaryKey(),
+  role: text('role').notNull().unique(), // SALES_REP, FIELD_TECH, EMPLOYEE, etc.
+  // Format: [{name: string, quantity: number}]
+  items: text('items').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const roleEquipmentDefaultsSchema = createInsertSchema(roleEquipmentDefaults);
+export const insertRoleEquipmentDefaultsSchema = createInsertSchema(roleEquipmentDefaults).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 // Insert types
 
@@ -1580,6 +1657,8 @@ export type BundleAssignmentItem = typeof bundleAssignmentItems.$inferSelect;
 // Equipment Checklist types
 export type EquipmentChecklist = typeof equipmentChecklists.$inferSelect;
 export type TerminationReminder = typeof terminationReminders.$inferSelect;
+export type EquipmentAgreement = typeof equipmentAgreements.$inferSelect;
+export type RoleEquipmentDefault = typeof roleEquipmentDefaults.$inferSelect;
 
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1636,6 +1715,8 @@ export type InsertBundleAssignmentItem = z.infer<typeof insertBundleAssignmentIt
 // Equipment Checklist insert types
 export type InsertEquipmentChecklist = z.infer<typeof insertEquipmentChecklistSchema>;
 export type InsertTerminationReminder = z.infer<typeof insertTerminationReminderSchema>;
+export type InsertEquipmentAgreement = z.infer<typeof insertEquipmentAgreementSchema>;
+export type InsertRoleEquipmentDefault = z.infer<typeof insertRoleEquipmentDefaultsSchema>;
 
 // Auth schemas
 export const loginSchema = z.object({
