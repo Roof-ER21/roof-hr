@@ -81,9 +81,21 @@ const categoryIcons = {
   BOOTS: <HardHat className="h-4 w-4" />,
   POLO: <Shirt className="h-4 w-4" />,
   LADDER: <Wrench className="h-4 w-4" />,
-  IPAD: <Package className="h-4 w-4" />,
+  IPAD: <Laptop className="h-4 w-4" />,
   OFFICE: <PenTool className="h-4 w-4" />,
-  OTHER: <Package className="h-4 w-4" />
+  OTHER: <Shirt className="h-4 w-4" />
+};
+
+// Friendly display names for categories
+const categoryDisplayNames: Record<string, string> = {
+  LAPTOP: 'Tech',
+  IPAD: 'Tech',
+  CAR: 'Equipment',
+  BOOTS: 'Equipment',
+  LADDER: 'Equipment',
+  POLO: 'Clothing',
+  OTHER: 'Clothing',
+  OFFICE: 'Office'
 };
 
 const conditionColors = {
@@ -539,12 +551,12 @@ export function Tools() {
   // Category type definitions for grouping
   const categoryTypes: Record<string, { label: string; icon: keyof typeof categoryIcons; categories: string[] }> = {
     tech: {
-      label: 'Technology',
+      label: 'Tech',
       icon: 'LAPTOP',
       categories: ['LAPTOP', 'IPAD']
     },
     clothing: {
-      label: 'Clothing & Apparel',
+      label: 'Clothing',
       icon: 'POLO',
       categories: ['POLO', 'OTHER']
     },
@@ -1364,7 +1376,7 @@ export function Tools() {
                                 <TableCell>
                                   <div className="flex items-center gap-2">
                                     {categoryIcons[tool.category as keyof typeof categoryIcons]}
-                                    <span className="text-sm">{tool.category}</span>
+                                    <span className="text-sm">{categoryDisplayNames[tool.category] || tool.category}</span>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -1459,7 +1471,7 @@ export function Tools() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {categoryIcons[tool.category as keyof typeof categoryIcons]}
-                                <span className="text-sm">{tool.category}</span>
+                                <span className="text-sm">{categoryDisplayNames[tool.category] || tool.category}</span>
                               </div>
                             </TableCell>
                             <TableCell>
