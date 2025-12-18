@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { storage } from '../storage';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { EmailService } from '../email-service';
 
 const router = Router();
 
@@ -81,6 +82,28 @@ router.post('/api/equipment-agreements', async (req: any, res) => {
       sentAt: new Date()
     });
 
+    // Send the equipment agreement email
+    const formUrl = `${process.env.APP_URL || 'https://roof-er-hr-production.up.railway.app'}/equipment-agreement/${accessToken}`;
+    const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
+
+    try {
+      const emailService = new EmailService();
+      await emailService.initialize();
+      const emailSent = await emailService.sendEquipmentAgreementEmail(
+        employeeName,
+        employeeEmail,
+        formUrl,
+        parsedItems
+      );
+
+      if (!emailSent) {
+        console.warn(`Equipment agreement created but email failed to send to ${employeeEmail}`);
+      }
+    } catch (emailError) {
+      console.error('Error sending equipment agreement email:', emailError);
+      // Don't fail the request if email fails - agreement is still created
+    }
+
     res.status(201).json({
       ...agreement,
       formUrl: `/equipment-agreement/${accessToken}`
@@ -155,10 +178,34 @@ router.post('/api/equipment-agreements/:id/resend', async (req: any, res) => {
         tokenExpiry,
         sentAt: new Date()
       });
+    } else {
+      // Update sentAt even if token is still valid
+      await storage.updateEquipmentAgreement(req.params.id, {
+        sentAt: new Date()
+      });
     }
 
-    // TODO: Send email with equipment agreement link
-    // await emailService.sendEquipmentAgreementEmail(agreement.employeeEmail, accessToken);
+    // Send the equipment agreement email
+    const formUrl = `${process.env.APP_URL || 'https://roof-er-hr-production.up.railway.app'}/equipment-agreement/${accessToken}`;
+    const parsedItems = agreement.items ? (typeof agreement.items === 'string' ? JSON.parse(agreement.items) : agreement.items) : [];
+
+    try {
+      const emailService = new EmailService();
+      await emailService.initialize();
+      const emailSent = await emailService.sendEquipmentAgreementEmail(
+        agreement.employeeName,
+        agreement.employeeEmail,
+        formUrl,
+        parsedItems
+      );
+
+      if (!emailSent) {
+        return res.status(500).json({ error: 'Failed to send email' });
+      }
+    } catch (emailError) {
+      console.error('Error sending equipment agreement email:', emailError);
+      return res.status(500).json({ error: 'Failed to send email' });
+    }
 
     res.json({
       success: true,
