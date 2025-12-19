@@ -5,6 +5,12 @@ import { Logo } from '@/components/ui/logo';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 import {
+  ADMIN_ROLES,
+  MANAGER_ROLES,
+  ALL_ROLES,
+  SUPER_ADMIN_EMAIL,
+} from '@shared/constants/roles';
+import {
   LayoutDashboard,
   Users,
   Calendar,
@@ -29,11 +35,6 @@ import {
   Upload,
   UserCircle
 } from 'lucide-react';
-
-// Admin roles that should have full access to all menu items
-const ADMIN_ROLES = ['ADMIN', 'TRUE_ADMIN', 'GENERAL_MANAGER'];
-const MANAGER_ROLES = [...ADMIN_ROLES, 'MANAGER', 'TERRITORY_SALES_MANAGER'];
-const ALL_ROLES = [...MANAGER_ROLES, 'EMPLOYEE', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH'];
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
@@ -122,7 +123,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navigation
-              .filter(item => !user?.role || item.roles.includes(user.role))
+              .filter(item => {
+                // Ahmed always sees all menu items (super admin email fallback)
+                if (user?.email === SUPER_ADMIN_EMAIL) return true;
+                return !user?.role || item.roles.includes(user.role);
+              })
               .map((item) => {
                 const isActive = location.pathname === item.href;
                 const hasChildren = item.children && item.children.length > 0;
@@ -154,7 +159,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {isExpanded && (
                         <div className="mt-1 ml-8 space-y-1">
                           {item.children
-                            .filter(child => !user?.role || child.roles.includes(user.role))
+                            .filter(child => {
+                              // Ahmed always sees all child items (super admin email fallback)
+                              if (user?.email === SUPER_ADMIN_EMAIL) return true;
+                              return !user?.role || child.roles.includes(user.role);
+                            })
                             .map((child) => {
                               const childIsActive = location.pathname === child.href;
                               return (

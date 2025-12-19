@@ -1,4 +1,12 @@
 import { useAuth } from '@/lib/auth';
+import {
+  ADMIN_ROLES,
+  MANAGER_ROLES,
+  SUPER_ADMIN_EMAIL,
+  isSystemAdmin,
+  isAdmin as isAdminRole,
+  isManager as isManagerRole,
+} from '@shared/constants/roles';
 
 export interface Permission {
   role: string;
@@ -6,19 +14,16 @@ export interface Permission {
   action: string;
 }
 
-// Admin roles that have full system access
-const ADMIN_ROLES = ['ADMIN', 'TRUE_ADMIN', 'GENERAL_MANAGER'];
-
-// Manager roles that have team management access
-const MANAGER_ROLES = ['ADMIN', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'];
-
 export const usePermissions = () => {
   const { user } = useAuth();
 
   const hasPermission = (resource: string, action: string): boolean => {
     if (!user) return false;
 
-    const { role } = user;
+    const { role, email } = user;
+
+    // Ahmed always has full access (email-based fallback)
+    if (email === SUPER_ADMIN_EMAIL) return true;
 
     // Admin has all permissions
     if (ADMIN_ROLES.includes(role)) return true;
@@ -93,15 +98,28 @@ export const usePermissions = () => {
   };
 
   const isAdmin = (): boolean => {
+    if (!user) return false;
+    // Ahmed always has admin access
+    if (user.email === SUPER_ADMIN_EMAIL) return true;
     return user?.role ? ADMIN_ROLES.includes(user.role) : false;
   };
 
   const isManager = (): boolean => {
+    if (!user) return false;
+    // Ahmed always has manager access
+    if (user.email === SUPER_ADMIN_EMAIL) return true;
     return user?.role ? MANAGER_ROLES.includes(user.role) : false;
   };
 
+  const isSystemAdmin = (): boolean => {
+    if (!user) return false;
+    // Ahmed always has system admin access
+    if (user.email === SUPER_ADMIN_EMAIL) return true;
+    return user?.role === 'SYSTEM_ADMIN' || user?.role === 'TRUE_ADMIN';
+  };
+
   const isEmployee = (): boolean => {
-    return user?.role === 'EMPLOYEE' || user?.role === 'SALES_REP' || user?.role === 'FIELD_TECH';
+    return user?.role === 'EMPLOYEE' || user?.role === 'SALES_REP' || user?.role === 'FIELD_TECH' || user?.role === 'CONTRACTOR';
   };
 
   return {
@@ -110,9 +128,11 @@ export const usePermissions = () => {
     canEditResource,
     canCreateResource,
     canDeleteResource,
+    isSystemAdmin,
     isAdmin,
     isManager,
     isEmployee,
     userRole: user?.role,
+    userEmail: user?.email,
   };
 };

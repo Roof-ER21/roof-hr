@@ -1,5 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
+import {
+  ADMIN_ROLES,
+  MANAGER_ROLES,
+  SYSTEM_ADMIN_ROLES,
+  SUPER_ADMIN_EMAIL,
+  isSystemAdmin,
+  isAdmin,
+  isManager,
+  canApprovePtoRequests,
+  PTO_APPROVER_EMAILS,
+} from '../../shared/constants/roles';
 
 export async function requireAuth(req: any, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace('Bearer ', '');
@@ -41,11 +52,16 @@ export function checkRole(allowedRoles: string[]) {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    
+
+    // Ahmed always has access (super admin email fallback)
+    if (req.user.email === SUPER_ADMIN_EMAIL) {
+      return next();
+    }
+
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
-    
+
     next();
   };
 }
@@ -54,11 +70,16 @@ export function requireManager(req: any, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
-  if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+
+  // Ahmed always has manager access
+  if (req.user.email === SUPER_ADMIN_EMAIL) {
+    return next();
+  }
+
+  if (!isManager(req.user.role)) {
     return res.status(403).json({ error: 'Manager access required' });
   }
-  
+
   next();
 }
 
@@ -66,10 +87,40 @@ export function requireAdmin(req: any, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Admin access required' });
+
+  // Ahmed always has admin access
+  if (isAdmin(req.user)) {
+    return next();
   }
-  
+
+  return res.status(403).json({ error: 'Admin access required' });
+}
+
+export function requireSystemAdmin(req: any, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  // Ahmed always has system admin access
+  if (isSystemAdmin(req.user)) {
+    return next();
+  }
+
+  return res.status(403).json({ error: 'System admin access required' });
+}
+
+// PTO Approval - Only specific people can approve PTO (email-based restriction)
+export function requirePtoApprover(req: any, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (!canApprovePtoRequests(req.user)) {
+    return res.status(403).json({
+      error: 'PTO approval not permitted',
+      message: 'Only authorized approvers can approve or deny PTO requests'
+    });
+  }
+
   next();
 }

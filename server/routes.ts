@@ -14,6 +14,7 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   ptoRequests
 } from '../shared/schema';
+import { PTO_APPROVER_EMAILS } from '../shared/constants/roles';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
 import googleAuthRoutes from './routes/google-auth';
@@ -1264,13 +1265,7 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
   }
 });
 
-// PTO Approvers - Only these users can approve/deny PTO requests
-const PTO_APPROVER_EMAILS = [
-  'ford.barsi@theroofdocs.com',
-  'ahmed.mahmoud@theroofdocs.com',
-  'reese.samala@theroofdocs.com',
-  'oliver.brown@theroofdocs.com'
-];
+// PTO Approvers - imported from shared/constants/roles.ts
 
 router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) => {
   try {

@@ -9,7 +9,7 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
-  role: text('role').$type<'TRUE_ADMIN' | 'ADMIN' | 'GENERAL_MANAGER' | 'TERRITORY_SALES_MANAGER' | 'MANAGER' | 'EMPLOYEE' | 'CONTRACTOR' | 'SALES_REP' | 'FIELD_TECH'>().notNull(),
+  role: text('role').$type<'SYSTEM_ADMIN' | 'HR_ADMIN' | 'GENERAL_MANAGER' | 'TERRITORY_MANAGER' | 'MANAGER' | 'TEAM_LEAD' | 'EMPLOYEE' | 'FIELD_TECH' | 'SALES_REP' | 'CONTRACTOR' | 'TRUE_ADMIN' | 'ADMIN' | 'TERRITORY_SALES_MANAGER'>().notNull(),
   employmentType: text('employment_type').$type<'W2' | '1099' | 'CONTRACTOR' | 'SUB_CONTRACTOR'>().notNull(),
   department: text('department').notNull(),
   position: text('position').notNull(),
