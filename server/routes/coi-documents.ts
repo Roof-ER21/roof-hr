@@ -53,8 +53,17 @@ function requireHROrManager(req: any, res: any, next: any) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
+  // Ahmed always has access (super admin email fallback)
+  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
+    return next();
+  }
+
   // HR, Managers, and Territory Managers can manage COI documents
-  if (!['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
+  const allowedRoles = [
+    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
+    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'  // Legacy
+  ];
+  if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({ error: 'HR or Manager access required' });
   }
 
