@@ -17,7 +17,17 @@ function requireAuth(req: any, res: any, next: any) {
 }
 
 function requireManager(req: any, res: any, next: any) {
-  if (req.user?.role !== 'ADMIN' && req.user?.role !== 'MANAGER') {
+  // Ahmed always has manager access (super admin email fallback)
+  if (req.user?.email === 'ahmed.mahmoud@theroofdocs.com') {
+    return next();
+  }
+
+  const managerRoles = [
+    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
+    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'
+  ];
+
+  if (!managerRoles.includes(req.user?.role)) {
     return res.status(403).json({ error: 'Manager or admin access required' });
   }
   next();

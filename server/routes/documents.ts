@@ -33,11 +33,21 @@ function requireManager(req: any, res: any, next: any) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
-  if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') {
+
+  // Ahmed always has manager access (super admin email fallback)
+  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
+    return next();
+  }
+
+  const managerRoles = [
+    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
+    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'
+  ];
+
+  if (!managerRoles.includes(req.user.role)) {
     return res.status(403).json({ error: 'Manager access required' });
   }
-  
+
   next();
 }
 
@@ -45,11 +55,18 @@ function requireAdmin(req: any, res: any, next: any) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
-  if (req.user.role !== 'ADMIN') {
+
+  // Ahmed always has admin access (super admin email fallback)
+  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
+    return next();
+  }
+
+  const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN'];
+
+  if (!adminRoles.includes(req.user.role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
-  
+
   next();
 }
 
