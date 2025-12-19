@@ -7,6 +7,8 @@ import { gmailService } from './gmail-service';
 import { EventEmitter } from 'events';
 import cron from 'node-cron';
 
+const EASTERN_TIMEZONE = 'America/New_York';
+
 // Default owners who should have access to all folders
 const DEFAULT_OWNERS = [
   { email: 'reese.samala@theroofdocs.com', name: 'Reese Samala' },
@@ -458,31 +460,31 @@ class GoogleSyncEnhanced extends EventEmitter {
     // Tools sync - bidirectional every 5 minutes
     const toolsTask = cron.schedule('*/5 * * * *', async () => {
       await this.syncToolsInventory();
-    });
+    }, { timezone: EASTERN_TIMEZONE });
     this.syncTasks.set('tools-sync', toolsTask);
     
     // Employees sync - bidirectional every 10 minutes
     const employeesTask = cron.schedule('*/10 * * * *', async () => {
       await this.syncEmployeeData();
-    });
+    }, { timezone: EASTERN_TIMEZONE });
     this.syncTasks.set('employees-sync', employeesTask);
     
     // PTO sync - bidirectional every 5 minutes
     const ptoTask = cron.schedule('*/5 * * * *', async () => {
       await this.syncPTOCalendar();
-    });
+    }, { timezone: EASTERN_TIMEZONE });
     this.syncTasks.set('pto-sync', ptoTask);
     
     // Reviews sync - to Google every hour
     const reviewsTask = cron.schedule('0 * * * *', async () => {
       await this.syncPerformanceReviews();
-    });
+    }, { timezone: EASTERN_TIMEZONE });
     this.syncTasks.set('reviews-sync', reviewsTask);
     
     // COI sync - to Google every 30 minutes
     const coiTask = cron.schedule('*/30 * * * *', async () => {
       await this.syncCOIDocuments();
-    });
+    }, { timezone: EASTERN_TIMEZONE });
     this.syncTasks.set('coi-sync', coiTask);
     
     // Start all tasks

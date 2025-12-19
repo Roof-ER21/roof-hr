@@ -150,6 +150,13 @@ export interface IStorage {
 
   // Task Management
   createTask(data: InsertTask): Promise<Task>;
+  createOnboardingTask(data: {
+    employeeId: string;
+    title: string;
+    description?: string;
+    dueDate?: Date | string;
+    status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'PENDING';
+  }): Promise<Task>;
   getTaskById(id: string): Promise<Task | null>;
   getAllTasks(): Promise<Task[]>;
   getTasksByAssignee(assigneeId: string): Promise<Task[]>;
@@ -915,6 +922,30 @@ class DrizzleStorage implements IStorage {
     };
     const [task] = await db.insert(tasks).values(insertData).returning();
     return task;
+  }
+
+  async createOnboardingTask(data: {
+    employeeId: string;
+    title: string;
+    description?: string;
+    dueDate?: Date | string;
+    status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'PENDING';
+  }): Promise<Task> {
+    const normalizedStatus = (data.status === 'PENDING' ? 'TODO' : data.status) || 'TODO';
+    const dueDateValue = data.dueDate ? new Date(data.dueDate) : undefined;
+
+    return this.createTask({
+      title: data.title,
+      description: data.description || '',
+      assignedTo: data.employeeId,
+      assignedBy: data.employeeId,
+      priority: 'MEDIUM',
+      status: normalizedStatus as 'TODO' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
+      dueDate: dueDateValue,
+      category: 'ONBOARDING',
+      tags: ['onboarding'],
+      completedAt: undefined
+    });
   }
 
   async getTaskById(id: string): Promise<Task | null> {

@@ -1009,10 +1009,10 @@ router.get('/calendar/rsvp/:token/:response', async (req, res) => {
     console.log(`[RSVP] ${attendee.email} responded ${responseUpper} to event: ${event.title}`);
 
     // Also update the Google Calendar event if possible
-    if (event.googleEventId) {
-      try {
-        const organizer = await db.select().from(users)
-          .where(eq(users.id, parseInt(event.userId)));
+        if (event.googleEventId) {
+          try {
+            const organizer = await db.select().from(users)
+          .where(eq(users.id, event.userId));
 
         if (organizer.length > 0 && organizer[0].email && serviceAccountAuth.isConfigured()) {
           const calendar = await serviceAccountAuth.getCalendarForUser(organizer[0].email);

@@ -3,6 +3,8 @@ import { EventEmitter } from 'events';
 import cron from 'node-cron';
 import { differenceInDays, addDays, isAfter, isBefore } from 'date-fns';
 
+const EASTERN_TIMEZONE = 'America/New_York';
+
 interface DeadlineAlert {
   type: 'COI_EXPIRY' | 'CONTRACT_EXPIRY' | 'PTO_APPROVAL' | 'PERFORMANCE_REVIEW' | 'ONBOARDING' | 'INTERVIEW';
   entityId: string;
@@ -35,9 +37,13 @@ class DeadlineTracker extends EventEmitter {
     console.log('[Susan AI - Deadline Tracker] Initializing...');
     
     // Schedule periodic checks
-    this.cronTask = cron.schedule(this.checkInterval, async () => {
-      await this.checkAllDeadlines();
-    });
+    this.cronTask = cron.schedule(
+      this.checkInterval,
+      async () => {
+        await this.checkAllDeadlines();
+      },
+      { timezone: EASTERN_TIMEZONE }
+    );
     
     this.cronTask.start();
     

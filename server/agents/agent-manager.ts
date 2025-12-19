@@ -12,6 +12,8 @@ import {
 } from './hr-agents';
 import { CoiAlertAgent } from './coi-alert-agent';
 
+const EASTERN_TIMEZONE = 'America/New_York';
+
 export interface AgentManagerConfig {
   enabled: boolean;
   maxConcurrentAgents: number;
@@ -198,9 +200,13 @@ export class AgentManager extends EventEmitter {
       this.scheduledJobs.get(agentName)?.destroy();
     }
 
-    const task = cron.schedule(schedule, async () => {
-      await this.runAgent(agentName);
-    });
+    const task = cron.schedule(
+      schedule,
+      async () => {
+        await this.runAgent(agentName);
+      },
+      { timezone: EASTERN_TIMEZONE }
+    );
 
     this.scheduledJobs.set(agentName, task);
     task.start();

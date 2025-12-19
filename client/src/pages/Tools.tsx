@@ -158,7 +158,9 @@ export function Tools() {
     notes: ''
   });
 
-  const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  // Ahmed always has manager access via email fallback
+  const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    (user?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role));
 
   // Fetch tools inventory
   const { data: tools = [], isLoading: toolsLoading, error: toolsError } = useQuery<Tool[]>({

@@ -287,7 +287,8 @@ export function EquipmentAgreementsSection() {
   const pendingCount = agreements.filter(a => a.status === 'PENDING').length;
   const signedCount = agreements.filter(a => a.status === 'SIGNED').length;
 
-  const canManage = user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'TRUE_ADMIN';
+  const role = user?.role as string | undefined;
+  const canManage = role === 'ADMIN' || role === 'MANAGER' || role === 'TRUE_ADMIN';
 
   if (isLoading) {
     return (

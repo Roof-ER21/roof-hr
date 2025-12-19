@@ -115,11 +115,13 @@ export const usePermissions = () => {
     if (!user) return false;
     // Ahmed always has system admin access
     if (user.email === SUPER_ADMIN_EMAIL) return true;
-    return user?.role === 'SYSTEM_ADMIN' || user?.role === 'TRUE_ADMIN';
+    const role = user?.role as string | undefined;
+    return role === 'SYSTEM_ADMIN' || role === 'TRUE_ADMIN';
   };
 
   const isEmployee = (): boolean => {
-    return user?.role === 'EMPLOYEE' || user?.role === 'SALES_REP' || user?.role === 'FIELD_TECH' || user?.role === 'CONTRACTOR';
+    const role = user?.role as string | undefined;
+    return role === 'EMPLOYEE' || role === 'SALES_REP' || role === 'FIELD_TECH' || role === 'CONTRACTOR';
   };
 
   return {

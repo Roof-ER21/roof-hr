@@ -30,6 +30,7 @@ export class CalendarConflictDetector {
   private calendar: any;
   private storage: IStorage;
   private isInitialized: boolean = false;
+  private scopeWarningLogged: boolean = false;
 
   constructor(storage: IStorage) {
     this.storage = storage;
@@ -259,7 +260,21 @@ export class CalendarConflictDetector {
           });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      const message = error?.message || '';
+      const status = (error as any)?.response?.status;
+      const isScopeError = message.includes('insufficient authentication scopes') || status === 403;
+
+      if (isScopeError) {
+        if (!this.scopeWarningLogged) {
+          console.warn(
+            '[CalendarConflictDetector] Google Calendar access has insufficient scopes (needs calendar.readonly). Skipping Calendar conflict checks until re-auth is completed.'
+          );
+          this.scopeWarningLogged = true;
+        }
+        return conflicts;
+      }
+
       console.error(`[CalendarConflictDetector] Error checking Google Calendar for ${email}:`, error);
     }
 

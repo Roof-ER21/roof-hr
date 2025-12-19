@@ -3,6 +3,8 @@ import { storage } from '../storage';
 import { EventEmitter } from 'events';
 import cron from 'node-cron';
 
+const EASTERN_TIMEZONE = 'America/New_York';
+
 interface SyncConfig {
   enabled: boolean;
   interval: string; // cron expression
@@ -143,9 +145,13 @@ class GoogleSyncOrchestrator extends EventEmitter {
     }
     
     // Schedule new task
-    const task = cron.schedule(config.interval, async () => {
-      await this.executeSyncTask(name);
-    });
+    const task = cron.schedule(
+      config.interval,
+      async () => {
+        await this.executeSyncTask(name);
+      },
+      { timezone: EASTERN_TIMEZONE }
+    );
     
     this.syncTasks.set(name, task);
     

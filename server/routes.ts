@@ -1780,7 +1780,13 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     }
 
     // Create onboarding tasks
-    const onboardingTasks = [
+    const onboardingTasks: Array<{
+      employeeId: string;
+      title: string;
+      description: string;
+      dueDate: Date;
+      status: 'PENDING' | 'COMPLETED';
+    }> = [
       {
         employeeId: newEmployee.id,
         title: 'Complete I-9 Form',
@@ -1800,28 +1806,28 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
         title: 'Complete Safety Training',
         description: 'Complete mandatory safety orientation',
         dueDate: new Date(new Date(startDate).getTime() + 3 * 24 * 60 * 60 * 1000),
-        status: 'PENDING'
+        status: 'PENDING' as const
       },
       {
         employeeId: newEmployee.id,
         title: 'Tools & Equipment Assignment',
         description: 'Receive and acknowledge assigned tools and equipment',
         dueDate: new Date(startDate),
-        status: toolsAssigned > 0 ? 'COMPLETED' : 'PENDING'
+        status: (toolsAssigned > 0 ? 'COMPLETED' : 'PENDING') as 'COMPLETED' | 'PENDING'
       },
       {
         employeeId: newEmployee.id,
         title: 'Benefits Enrollment',
         description: 'Enroll in company benefits programs',
         dueDate: new Date(new Date(startDate).getTime() + 7 * 24 * 60 * 60 * 1000),
-        status: 'PENDING'
+        status: 'PENDING' as const
       },
       {
         employeeId: newEmployee.id,
         title: 'Complete Online Training',
         description: 'Complete required online training before first day',
         dueDate: new Date(new Date(startDate).getTime() - 1 * 24 * 60 * 60 * 1000),
-        status: 'PENDING'
+        status: 'PENDING' as const
       }
     ];
 

@@ -738,7 +738,7 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
     const fileName = `COI_${coiType}_${safeName}_${Date.now()}.${req.file.originalname.split('.').pop()}`;
 
     let driveFile: { id: string | null; webViewLink: string | null } | null = null;
-    let documentUrl: string;
+    let documentUrl = '';
     let googleDriveId: string | null = null;
 
     // Check if Google Drive is configured
@@ -762,9 +762,11 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
             description: `COI Document - ${coiType} - ${displayName}`
           });
         }
-        documentUrl = driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`;
-        googleDriveId = driveFile.id;
-        console.log('[COI Confirm] Uploaded to Google Drive:', driveFile.id);
+        if (driveFile?.id) {
+          documentUrl = driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`;
+          googleDriveId = driveFile.id;
+          console.log('[COI Confirm] Uploaded to Google Drive:', driveFile.id);
+        }
       } catch (driveError: any) {
         console.error('[COI Confirm] Google Drive upload failed, falling back to local storage:', driveError.message);
         // Fall through to local storage
@@ -779,6 +781,10 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
       fs.writeFileSync(localFilePath, req.file.buffer);
       documentUrl = `/api/coi-documents/local/${fileName}`;
       console.log('[COI Confirm] Saved to local storage:', localFilePath);
+    }
+
+    if (!documentUrl) {
+      throw new Error('Document URL could not be determined after upload.');
     }
 
     // Parse dates or use defaults
