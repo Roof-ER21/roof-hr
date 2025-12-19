@@ -634,10 +634,15 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
   try {
     // Get candidate and interviewer details
     const candidate = await storage.getCandidateById(interview.candidateId);
-    const interviewer = await storage.getUserById(interview.interviewerId);
+    const interviewer = interview.interviewerId ? await storage.getUserById(interview.interviewerId) : null;
 
-    if (!candidate || !interviewer) {
-      console.error('Missing candidate or interviewer data for email');
+    // Get interviewer name - either from user record or custom name
+    const interviewerName = interviewer
+      ? `${interviewer.firstName} ${interviewer.lastName}`
+      : (interview.customInterviewerName || 'Your Interviewer');
+
+    if (!candidate) {
+      console.error('[INTERVIEW EMAIL] Missing candidate data for email');
       return;
     }
 
@@ -646,17 +651,19 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'America/New_York',
     });
 
     const interviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'America/New_York',
     });
 
     // Import email service
     const { emailService } = await import('../email-service');
 
-    // Email HTML to candidate
+    // Email HTML to candidate - ALWAYS send this
     const candidateHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Interview Scheduled - ROOF-ER</h2>
@@ -665,12 +672,12 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
           <p><strong>Date:</strong> ${interviewDate}</p>
-          <p><strong>Time:</strong> ${interviewTime}</p>
+          <p><strong>Time:</strong> ${interviewTime} (Eastern Time)</p>
           <p><strong>Duration:</strong> ${interview.duration} minutes</p>
           <p><strong>Type:</strong> ${interview.type}</p>
           ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
           ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
-          <p><strong>Interviewer:</strong> ${interviewer.firstName} ${interviewer.lastName}</p>
+          <p><strong>Interviewer:</strong> ${interviewerName}</p>
           ${interview.notes ? `<p><strong>Notes:</strong> ${interview.notes}</p>` : ''}
         </div>
         <p>If you need to reschedule or have any questions, please contact us immediately.</p>
@@ -689,43 +696,51 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
     });
 
-    // Email HTML to interviewer
-    const interviewerHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563eb;">Interview Scheduled</h2>
-        <p>Hello ${interviewer.firstName},</p>
-        <p>You have an interview scheduled with <strong>${candidate.firstName} ${candidate.lastName}</strong> for the <strong>${candidate.position}</strong> position.</p>
-        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
-          <p><strong>Date:</strong> ${interviewDate}</p>
-          <p><strong>Time:</strong> ${interviewTime}</p>
-          <p><strong>Duration:</strong> ${interview.duration} minutes</p>
-          <p><strong>Type:</strong> ${interview.type}</p>
-          ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
-          ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
-        </div>
-        <div style="background-color: #e0f2fe; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #0369a1;">Candidate Information</h3>
-          <p><strong>Name:</strong> ${candidate.firstName} ${candidate.lastName}</p>
-          <p><strong>Email:</strong> ${candidate.email}</p>
-          <p><strong>Phone:</strong> ${candidate.phone}</p>
-        </div>
-        ${interview.notes ? `<p><strong>Interview Notes:</strong> ${interview.notes}</p>` : ''}
-        <p>Please review the candidate's profile before the interview.</p>
-        <p>Best regards,<br>ROOF-ER HR System</p>
-      </div>
-    `;
+    console.log('[INTERVIEW] Confirmation email sent to candidate:', candidate.email);
 
-    // Send email to interviewer (from the logged-in user's email)
-    await emailService.sendEmail({
-      to: interviewer.email,
-      subject: `Interview Scheduled - ${candidate.firstName} ${candidate.lastName}`,
-      html: interviewerHtml,
-      interviewId: interview.id,
-      fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
-    });
+    // Only send interviewer email if we have an interviewer in the system with an email
+    if (interviewer && interviewer.email) {
+      const interviewerHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2563eb;">Interview Scheduled</h2>
+          <p>Hello ${interviewer.firstName},</p>
+          <p>You have an interview scheduled with <strong>${candidate.firstName} ${candidate.lastName}</strong> for the <strong>${candidate.position}</strong> position.</p>
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
+            <p><strong>Date:</strong> ${interviewDate}</p>
+            <p><strong>Time:</strong> ${interviewTime} (Eastern Time)</p>
+            <p><strong>Duration:</strong> ${interview.duration} minutes</p>
+            <p><strong>Type:</strong> ${interview.type}</p>
+            ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
+            ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
+          </div>
+          <div style="background-color: #e0f2fe; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #0369a1;">Candidate Information</h3>
+            <p><strong>Name:</strong> ${candidate.firstName} ${candidate.lastName}</p>
+            <p><strong>Email:</strong> ${candidate.email}</p>
+            <p><strong>Phone:</strong> ${candidate.phone}</p>
+          </div>
+          ${interview.notes ? `<p><strong>Interview Notes:</strong> ${interview.notes}</p>` : ''}
+          <p>Please review the candidate's profile before the interview.</p>
+          <p>Best regards,<br>ROOF-ER HR System</p>
+        </div>
+      `;
 
-    console.log('[INTERVIEW] Confirmation emails sent to candidate and interviewer');
+      // Send email to interviewer (from the logged-in user's email)
+      await emailService.sendEmail({
+        to: interviewer.email,
+        subject: `Interview Scheduled - ${candidate.firstName} ${candidate.lastName}`,
+        html: interviewerHtml,
+        interviewId: interview.id,
+        fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
+      });
+
+      console.log('[INTERVIEW] Confirmation email sent to interviewer:', interviewer.email);
+    } else if (interview.customInterviewerName) {
+      console.log('[INTERVIEW] Custom interviewer used - no interviewer email sent (name only):', interview.customInterviewerName);
+    }
+
+    console.log('[INTERVIEW] Interview email notifications completed');
 
   } catch (error) {
     console.error('Failed to send interview scheduled emails:', error);

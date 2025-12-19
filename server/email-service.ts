@@ -347,7 +347,7 @@ class EmailService {
 
           <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
-            <p><strong>Date & Time:</strong> ${new Date(interview.scheduledDate).toLocaleString()}</p>
+            <p><strong>Date & Time:</strong> ${new Date(interview.scheduledDate).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'full', timeStyle: 'short' })} (Eastern Time)</p>
             <p><strong>Type:</strong> ${interview.type}</p>
             <p><strong>Interviewer:</strong> ${interviewer?.firstName} ${interviewer?.lastName}</p>
             ${interview.notes ? `<p><strong>Notes:</strong> ${interview.notes}</p>` : ''}
