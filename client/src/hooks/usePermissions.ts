@@ -6,6 +6,12 @@ export interface Permission {
   action: string;
 }
 
+// Admin roles that have full system access
+const ADMIN_ROLES = ['ADMIN', 'TRUE_ADMIN', 'GENERAL_MANAGER'];
+
+// Manager roles that have team management access
+const MANAGER_ROLES = ['ADMIN', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'];
+
 export const usePermissions = () => {
   const { user } = useAuth();
 
@@ -15,7 +21,7 @@ export const usePermissions = () => {
     const { role } = user;
 
     // Admin has all permissions
-    if (role === 'ADMIN') return true;
+    if (ADMIN_ROLES.includes(role)) return true;
 
     // Manager permissions
     if (role === 'MANAGER') {
@@ -87,15 +93,15 @@ export const usePermissions = () => {
   };
 
   const isAdmin = (): boolean => {
-    return user?.role === 'ADMIN';
+    return user?.role ? ADMIN_ROLES.includes(user.role) : false;
   };
 
   const isManager = (): boolean => {
-    return user?.role === 'MANAGER' || user?.role === 'ADMIN';
+    return user?.role ? MANAGER_ROLES.includes(user.role) : false;
   };
 
   const isEmployee = (): boolean => {
-    return user?.role === 'EMPLOYEE';
+    return user?.role === 'EMPLOYEE' || user?.role === 'SALES_REP' || user?.role === 'FIELD_TECH';
   };
 
   return {

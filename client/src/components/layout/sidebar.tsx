@@ -30,49 +30,54 @@ import {
   UserCircle
 } from 'lucide-react';
 
+// Admin roles that should have full access to all menu items
+const ADMIN_ROLES = ['ADMIN', 'TRUE_ADMIN', 'GENERAL_MANAGER'];
+const MANAGER_ROLES = [...ADMIN_ROLES, 'MANAGER', 'TERRITORY_SALES_MANAGER'];
+const ALL_ROLES = [...MANAGER_ROLES, 'EMPLOYEE', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH'];
+
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH'] },
-  { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: ['ADMIN', 'MANAGER', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER'] },
-  { name: 'Susan AI', href: '/susan-ai', icon: Sparkles, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'TRUE_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH'] },
-  { name: 'Recruiting', href: '/recruiting', icon: Briefcase, roles: ['ADMIN', 'MANAGER'] },
-  { 
-    name: 'Documents', 
-    href: '/documents', 
-    icon: FileText, 
-    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'],
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+  { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ALL_ROLES },
+  { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: MANAGER_ROLES },
+  { name: 'Susan AI', href: '/susan-ai', icon: Sparkles, roles: ALL_ROLES },
+  { name: 'Recruiting', href: '/recruiting', icon: Briefcase, roles: MANAGER_ROLES },
+  {
+    name: 'Documents',
+    href: '/documents',
+    icon: FileText,
+    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
     children: [
-      { name: 'All Documents', href: '/documents', icon: FileText, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-      { name: 'Tools & Equipment', href: '/tools', icon: Package, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-      { name: 'COI Tracking', href: '/coi-documents', icon: AlertTriangle, roles: ['ADMIN', 'MANAGER'] },
-      { name: 'Contracts', href: '/contracts', icon: ScrollText, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] }
+      { name: 'All Documents', href: '/documents', icon: FileText, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+      { name: 'Tools & Equipment', href: '/tools', icon: Package, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+      { name: 'COI Tracking', href: '/coi-documents', icon: AlertTriangle, roles: MANAGER_ROLES },
+      { name: 'Contracts', href: '/contracts', icon: ScrollText, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] }
     ]
   },
-  { 
-    name: 'Employees', 
-    href: '/employees', 
-    icon: Users, 
-    roles: ['ADMIN', 'MANAGER'],
+  {
+    name: 'Employees',
+    href: '/employees',
+    icon: Users,
+    roles: MANAGER_ROLES,
     children: [
-      { name: 'Employee Directory', href: '/employees', icon: Users, roles: ['ADMIN', 'MANAGER'] },
-      { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: ['ADMIN', 'MANAGER'] },
-      { name: 'Territories', href: '/territories', icon: MapPin, roles: ['ADMIN', 'MANAGER', 'TERRITORY_SALES_MANAGER'] }
+      { name: 'Employee Directory', href: '/employees', icon: Users, roles: MANAGER_ROLES },
+      { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: MANAGER_ROLES },
+      { name: 'Territories', href: '/territories', icon: MapPin, roles: MANAGER_ROLES }
     ]
   },
-  { 
-    name: 'Time Off', 
-    href: '/pto', 
-    icon: Calendar, 
-    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'],
+  {
+    name: 'Time Off',
+    href: '/pto',
+    icon: Calendar,
+    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
     children: [
-      { name: 'PTO Requests', href: '/pto', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-      { name: 'PTO Policies', href: '/pto-policies', icon: Settings, roles: ['ADMIN', 'MANAGER', 'GENERAL_MANAGER'] }
+      { name: 'PTO Requests', href: '/pto', icon: Calendar, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+      { name: 'PTO Policies', href: '/pto-policies', icon: Settings, roles: ADMIN_ROLES }
     ]
   },
-  { name: 'Reviews', href: '/reviews', icon: Video, roles: ['ADMIN', 'MANAGER'] },
-  { name: 'Attendance', href: '/attendance', icon: Clock, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  { name: 'Google Integration', href: '/google-integration', icon: Cloud, roles: ['ADMIN'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN', 'MANAGER'] },
+  { name: 'Reviews', href: '/reviews', icon: Video, roles: MANAGER_ROLES },
+  { name: 'Attendance', href: '/attendance', icon: Clock, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+  { name: 'Google Integration', href: '/google-integration', icon: Cloud, roles: ADMIN_ROLES },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: MANAGER_ROLES },
 ];
 
 interface SidebarProps {
