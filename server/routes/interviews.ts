@@ -273,34 +273,58 @@ Please use the HR system to record interview feedback.
         const attendees: string[] = [];
         if (candidateDetails.email) attendees.push(candidateDetails.email);
         if (interviewerDetails.email) attendees.push(interviewerDetails.email);
-        
-        // Create the calendar event
-        const calendarEvent = await calendarService.createEvent({
-          summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
-          description,
-          location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
-          startDateTime,
-          endDateTime,
-          attendees,
-          sendNotifications: true,
-          reminders: {
-            useDefault: false,
-            overrides: [
-              { method: 'email', minutes: 24 * 60 }, // 1 day before
-              { method: 'email', minutes: 60 }, // 1 hour before
-              { method: 'popup', minutes: 15 } // 15 minutes before
-            ]
+
+        let calendarEvent: any;
+        let autoMeetLink: string | undefined;
+
+        // For VIDEO interviews, auto-generate Google Meet link
+        if (data.type === 'VIDEO') {
+          calendarEvent = await calendarService.createEventWithMeet({
+            summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+            description,
+            startDateTime,
+            endDateTime,
+            attendees,
+            sendNotifications: true
+          });
+
+          // Extract the auto-generated Meet link
+          autoMeetLink = calendarEvent.meetLink || calendarEvent.hangoutLink;
+          if (autoMeetLink) {
+            console.log('[INTERVIEW] Auto-generated Google Meet link:', autoMeetLink);
           }
-        });
-        
+        } else {
+          // For PHONE and IN_PERSON, create regular event without Meet
+          calendarEvent = await calendarService.createEvent({
+            summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+            description,
+            location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
+            startDateTime,
+            endDateTime,
+            attendees,
+            sendNotifications: true,
+            reminders: {
+              useDefault: false,
+              overrides: [
+                { method: 'email', minutes: 24 * 60 }, // 1 day before
+                { method: 'email', minutes: 60 }, // 1 hour before
+                { method: 'popup', minutes: 15 } // 15 minutes before
+              ]
+            }
+          });
+        }
+
         googleEventId = calendarEvent.id;
         console.log('[INTERVIEW] Google Calendar event created successfully:', googleEventId);
-        
-        // Update interview with calendar event ID
+
+        // Update interview with calendar event ID and auto-generated Meet link (for VIDEO)
         if (googleEventId) {
-          await storage.updateInterview(interview.id, {
-            googleEventId
-          });
+          const updateData: any = { googleEventId };
+          // If VIDEO and we have an auto-generated Meet link, use it (override any manual link)
+          if (data.type === 'VIDEO' && autoMeetLink) {
+            updateData.meetingLink = autoMeetLink;
+          }
+          await storage.updateInterview(interview.id, updateData);
         }
       }
     } catch (calendarError: any) {

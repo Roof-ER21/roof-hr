@@ -158,7 +158,8 @@ export const ptoRequests = pgTable('pto_requests', {
   reviewNotes: text('review_notes'),
   departmentOverlapWarning: boolean('department_overlap_warning').default(false), // NEW
   overlappingEmployees: text('overlapping_employees').array(), // NEW - track who else has PTO
-  googleEventId: text('google_event_id'), // Google Calendar event ID for sync
+  googleEventId: text('google_event_id'), // Google Calendar event ID for employee's calendar
+  hrCalendarEventId: text('hr_calendar_event_id'), // Google Calendar event ID for HR shared calendar
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -492,6 +493,36 @@ export const interviewPanelMemberSchema = createInsertSchema(interviewPanelMembe
 export const insertInterviewPanelMemberSchema = createInsertSchema(interviewPanelMembers).omit({
   id: true,
   createdAt: true,
+});
+
+// Calendar Events - User-created events that sync to Google Calendar
+export const calendarEvents = pgTable('calendar_events', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(), // Owner of the event
+  googleEventId: text('google_event_id'), // ID from Google Calendar after sync
+  type: text('type').$type<'MEETING' | 'PTO' | 'INTERVIEW' | 'OTHER'>().notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  location: text('location'),
+  meetLink: text('meet_link'),
+  allDay: boolean('all_day').notNull().default(false),
+  // For PTO type events
+  ptoType: text('pto_type').$type<'VACATION' | 'SICK' | 'PERSONAL'>(),
+  ptoRequestId: text('pto_request_id'), // Link to PTO request if applicable
+  // For Interview type events
+  candidateId: text('candidate_id'), // Link to candidate for interviews
+  interviewId: text('interview_id'), // Link to interview record
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const calendarEventSchema = createInsertSchema(calendarEvents);
+export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 // Email Templates

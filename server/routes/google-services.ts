@@ -3,8 +3,9 @@ import { googleServicesManager } from '../services/google-services-manager';
 import { serviceAccountAuth } from '../services/service-account-auth';
 import { requireAuth, checkRole } from '../middleware/auth';
 import { db } from '../db';
-import { toolInventory, candidates, users, documents } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { toolInventory, candidates, users, documents, calendarEvents } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -161,6 +162,220 @@ router.post('/calendar/events', requireAuth, async (req, res) => {
   }
 });
 
+// Create calendar event with local database tracking
+router.post('/calendar/user-events', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const userEmail = user?.email;
+    const { type, title, description, startDate, endDate, location, allDay, addGoogleMeet, ptoType, candidateId, interviewId } = req.body;
+
+    // Validate required fields
+    if (!type || !title || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Missing required fields: type, title, startDate, endDate' });
+    }
+
+    let googleEventId = null;
+    let meetLink = null;
+
+    // Create event in Google Calendar
+    if (userEmail && serviceAccountAuth.isConfigured()) {
+      try {
+        const calendar = await serviceAccountAuth.getCalendarForUser(userEmail);
+
+        const eventData: any = {
+          summary: title,
+          description: description || '',
+          start: allDay
+            ? { date: new Date(startDate).toISOString().split('T')[0] }
+            : { dateTime: new Date(startDate).toISOString(), timeZone: 'America/New_York' },
+          end: allDay
+            ? { date: new Date(endDate).toISOString().split('T')[0] }
+            : { dateTime: new Date(endDate).toISOString(), timeZone: 'America/New_York' },
+          location: location || undefined,
+        };
+
+        // Add Google Meet if requested
+        if (addGoogleMeet) {
+          eventData.conferenceData = {
+            createRequest: {
+              requestId: uuidv4(),
+              conferenceSolutionKey: { type: 'hangoutsMeet' }
+            }
+          };
+        }
+
+        const googleEvent = await calendar.events.insert({
+          calendarId: 'primary',
+          requestBody: eventData,
+          conferenceDataVersion: addGoogleMeet ? 1 : 0,
+        });
+
+        googleEventId = googleEvent.data.id;
+        meetLink = googleEvent.data.hangoutLink || null;
+      } catch (error) {
+        console.warn('[Calendar] Failed to create Google Calendar event:', error);
+      }
+    }
+
+    // Save to local database
+    const eventId = uuidv4();
+    const [newEvent] = await db.insert(calendarEvents).values({
+      id: eventId,
+      userId: String(user.id),
+      googleEventId,
+      type,
+      title,
+      description: description || null,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      location: location || null,
+      meetLink,
+      allDay: allDay || false,
+      ptoType: ptoType || null,
+      candidateId: candidateId || null,
+      interviewId: interviewId || null,
+    }).returning();
+
+    res.json(newEvent);
+  } catch (error: any) {
+    console.error('Error creating user calendar event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update calendar event
+router.put('/calendar/user-events/:eventId', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const userEmail = user?.email;
+    const { eventId } = req.params;
+    const { title, description, startDate, endDate, location, allDay, type, ptoType } = req.body;
+
+    // Find the event and verify ownership
+    const [existingEvent] = await db.select().from(calendarEvents)
+      .where(and(eq(calendarEvents.id, eventId), eq(calendarEvents.userId, String(user.id))));
+
+    if (!existingEvent) {
+      return res.status(404).json({ error: 'Event not found or not authorized' });
+    }
+
+    // Update Google Calendar if linked
+    if (existingEvent.googleEventId && userEmail && serviceAccountAuth.isConfigured()) {
+      try {
+        const calendar = await serviceAccountAuth.getCalendarForUser(userEmail);
+
+        const eventData: any = {
+          summary: title || existingEvent.title,
+          description: description !== undefined ? description : existingEvent.description,
+          start: (allDay !== undefined ? allDay : existingEvent.allDay)
+            ? { date: new Date(startDate || existingEvent.startDate).toISOString().split('T')[0] }
+            : { dateTime: new Date(startDate || existingEvent.startDate).toISOString(), timeZone: 'America/New_York' },
+          end: (allDay !== undefined ? allDay : existingEvent.allDay)
+            ? { date: new Date(endDate || existingEvent.endDate).toISOString().split('T')[0] }
+            : { dateTime: new Date(endDate || existingEvent.endDate).toISOString(), timeZone: 'America/New_York' },
+          location: location !== undefined ? location : existingEvent.location,
+        };
+
+        await calendar.events.update({
+          calendarId: 'primary',
+          eventId: existingEvent.googleEventId,
+          requestBody: eventData,
+        });
+      } catch (error) {
+        console.warn('[Calendar] Failed to update Google Calendar event:', error);
+      }
+    }
+
+    // Update local database
+    const [updatedEvent] = await db.update(calendarEvents)
+      .set({
+        title: title || existingEvent.title,
+        description: description !== undefined ? description : existingEvent.description,
+        startDate: startDate ? new Date(startDate) : existingEvent.startDate,
+        endDate: endDate ? new Date(endDate) : existingEvent.endDate,
+        location: location !== undefined ? location : existingEvent.location,
+        allDay: allDay !== undefined ? allDay : existingEvent.allDay,
+        type: type || existingEvent.type,
+        ptoType: ptoType !== undefined ? ptoType : existingEvent.ptoType,
+        updatedAt: new Date(),
+      })
+      .where(eq(calendarEvents.id, eventId))
+      .returning();
+
+    res.json(updatedEvent);
+  } catch (error: any) {
+    console.error('Error updating calendar event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete calendar event
+router.delete('/calendar/user-events/:eventId', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const userEmail = user?.email;
+    const { eventId } = req.params;
+
+    // Find the event and verify ownership
+    const [existingEvent] = await db.select().from(calendarEvents)
+      .where(and(eq(calendarEvents.id, eventId), eq(calendarEvents.userId, String(user.id))));
+
+    if (!existingEvent) {
+      return res.status(404).json({ error: 'Event not found or not authorized' });
+    }
+
+    // Delete from Google Calendar if linked
+    if (existingEvent.googleEventId && userEmail && serviceAccountAuth.isConfigured()) {
+      try {
+        const calendar = await serviceAccountAuth.getCalendarForUser(userEmail);
+        await calendar.events.delete({
+          calendarId: 'primary',
+          eventId: existingEvent.googleEventId,
+        });
+      } catch (error) {
+        console.warn('[Calendar] Failed to delete Google Calendar event:', error);
+      }
+    }
+
+    // Delete from local database
+    await db.delete(calendarEvents).where(eq(calendarEvents.id, eventId));
+
+    res.json({ success: true, message: 'Event deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting calendar event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user's local calendar events
+router.get('/calendar/user-events', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { timeMin, timeMax } = req.query;
+
+    let query = db.select().from(calendarEvents).where(eq(calendarEvents.userId, String(user.id)));
+
+    const events = await query;
+
+    // Filter by date range if provided
+    let filteredEvents = events;
+    if (timeMin || timeMax) {
+      const startFilter = timeMin ? new Date(timeMin as string) : new Date(0);
+      const endFilter = timeMax ? new Date(timeMax as string) : new Date('2099-12-31');
+      filteredEvents = events.filter(event => {
+        const eventStart = new Date(event.startDate);
+        const eventEnd = new Date(event.endDate);
+        return eventStart >= startFilter && eventEnd <= endFilter;
+      });
+    }
+
+    res.json(filteredEvents);
+  } catch (error: any) {
+    console.error('Error fetching user calendar events:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/calendar/events', requireAuth, async (req, res) => {
   try {
     const userEmail = (req as any).user?.email;
@@ -225,6 +440,244 @@ router.post('/calendar/check-availability', requireAuth, async (req, res) => {
     res.json(availability);
   } catch (error: any) {
     console.error('Error checking availability:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// My Calendar - Combined view of Google Calendar + Interviews + PTO for logged-in user
+router.get('/calendar/my-events', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const userEmail = user?.email;
+    const { timeMin, timeMax } = req.query;
+
+    // Set default time range (current month)
+    const now = new Date();
+    const defaultTimeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const defaultTimeMax = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString();
+
+    const startDate = timeMin ? new Date(timeMin as string) : new Date(defaultTimeMin);
+    const endDate = timeMax ? new Date(timeMax as string) : new Date(defaultTimeMax);
+
+    const events: any[] = [];
+
+    // 1. Fetch Google Calendar events for the user
+    if (userEmail && serviceAccountAuth.isConfigured()) {
+      try {
+        const calendar = await serviceAccountAuth.getCalendarForUser(userEmail);
+        const response = await calendar.events.list({
+          calendarId: 'primary',
+          timeMin: startDate.toISOString(),
+          timeMax: endDate.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime'
+        });
+
+        for (const item of (response.data.items || [])) {
+          events.push({
+            id: item.id,
+            type: 'MEETING',
+            title: item.summary || 'Untitled',
+            description: item.description,
+            startDate: item.start?.dateTime || item.start?.date,
+            endDate: item.end?.dateTime || item.end?.date,
+            location: item.location,
+            meetingLink: item.hangoutLink || item.conferenceData?.entryPoints?.[0]?.uri,
+            source: 'google_calendar',
+            color: 'green'
+          });
+        }
+      } catch (calError) {
+        console.warn('[My Calendar] Failed to fetch Google Calendar events:', calError);
+      }
+    }
+
+    // 2. Fetch user's interviews (as interviewer)
+    try {
+      const { storage } = await import('../storage');
+      const allInterviews = await storage.getAllInterviews();
+      const userInterviews = allInterviews.filter((interview: any) => {
+        const interviewDate = new Date(interview.scheduledDate);
+        return (
+          interview.interviewerId === user.id &&
+          interviewDate >= startDate &&
+          interviewDate <= endDate &&
+          interview.status !== 'CANCELLED'
+        );
+      });
+
+      for (const interview of userInterviews) {
+        const candidate = await storage.getCandidateById(interview.candidateId);
+        events.push({
+          id: interview.id,
+          type: 'INTERVIEW',
+          title: `Interview: ${candidate?.firstName} ${candidate?.lastName} - ${candidate?.position}`,
+          description: interview.notes,
+          startDate: interview.scheduledDate,
+          endDate: new Date(new Date(interview.scheduledDate).getTime() + interview.duration * 60000).toISOString(),
+          location: interview.location,
+          meetingLink: interview.meetingLink,
+          candidateId: interview.candidateId,
+          interviewType: interview.type,
+          source: 'interview',
+          color: 'blue'
+        });
+      }
+    } catch (intError) {
+      console.warn('[My Calendar] Failed to fetch interviews:', intError);
+    }
+
+    // 3. Fetch user's approved PTO
+    try {
+      const { storage } = await import('../storage');
+      const allPto = await storage.getAllPtoRequests();
+      const userPto = allPto.filter((pto: any) => {
+        const ptoStart = new Date(pto.startDate);
+        const ptoEnd = new Date(pto.endDate);
+        return (
+          pto.employeeId === user.id &&
+          pto.status === 'APPROVED' &&
+          ptoEnd >= startDate &&
+          ptoStart <= endDate
+        );
+      });
+
+      for (const pto of userPto) {
+        events.push({
+          id: pto.id,
+          type: 'PTO',
+          title: `PTO: ${pto.type}`,
+          description: pto.reason,
+          startDate: pto.startDate,
+          endDate: pto.endDate,
+          ptoType: pto.type,
+          days: pto.days,
+          source: 'pto',
+          color: 'red'
+        });
+      }
+    } catch (ptoError) {
+      console.warn('[My Calendar] Failed to fetch PTO:', ptoError);
+    }
+
+    // 4. Fetch user-created events from calendarEvents table
+    try {
+      const userCreatedEvents = await db.select().from(calendarEvents).where(eq(calendarEvents.userId, String(user.id)));
+
+      // Filter by date range
+      const filteredUserEvents = userCreatedEvents.filter(event => {
+        const eventStart = new Date(event.startDate);
+        const eventEnd = new Date(event.endDate);
+        return eventEnd >= startDate && eventStart <= endDate;
+      });
+
+      for (const event of filteredUserEvents) {
+        events.push({
+          id: event.id.toString(),
+          googleEventId: event.googleEventId,
+          type: event.type as 'MEETING' | 'PTO' | 'INTERVIEW' | 'OTHER',
+          title: event.title,
+          description: event.description,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          location: event.location,
+          meetLink: event.meetLink,
+          allDay: event.allDay,
+          ptoType: event.ptoType,
+          userId: event.userId,
+          source: 'user-events',
+          color: event.type === 'PTO' ? 'red' : event.type === 'INTERVIEW' ? 'blue' : 'green'
+        });
+      }
+    } catch (userEventError) {
+      console.warn('[My Calendar] Failed to fetch user-created events:', userEventError);
+    }
+
+    // Sort events by start date
+    events.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    res.json(events);
+  } catch (error: any) {
+    console.error('Error fetching my calendar events:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Team PTO - For managers to see team members' approved PTO
+router.get('/calendar/team-pto', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { timeMin, timeMax, department } = req.query;
+
+    // Only managers and admins can view team PTO
+    if (!['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN'].includes(user.role)) {
+      return res.status(403).json({ error: 'Manager access required to view team PTO' });
+    }
+
+    // Set default time range (current month)
+    const now = new Date();
+    const defaultTimeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const defaultTimeMax = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString();
+
+    const startDate = timeMin ? new Date(timeMin as string) : new Date(defaultTimeMin);
+    const endDate = timeMax ? new Date(timeMax as string) : new Date(defaultTimeMax);
+
+    const events: any[] = [];
+
+    try {
+      const { storage } = await import('../storage');
+      const allPto = await storage.getAllPtoRequests();
+      const allUsers = await storage.getAllUsers();
+
+      // Filter by department if specified, otherwise get all approved PTO
+      const filteredPto = allPto.filter((pto: any) => {
+        const ptoStart = new Date(pto.startDate);
+        const ptoEnd = new Date(pto.endDate);
+        const employee = allUsers.find((u: any) => u.id === pto.employeeId);
+
+        // Exclude the current user's own PTO (they can see that in my-events)
+        if (pto.employeeId === user.id) return false;
+
+        // Check date range
+        if (ptoEnd < startDate || ptoStart > endDate) return false;
+
+        // Check status
+        if (pto.status !== 'APPROVED') return false;
+
+        // Filter by department if specified
+        if (department && employee?.department !== department) return false;
+
+        return true;
+      });
+
+      for (const pto of filteredPto) {
+        const employee = allUsers.find((u: any) => u.id === pto.employeeId);
+        events.push({
+          id: pto.id,
+          type: 'TEAM_PTO',
+          title: `${employee?.firstName} ${employee?.lastName} - ${pto.type}`,
+          description: `${employee?.firstName} ${employee?.lastName} is on ${pto.type} leave`,
+          startDate: pto.startDate,
+          endDate: pto.endDate,
+          ptoType: pto.type,
+          days: pto.days,
+          employeeId: pto.employeeId,
+          employeeName: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown',
+          department: employee?.department,
+          source: 'team_pto',
+          color: 'purple'
+        });
+      }
+    } catch (ptoError) {
+      console.warn('[Team PTO] Failed to fetch team PTO:', ptoError);
+    }
+
+    // Sort events by start date
+    events.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    res.json(events);
+  } catch (error: any) {
+    console.error('Error fetching team PTO:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -114,6 +114,7 @@ function AuthenticatedRoutes() {
         <Route path="/my-portal" element={<EmployeeDashboard />} />
         <Route path="/team-directory" element={<TeamDirectory />} />
         <Route path="/team-dashboard" element={<TeamDashboard />} />
+        <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
       </Routes>
       <SusanFloatingOrb />
       <OnboardingTour />

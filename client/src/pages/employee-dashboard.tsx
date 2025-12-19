@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { DashboardSkeleton } from '@/components/ui/skeleton-patterns';
+import { EventFormModal } from '@/components/calendar/EventFormModal';
+import { DeleteEventDialog } from '@/components/calendar/DeleteEventDialog';
 import {
   Calendar,
   Clock,
@@ -27,11 +29,17 @@ import {
   ChevronRight,
   Umbrella,
   Heart,
-  Coffee
+  Coffee,
+  Video,
+  X,
+  Plus,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isToday } from 'date-fns';
 import { apiRequest } from '@/lib/queryClient';
 
 interface PtoBalance {
@@ -54,9 +62,80 @@ interface PendingItem {
   link: string;
 }
 
+interface CalendarEvent {
+  id: string;
+  type: 'MEETING' | 'INTERVIEW' | 'PTO' | 'TEAM_PTO' | 'OTHER';
+  title: string;
+  startDate: string;
+  endDate: string;
+  color?: string;
+  source: string;
+  meetLink?: string;
+  location?: string;
+  description?: string;
+  googleEventId?: string;
+  allDay?: boolean;
+  ptoType?: 'VACATION' | 'SICK' | 'PERSONAL';
+  userId?: string;
+}
+
+const eventTypeColors: Record<string, { bg: string; text: string; border: string }> = {
+  MEETING: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-700 dark:text-green-200', border: 'border-green-300 dark:border-green-700' },
+  INTERVIEW: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-700 dark:text-blue-200', border: 'border-blue-300 dark:border-blue-700' },
+  PTO: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-700 dark:text-red-200', border: 'border-red-300 dark:border-red-700' },
+  TEAM_PTO: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-700 dark:text-purple-200', border: 'border-purple-300 dark:border-purple-700' },
+  OTHER: { bg: 'bg-gray-100 dark:bg-gray-900/50', text: 'text-gray-700 dark:text-gray-200', border: 'border-gray-300 dark:border-gray-700' }
+};
+
 function EmployeeDashboard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  // Event CRUD modal state
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [eventToEdit, setEventToEdit] = useState<CalendarEvent | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
+  const [selectedDateForNew, setSelectedDateForNew] = useState<Date | undefined>();
+
+  // Helper to check if user owns the event
+  const userOwnsEvent = (event: CalendarEvent) => {
+    return event.source === 'user-events' || event.userId === user?.id?.toString();
+  };
+
+  // Fetch calendar events
+  const { data: calendarEvents = [], isLoading: calendarLoading } = useQuery<CalendarEvent[]>({
+    queryKey: ['/api/google/calendar/my-events', currentMonth.toISOString()],
+    queryFn: async () => {
+      const start = startOfMonth(currentMonth);
+      const end = endOfMonth(currentMonth);
+      const response = await fetch(
+        `/api/google/calendar/my-events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}`,
+        { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+      );
+      if (!response.ok) return [];
+      return response.json();
+    }
+  });
+
+  // Calendar helpers
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const calStart = startOfWeek(monthStart);
+    const calEnd = endOfWeek(monthEnd);
+    return eachDayOfInterval({ start: calStart, end: calEnd });
+  }, [currentMonth]);
+
+  const getEventsForDay = (day: Date) => {
+    return calendarEvents.filter(event => {
+      const eventStart = new Date(event.startDate);
+      const eventEnd = new Date(event.endDate);
+      return day >= new Date(eventStart.toDateString()) && day <= new Date(eventEnd.toDateString());
+    });
+  };
 
   // Fetch PTO balance
   const { data: ptoBalance, isLoading: ptoLoading } = useQuery<PtoBalance>({
@@ -363,12 +442,230 @@ function EmployeeDashboard() {
 
         {/* Center Column - Activity & PTO */}
         <div className="lg:col-span-2 space-y-6">
-          <Tabs defaultValue="pto" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs defaultValue="calendar" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="calendar">My Calendar</TabsTrigger>
               <TabsTrigger value="pto">My PTO</TabsTrigger>
               <TabsTrigger value="pending">Pending Actions</TabsTrigger>
               <TabsTrigger value="activity">Recent Activity</TabsTrigger>
             </TabsList>
+
+            {/* Calendar Tab */}
+            <TabsContent value="calendar" className="space-y-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div>
+                    <CardTitle>My Calendar</CardTitle>
+                    <CardDescription>View your schedule, PTO, and events</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEventToEdit(null);
+                        setSelectedDateForNew(undefined);
+                        setShowEventModal(true);
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Event
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                    >
+                      &lt;
+                    </Button>
+                    <span className="text-sm font-medium min-w-[140px] text-center">
+                      {format(currentMonth, 'MMMM yyyy')}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                    >
+                      &gt;
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {/* Event Type Legend */}
+                  <div className="flex flex-wrap gap-3 mb-4 text-xs">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded bg-green-500" />
+                      <span>Meetings</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded bg-blue-500" />
+                      <span>Interviews</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded bg-red-500" />
+                      <span>My PTO</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded bg-purple-500" />
+                      <span>Team PTO</span>
+                    </div>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div className="border rounded-lg overflow-hidden dark:border-gray-700">
+                    {/* Day Headers */}
+                    <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                        <div key={day} className="p-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Days */}
+                    <div className="grid grid-cols-7">
+                      {calendarDays.map((day, idx) => {
+                        const dayEvents = getEventsForDay(day);
+                        const inCurrentMonth = isSameMonth(day, currentMonth);
+                        const isCurrentDay = isToday(day);
+
+                        return (
+                          <div
+                            key={idx}
+                            onClick={(e) => {
+                              // Only open create modal if clicking on the day cell itself, not on an event
+                              if ((e.target as HTMLElement).closest('button')) return;
+                              setEventToEdit(null);
+                              setSelectedDateForNew(day);
+                              setShowEventModal(true);
+                            }}
+                            className={`min-h-[80px] p-1 border-b border-r dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors ${
+                              !inCurrentMonth ? 'bg-gray-50 dark:bg-gray-800/50' : ''
+                            } ${isCurrentDay ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                          >
+                            <div className={`text-xs mb-1 ${
+                              !inCurrentMonth ? 'text-gray-400' :
+                              isCurrentDay ? 'font-bold text-blue-600 dark:text-blue-400' :
+                              'text-gray-700 dark:text-gray-300'
+                            }`}>
+                              {format(day, 'd')}
+                            </div>
+                            <div className="space-y-0.5">
+                              {dayEvents.slice(0, 2).map((event) => {
+                                const colors = eventTypeColors[event.type] || eventTypeColors.MEETING;
+                                return (
+                                  <button
+                                    key={event.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedEvent(event);
+                                    }}
+                                    className={`w-full text-left px-1 py-0.5 text-xs rounded truncate ${colors.bg} ${colors.text} hover:opacity-80`}
+                                  >
+                                    {event.title}
+                                  </button>
+                                );
+                              })}
+                              {dayEvents.length > 2 && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
+                                  +{dayEvents.length - 2} more
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Loading State */}
+                  {calendarLoading && (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Event Detail Modal */}
+              {selectedEvent && (
+                <Card className="border-2 border-primary/20">
+                  <CardHeader className="flex flex-row items-start justify-between pb-2">
+                    <div>
+                      <Badge className={`mb-2 ${eventTypeColors[selectedEvent.type]?.bg} ${eventTypeColors[selectedEvent.type]?.text}`}>
+                        {selectedEvent.type}
+                      </Badge>
+                      <CardTitle className="text-lg">{selectedEvent.title}</CardTitle>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedEvent(null)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <Calendar className="w-4 h-4" />
+                      <span>
+                        {format(new Date(selectedEvent.startDate), 'MMM d, yyyy')}
+                        {selectedEvent.startDate !== selectedEvent.endDate && (
+                          <> - {format(new Date(selectedEvent.endDate), 'MMM d, yyyy')}</>
+                        )}
+                      </span>
+                    </div>
+                    {selectedEvent.meetLink && (
+                      <a
+                        href={selectedEvent.meetLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                      >
+                        <Video className="w-4 h-4" />
+                        Join Google Meet
+                      </a>
+                    )}
+                    {selectedEvent.location && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <MapPin className="w-4 h-4" />
+                        <span>{selectedEvent.location}</span>
+                      </div>
+                    )}
+                    {selectedEvent.description && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                        {selectedEvent.description}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">Source: {selectedEvent.source}</p>
+
+                    {/* Edit/Delete buttons - only show for user's own events */}
+                    {userOwnsEvent(selectedEvent) && (
+                      <div className="flex gap-2 mt-4 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEventToEdit(selectedEvent as any);
+                            setShowEventModal(true);
+                          }}
+                        >
+                          <Pencil className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            setEventToDelete(selectedEvent);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
             {/* PTO Tab */}
             <TabsContent value="pto" className="space-y-4">
@@ -569,6 +866,45 @@ function EmployeeDashboard() {
           </Card>
         </div>
       </div>
+
+      {/* Event Create/Edit Modal */}
+      <EventFormModal
+        open={showEventModal}
+        onClose={() => {
+          setShowEventModal(false);
+          setEventToEdit(null);
+          setSelectedDateForNew(undefined);
+          setSelectedEvent(null);
+        }}
+        event={eventToEdit ? {
+          id: eventToEdit.id,
+          type: eventToEdit.type === 'TEAM_PTO' ? 'PTO' : eventToEdit.type as 'MEETING' | 'PTO' | 'INTERVIEW' | 'OTHER',
+          title: eventToEdit.title,
+          description: eventToEdit.description,
+          startDate: eventToEdit.startDate,
+          endDate: eventToEdit.endDate,
+          location: eventToEdit.location,
+          allDay: eventToEdit.allDay,
+          meetLink: eventToEdit.meetLink,
+          ptoType: eventToEdit.ptoType,
+        } : null}
+        selectedDate={selectedDateForNew}
+      />
+
+      {/* Delete Event Confirmation Dialog */}
+      <DeleteEventDialog
+        open={showDeleteDialog}
+        onClose={() => {
+          setShowDeleteDialog(false);
+          setEventToDelete(null);
+          setSelectedEvent(null);
+        }}
+        event={eventToDelete ? {
+          id: eventToDelete.id,
+          title: eventToDelete.title,
+          googleEventId: eventToDelete.googleEventId,
+        } : null}
+      />
     </div>
   );
 }

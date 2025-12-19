@@ -7,11 +7,12 @@ import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { db } from './db';
 import { eq, and } from 'drizzle-orm';
-import { 
+import {
   loginSchema, registerSchema, insertPtoRequestSchema,
-  insertCandidateSchema, insertInterviewSchema, insertDocumentSchema, 
+  insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
   insertEmployeeReviewSchema, insertTaskSchema, insertCompanySettingsSchema,
-  toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems
+  toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
+  ptoRequests
 } from '../shared/schema';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
@@ -48,6 +49,7 @@ import equipmentReceiptRoutes from './routes/equipment-receipts';
 import employeePortalRoutes from './routes/employee-portal';
 import equipmentAgreementRoutes from './routes/equipment-agreements';
 import { googleDriveService } from './services/google-drive-service';
+import { googleCalendarService } from './services/google-calendar-service';
 import { serviceAccountAuth } from './services/service-account-auth';
 
 const router = express.Router();
@@ -1261,36 +1263,150 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
       reviewedAt: new Date(),
     });
     
-    // If the request is approved, update the employee's PTO policy
+    // If the request is approved, update the employee's PTO policy and create calendar events
     if (status === 'APPROVED' && currentRequest.status !== 'APPROVED') {
       const policy = await storage.getPtoPolicyByEmployee(currentRequest.employeeId);
       if (policy) {
         const daysToUse = currentRequest.days || 0;
         const newUsedDays = policy.usedDays + daysToUse;
         const newRemainingDays = policy.totalDays - newUsedDays;
-        
+
         await storage.updatePtoPolicy(currentRequest.employeeId, {
           usedDays: newUsedDays,
           remainingDays: newRemainingDays
         });
       }
+
+      // Create Google Calendar events for approved PTO
+      try {
+        const employee = await storage.getUserById(currentRequest.employeeId);
+        if (employee && employee.email) {
+          await googleCalendarService.initialize();
+
+          const startDate = new Date(currentRequest.startDate);
+          const endDate = new Date(currentRequest.endDate);
+          // Set end date to end of day (all-day events)
+          endDate.setHours(23, 59, 59, 999);
+
+          const ptoTypeName = currentRequest.type || 'Time Off';
+
+          // 1. Create event on Employee's personal calendar
+          try {
+            const employeeEvent = await googleCalendarService.createEventWithId(employee.email, {
+              summary: `PTO: ${ptoTypeName}`,
+              description: `Your approved ${ptoTypeName} time off.\n\nReason: ${currentRequest.reason || 'Not specified'}\nDays: ${currentRequest.days || 'N/A'}`,
+              start: {
+                dateTime: startDate.toISOString(),
+                timeZone: 'America/New_York'
+              },
+              end: {
+                dateTime: endDate.toISOString(),
+                timeZone: 'America/New_York'
+              },
+              reminders: {
+                useDefault: false,
+                overrides: [
+                  { method: 'email', minutes: 24 * 60 },
+                  { method: 'popup', minutes: 60 }
+                ]
+              }
+            });
+
+            // Update PTO request with employee calendar event ID
+            if (employeeEvent?.id) {
+              await db.update(ptoRequests)
+                .set({ googleEventId: employeeEvent.id })
+                .where(eq(ptoRequests.id, req.params.id));
+              console.log(`[PTO Calendar] Created employee calendar event: ${employeeEvent.id}`);
+            }
+          } catch (empCalError) {
+            console.error('[PTO Calendar] Error creating employee calendar event:', empCalError);
+          }
+
+          // 2. Create event on HR shared calendar
+          const hrCalendarId = process.env.HR_CALENDAR_ID;
+          if (hrCalendarId) {
+            try {
+              const hrEvent = await googleCalendarService.createEventWithId(hrCalendarId, {
+                summary: `PTO: ${employee.firstName} ${employee.lastName} - ${ptoTypeName}`,
+                description: `Employee: ${employee.firstName} ${employee.lastName}\nEmail: ${employee.email}\nDepartment: ${employee.department || 'N/A'}\nType: ${ptoTypeName}\nDays: ${currentRequest.days || 'N/A'}\nReason: ${currentRequest.reason || 'Not specified'}`,
+                start: {
+                  dateTime: startDate.toISOString(),
+                  timeZone: 'America/New_York'
+                },
+                end: {
+                  dateTime: endDate.toISOString(),
+                  timeZone: 'America/New_York'
+                }
+              });
+
+              // Update PTO request with HR calendar event ID
+              if (hrEvent?.id) {
+                await db.update(ptoRequests)
+                  .set({ hrCalendarEventId: hrEvent.id })
+                  .where(eq(ptoRequests.id, req.params.id));
+                console.log(`[PTO Calendar] Created HR calendar event: ${hrEvent.id}`);
+              }
+            } catch (hrCalError) {
+              console.error('[PTO Calendar] Error creating HR calendar event:', hrCalError);
+            }
+          }
+        }
+      } catch (calendarError) {
+        console.error('[PTO Calendar] Error creating calendar events:', calendarError);
+        // Don't fail the approval if calendar creation fails
+      }
     }
-    
-    // If the request was previously approved and is now denied/pending, restore the days
+
+    // If the request was previously approved and is now denied/pending, restore the days and delete calendar events
     if (currentRequest.status === 'APPROVED' && status !== 'APPROVED') {
       const policy = await storage.getPtoPolicyByEmployee(currentRequest.employeeId);
       if (policy) {
         const daysToRestore = currentRequest.days || 0;
         const newUsedDays = Math.max(0, policy.usedDays - daysToRestore);
         const newRemainingDays = policy.totalDays - newUsedDays;
-        
+
         await storage.updatePtoPolicy(currentRequest.employeeId, {
           usedDays: newUsedDays,
           remainingDays: newRemainingDays
         });
       }
+
+      // Delete Google Calendar events if they exist
+      try {
+        await googleCalendarService.initialize();
+        const employee = await storage.getUserById(currentRequest.employeeId);
+
+        // Delete employee calendar event
+        if (currentRequest.googleEventId && employee?.email) {
+          try {
+            await googleCalendarService.updateEventWithId(employee.email, currentRequest.googleEventId, { status: 'cancelled' });
+            console.log(`[PTO Calendar] Cancelled employee calendar event: ${currentRequest.googleEventId}`);
+          } catch (delError) {
+            console.error('[PTO Calendar] Error cancelling employee event:', delError);
+          }
+        }
+
+        // Delete HR calendar event
+        const hrCalendarId = process.env.HR_CALENDAR_ID;
+        if (currentRequest.hrCalendarEventId && hrCalendarId) {
+          try {
+            await googleCalendarService.updateEventWithId(hrCalendarId, currentRequest.hrCalendarEventId, { status: 'cancelled' });
+            console.log(`[PTO Calendar] Cancelled HR calendar event: ${currentRequest.hrCalendarEventId}`);
+          } catch (delError) {
+            console.error('[PTO Calendar] Error cancelling HR event:', delError);
+          }
+        }
+
+        // Clear the event IDs from the PTO request
+        await db.update(ptoRequests)
+          .set({ googleEventId: null, hrCalendarEventId: null })
+          .where(eq(ptoRequests.id, req.params.id));
+      } catch (calendarError) {
+        console.error('[PTO Calendar] Error deleting calendar events:', calendarError);
+      }
     }
-    
+
     res.json(ptoRequest);
   } catch (error) {
     console.error('Error updating PTO request:', error);
