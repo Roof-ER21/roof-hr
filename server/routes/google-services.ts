@@ -167,7 +167,7 @@ router.post('/calendar/user-events', requireAuth, async (req, res) => {
   try {
     const user = (req as any).user;
     const userEmail = user?.email;
-    const { type, title, description, startDate, endDate, location, allDay, addGoogleMeet, ptoType, candidateId, interviewId } = req.body;
+    const { type, title, description, startDate, endDate, location, allDay, addGoogleMeet, ptoType, candidateId, interviewId, attendees } = req.body;
 
     // Validate required fields
     if (!type || !title || !startDate || !endDate) {
@@ -192,6 +192,8 @@ router.post('/calendar/user-events', requireAuth, async (req, res) => {
             ? { date: new Date(endDate).toISOString().split('T')[0] }
             : { dateTime: new Date(endDate).toISOString(), timeZone: 'America/New_York' },
           location: location || undefined,
+          // Add attendees if provided
+          attendees: attendees?.length ? attendees.map((email: string) => ({ email })) : undefined,
         };
 
         // Add Google Meet if requested
@@ -234,6 +236,7 @@ router.post('/calendar/user-events', requireAuth, async (req, res) => {
       ptoType: ptoType || null,
       candidateId: candidateId || null,
       interviewId: interviewId || null,
+      attendees: attendees?.length ? attendees : null,
     }).returning();
 
     res.json(newEvent);
@@ -249,7 +252,7 @@ router.put('/calendar/user-events/:eventId', requireAuth, async (req, res) => {
     const user = (req as any).user;
     const userEmail = user?.email;
     const { eventId } = req.params;
-    const { title, description, startDate, endDate, location, allDay, type, ptoType } = req.body;
+    const { title, description, startDate, endDate, location, allDay, type, ptoType, attendees } = req.body;
 
     // Find the event and verify ownership
     const [existingEvent] = await db.select().from(calendarEvents)
@@ -274,6 +277,10 @@ router.put('/calendar/user-events/:eventId', requireAuth, async (req, res) => {
             ? { date: new Date(endDate || existingEvent.endDate).toISOString().split('T')[0] }
             : { dateTime: new Date(endDate || existingEvent.endDate).toISOString(), timeZone: 'America/New_York' },
           location: location !== undefined ? location : existingEvent.location,
+          // Update attendees if provided
+          attendees: attendees !== undefined
+            ? (attendees?.length ? attendees.map((email: string) => ({ email })) : [])
+            : (existingEvent.attendees?.length ? existingEvent.attendees.map((email: string) => ({ email })) : undefined),
         };
 
         await calendar.events.update({
@@ -297,6 +304,7 @@ router.put('/calendar/user-events/:eventId', requireAuth, async (req, res) => {
         allDay: allDay !== undefined ? allDay : existingEvent.allDay,
         type: type || existingEvent.type,
         ptoType: ptoType !== undefined ? ptoType : existingEvent.ptoType,
+        attendees: attendees !== undefined ? (attendees?.length ? attendees : null) : existingEvent.attendees,
         updatedAt: new Date(),
       })
       .where(eq(calendarEvents.id, eventId))
@@ -593,10 +601,25 @@ router.get('/calendar/my-events', requireAuth, async (req, res) => {
       console.warn('[My Calendar] Failed to fetch user-created events:', userEventError);
     }
 
-    // Sort events by start date
-    events.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    // Deduplicate: Remove Google Calendar events that are already in user-events
+    // This prevents duplicate display when a user-created event is synced to Google Calendar
+    const userEventGoogleIds = new Set(
+      events
+        .filter(e => e.source === 'user-events' && e.googleEventId)
+        .map(e => e.googleEventId)
+    );
 
-    res.json(events);
+    const deduplicatedEvents = events.filter(event => {
+      // Keep all non-google_calendar events
+      if (event.source !== 'google_calendar') return true;
+      // Filter out Google Calendar events that exist in user-events
+      return !userEventGoogleIds.has(event.id);
+    });
+
+    // Sort events by start date
+    deduplicatedEvents.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+    res.json(deduplicatedEvents);
   } catch (error: any) {
     console.error('Error fetching my calendar events:', error);
     res.status(500).json({ error: error.message });

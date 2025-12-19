@@ -514,6 +514,8 @@ export const calendarEvents = pgTable('calendar_events', {
   // For Interview type events
   candidateId: text('candidate_id'), // Link to candidate for interviews
   interviewId: text('interview_id'), // Link to interview record
+  // Attendees for meetings/events
+  attendees: text('attendees').array(), // Array of email addresses
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

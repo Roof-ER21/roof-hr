@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { Users, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +47,7 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
     allDay: boolean;
     addGoogleMeet: boolean;
     ptoType: 'VACATION' | 'SICK' | 'PERSONAL' | '';
+    attendees: string[];
   }>({
     type: 'MEETING',
     title: '',
@@ -58,11 +60,37 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
     allDay: false,
     addGoogleMeet: false,
     ptoType: '',
+    attendees: [],
   });
+
+  // Attendee search state
+  const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [showAttendeeSuggestions, setShowAttendeeSuggestions] = useState(false);
+
+  // Fetch employees for attendee suggestions
+  const { data: employeesData } = useQuery<{ id: number; email: string; firstName: string; lastName: string; }[]>({
+    queryKey: ['/api/employees'],
+    enabled: open,
+  });
+
+  // Filter employees based on search
+  const filteredEmployees = employeesData?.filter(emp => {
+    if (!emp.email) return false;
+    const searchLower = attendeeSearch.toLowerCase();
+    const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
+    return (
+      !formData.attendees.includes(emp.email) &&
+      (fullName.includes(searchLower) || emp.email.toLowerCase().includes(searchLower))
+    );
+  }) || [];
 
   // Initialize form when modal opens
   useEffect(() => {
     if (open) {
+      // Reset attendee search
+      setAttendeeSearch('');
+      setShowAttendeeSuggestions(false);
+
       if (event) {
         // Editing existing event
         const startDt = new Date(event.startDate);
@@ -79,6 +107,7 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
           allDay: event.allDay || false,
           addGoogleMeet: !!event.meetLink,
           ptoType: event.ptoType || '',
+          attendees: (event as any).attendees || [],
         });
       } else {
         // Creating new event
@@ -96,6 +125,7 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
           allDay: false,
           addGoogleMeet: false,
           ptoType: '',
+          attendees: [],
         });
       }
     }
@@ -189,6 +219,7 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
       allDay: formData.allDay,
       addGoogleMeet: formData.addGoogleMeet && formData.type !== 'PTO',
       ptoType: formData.type === 'PTO' ? formData.ptoType : undefined,
+      attendees: formData.type !== 'PTO' && formData.attendees.length > 0 ? formData.attendees : undefined,
     };
 
     if (event?.id) {
@@ -345,6 +376,82 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 placeholder="Add location (optional)"
               />
+            </div>
+          )}
+
+          {/* Attendees */}
+          {formData.type !== 'PTO' && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <Users className="h-4 w-4" /> Attendees
+              </Label>
+
+              {/* Selected Attendees */}
+              {formData.attendees.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {formData.attendees.map((email) => {
+                    const emp = employeesData?.find(e => e.email === email);
+                    const displayName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : email;
+                    return (
+                      <span
+                        key={email}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                      >
+                        {displayName}
+                        <button
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            attendees: formData.attendees.filter(a => a !== email)
+                          })}
+                          className="hover:bg-blue-200 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Attendee Search Input */}
+              <div className="relative">
+                <Input
+                  placeholder="Search employees to invite..."
+                  value={attendeeSearch}
+                  onChange={(e) => {
+                    setAttendeeSearch(e.target.value);
+                    setShowAttendeeSuggestions(true);
+                  }}
+                  onFocus={() => setShowAttendeeSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowAttendeeSuggestions(false), 200)}
+                />
+
+                {/* Suggestions Dropdown */}
+                {showAttendeeSuggestions && filteredEmployees.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-auto">
+                    {filteredEmployees.slice(0, 10).map((emp) => (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-gray-100 flex flex-col"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setFormData({
+                            ...formData,
+                            attendees: [...formData.attendees, emp.email]
+                          });
+                          setAttendeeSearch('');
+                          setShowAttendeeSuggestions(false);
+                        }}
+                      >
+                        <span className="font-medium">{emp.firstName} {emp.lastName}</span>
+                        <span className="text-sm text-gray-500">{emp.email}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
