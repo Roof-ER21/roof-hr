@@ -557,18 +557,28 @@ router.get('/calendar/my-events', requireAuth, async (req, res) => {
       }
     }
 
-    // 2. Fetch user's interviews (as interviewer)
+    // 2. Fetch user's interviews (as interviewer OR all for managers)
     try {
       const { storage } = await import('../storage');
       const allInterviews = await storage.getAllInterviews();
+
+      // Check if user is a manager - managers see all interviews for visibility into recruiting
+      const isManager = ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN'].includes(user.role);
+
       const userInterviews = allInterviews.filter((interview: any) => {
         const interviewDate = new Date(interview.scheduledDate);
-        return (
-          interview.interviewerId === user.id &&
-          interviewDate >= startDate &&
-          interviewDate <= endDate &&
-          interview.status !== 'CANCELLED'
-        );
+        const inDateRange = interviewDate >= startDate && interviewDate <= endDate;
+        const notCancelled = interview.status !== 'CANCELLED';
+
+        if (!inDateRange || !notCancelled) return false;
+
+        // Show interview if user is the interviewer
+        if (interview.interviewerId === user.id) return true;
+
+        // For managers: show all interviews so they have visibility into recruiting
+        if (isManager) return true;
+
+        return false;
       });
 
       for (const interview of userInterviews) {
