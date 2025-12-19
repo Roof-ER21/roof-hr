@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
+import { io } from 'socket.io-client';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -174,6 +175,41 @@ export default function CoiDocuments() {
     refetchDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
+
+  // Real-time COI updates via Socket.IO
+  useEffect(() => {
+    const socket = io('/', {
+      path: '/socket.io/',
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('coi:updated', (data: { action: string; documentId: string; uploadedBy?: string; updatedBy?: string; deletedBy?: string }) => {
+      // Refresh the COI documents list when any change occurs
+      queryClient.invalidateQueries({ queryKey: ['/api/coi-documents'] });
+
+      // Show toast notification for changes made by other users
+      if (data.uploadedBy && data.uploadedBy !== currentUser?.email) {
+        toast({
+          title: 'COI Document Added',
+          description: 'A new COI document was uploaded by another user.',
+        });
+      } else if (data.deletedBy && data.deletedBy !== currentUser?.email) {
+        toast({
+          title: 'COI Document Removed',
+          description: 'A COI document was deleted by another user.',
+        });
+      } else if (data.updatedBy && data.updatedBy !== currentUser?.email) {
+        toast({
+          title: 'COI Document Updated',
+          description: 'A COI document was modified by another user.',
+        });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [currentUser?.email, toast]);
 
   // Filter users based on current user's role
   const { data: allUsers = [], isLoading: usersLoading } = useQuery<User[]>({

@@ -40,7 +40,16 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
   { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ALL_ROLES },
   { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: MANAGER_ROLES },
-  { name: 'Susan AI', href: '/susan-ai', icon: Sparkles, roles: ALL_ROLES },
+  {
+    name: 'Susan AI',
+    href: '/susan-ai',
+    icon: Sparkles,
+    roles: ALL_ROLES,
+    children: [
+      { name: 'AI Assistant', href: '/susan-ai', icon: Sparkles, roles: ALL_ROLES },
+      { name: 'Admin Dashboard', href: '/susan-ai-admin', icon: Shield, roles: ADMIN_ROLES }
+    ]
+  },
   { name: 'Recruiting', href: '/recruiting', icon: Briefcase, roles: MANAGER_ROLES },
   {
     name: 'Documents',
@@ -89,7 +98,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI']);
 
   const toggleExpanded = (name: string) => {
     setExpandedItems(prev => 

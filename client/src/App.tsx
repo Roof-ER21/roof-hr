@@ -26,6 +26,7 @@ import CoiDocuments from '@/pages/CoiDocuments';
 import EmployeeAssignments from '@/pages/EmployeeAssignments';
 import Contracts from '@/pages/Contracts';
 import SusanAI from '@/pages/susan-ai';
+import SusanAIAdmin from '@/pages/susan-ai-admin';
 import GoogleIntegration from '@/pages/GoogleIntegration';
 import AttendanceDashboard from '@/pages/AttendanceDashboard';
 import AttendanceCheckIn from '@/pages/AttendanceCheckIn';
@@ -108,6 +109,7 @@ function AuthenticatedRoutes() {
         <Route path="/employee-assignments" element={<EmployeeAssignments />} />
         <Route path="/contracts" element={<Contracts />} />
         <Route path="/susan-ai" element={<SusanAI />} />
+        <Route path="/susan-ai-admin" element={<SusanAIAdmin />} />
         <Route path="/google-integration" element={<GoogleIntegration />} />
         <Route path="/attendance" element={<AttendanceDashboard />} />
         <Route path="/attendance/admin" element={<AttendanceAdminDashboard />} />

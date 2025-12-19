@@ -270,10 +270,16 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
     });
 
     console.log('[COI Upload] COI document created successfully. ID:', document.id, 'Google Drive ID:', driveFile.id);
-    
-    // TODO: Notify Susan AI about the new COI document
-    // This would trigger alerts and tracking
-    
+
+    // Emit real-time update for COI sync across all clients
+    if (req.app.locals.io) {
+      req.app.locals.io.emit('coi:updated', {
+        action: 'created',
+        documentId: document.id,
+        uploadedBy: req.user?.email
+      });
+    }
+
     res.json({
       ...document,
       googleDriveUrl: driveFile.webViewLink // Include direct link for frontend
@@ -344,6 +350,15 @@ router.post('/api/coi-documents', requireAuth, requireHROrManager, async (req, r
       alertFrequency
     });
 
+    // Emit real-time update for COI sync across all clients
+    if (req.app.locals.io) {
+      req.app.locals.io.emit('coi:updated', {
+        action: 'created',
+        documentId: document.id,
+        uploadedBy: req.user?.email
+      });
+    }
+
     res.json(document);
   } catch (error: any) {
     console.error('Error creating COI document:', error);
@@ -392,6 +407,16 @@ router.patch('/api/coi-documents/:id', requireAuth, requireHROrManager, async (r
     }
     
     const updatedDocument = await storage.updateCoiDocument(req.params.id, updateData);
+
+    // Emit real-time update for COI sync across all clients
+    if (req.app.locals.io) {
+      req.app.locals.io.emit('coi:updated', {
+        action: 'updated',
+        documentId: req.params.id,
+        updatedBy: req.user?.email
+      });
+    }
+
     res.json(updatedDocument);
   } catch (error) {
     console.error('Error updating COI document:', error);
@@ -402,7 +427,18 @@ router.patch('/api/coi-documents/:id', requireAuth, requireHROrManager, async (r
 // Delete COI document
 router.delete('/api/coi-documents/:id', requireAuth, requireHROrManager, async (req, res) => {
   try {
-    await storage.deleteCoiDocument(req.params.id);
+    const documentId = req.params.id;
+    await storage.deleteCoiDocument(documentId);
+
+    // Emit real-time update for COI sync across all clients
+    if (req.app.locals.io) {
+      req.app.locals.io.emit('coi:updated', {
+        action: 'deleted',
+        documentId: documentId,
+        deletedBy: req.user?.email
+      });
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting COI document:', error);
