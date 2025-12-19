@@ -527,6 +527,19 @@ export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit
   updatedAt: true,
 });
 
+// Calendar Event Attendees - Track individual RSVP status
+export const calendarEventAttendees = pgTable('calendar_event_attendees', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => calendarEvents.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  status: text('status').$type<'PENDING' | 'ACCEPTED' | 'MAYBE' | 'DECLINED'>().notNull().default('PENDING'),
+  rsvpToken: text('rsvp_token').notNull(), // Unique token for email links
+  respondedAt: timestamp('responded_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const calendarEventAttendeeSchema = createInsertSchema(calendarEventAttendees);
+
 // Email Templates
 export const emailTemplates = pgTable('email_templates', {
   id: text('id').primaryKey(),

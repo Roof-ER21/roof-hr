@@ -1057,7 +1057,7 @@ class EmailService {
 
   /**
    * Send calendar event invite email to attendees
-   * Includes event details and RSVP options
+   * Includes event details and one-click RSVP links
    */
   async sendCalendarInviteEmail(
     attendeeEmail: string,
@@ -1071,13 +1071,15 @@ class EmailService {
       organizerName: string;
       organizerEmail: string;
       eventId: string;
+      rsvpToken?: string;  // Unique token for direct RSVP
+      baseUrl?: string;    // Base URL for RSVP links
     },
     fromUserEmail?: string
   ): Promise<boolean> {
     try {
-      const { title, description, startDate, endDate, location, meetLink, organizerName, organizerEmail, eventId } = eventDetails;
+      const { title, description, startDate, endDate, location, meetLink, organizerName, organizerEmail, eventId, rsvpToken, baseUrl } = eventDetails;
 
-      // Format date and time
+      // Format date and time in Eastern timezone (DC time)
       const formatDateTime = (date: Date) => {
         return date.toLocaleString('en-US', {
           weekday: 'long',
@@ -1087,6 +1089,7 @@ class EmailService {
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
+          timeZone: 'America/New_York',
           timeZoneName: 'short'
         });
       };
@@ -1100,6 +1103,75 @@ class EmailService {
       }
       if (meetLink) {
         locationHtml += `<p><strong>Join Meeting:</strong> <a href="${meetLink}" style="color: #1155cc;">${meetLink}</a></p>`;
+      }
+
+      // Build RSVP buttons - use direct links if token provided, otherwise mailto fallback
+      let rsvpButtonsHtml = '';
+      if (rsvpToken && baseUrl) {
+        // Direct one-click RSVP links (no email needed)
+        const acceptUrl = `${baseUrl}/api/google/calendar/rsvp/${rsvpToken}/accepted`;
+        const maybeUrl = `${baseUrl}/api/google/calendar/rsvp/${rsvpToken}/maybe`;
+        const declineUrl = `${baseUrl}/api/google/calendar/rsvp/${rsvpToken}/declined`;
+
+        rsvpButtonsHtml = `
+          <div style="text-align: center; margin: 30px 0;">
+            <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Will you attend? (Click once to respond)</p>
+            <table cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+              <tr>
+                <td style="padding: 0 8px;">
+                  <a href="${acceptUrl}"
+                     style="display: inline-block; padding: 14px 30px; background-color: #22c55e; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                    Yes
+                  </a>
+                </td>
+                <td style="padding: 0 8px;">
+                  <a href="${maybeUrl}"
+                     style="display: inline-block; padding: 14px 30px; background-color: #f59e0b; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                    Maybe
+                  </a>
+                </td>
+                <td style="padding: 0 8px;">
+                  <a href="${declineUrl}"
+                     style="display: inline-block; padding: 14px 30px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                    No
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="font-size: 12px; color: #999; margin-top: 12px;">
+              Your response will be recorded automatically - no email reply needed.
+            </p>
+          </div>
+        `;
+      } else {
+        // Fallback to mailto links if no token
+        rsvpButtonsHtml = `
+          <div style="text-align: center; margin: 30px 0;">
+            <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Will you attend?</p>
+            <table cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+              <tr>
+                <td style="padding: 0 5px;">
+                  <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - Yes, I'll attend"
+                     style="display: inline-block; padding: 12px 25px; background-color: #22c55e; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                    Yes
+                  </a>
+                </td>
+                <td style="padding: 0 5px;">
+                  <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - Maybe"
+                     style="display: inline-block; padding: 12px 25px; background-color: #f59e0b; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                    Maybe
+                  </a>
+                </td>
+                <td style="padding: 0 5px;">
+                  <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - No, I can't attend"
+                     style="display: inline-block; padding: 12px 25px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                    No
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </div>
+        `;
       }
 
       const html = `
@@ -1128,31 +1200,7 @@ class EmailService {
               ${description ? `<p><strong>Description:</strong><br>${description}</p>` : ''}
             </div>
 
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Will you attend?</p>
-              <table cellspacing="0" cellpadding="0" style="margin: 0 auto;">
-                <tr>
-                  <td style="padding: 0 5px;">
-                    <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - Yes, I'll attend"
-                       style="display: inline-block; padding: 12px 25px; background-color: #22c55e; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                      Yes
-                    </a>
-                  </td>
-                  <td style="padding: 0 5px;">
-                    <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - Maybe"
-                       style="display: inline-block; padding: 12px 25px; background-color: #f59e0b; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                      Maybe
-                    </a>
-                  </td>
-                  <td style="padding: 0 5px;">
-                    <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - No, I can't attend"
-                       style="display: inline-block; padding: 12px 25px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                      No
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </div>
+            ${rsvpButtonsHtml}
 
             <p style="font-size: 14px; color: #666;">
               This event has also been added to your Google Calendar. You can respond directly from there as well.
@@ -1167,7 +1215,7 @@ class EmailService {
         </div>
       `;
 
-      console.log(`[Calendar Invite] Sending invite to: ${attendeeEmail} for event: ${title}`);
+      console.log(`[Calendar Invite] Sending invite to: ${attendeeEmail} for event: ${title}${rsvpToken ? ' (with one-click RSVP)' : ''}`);
 
       return await this.sendEmail({
         to: attendeeEmail,

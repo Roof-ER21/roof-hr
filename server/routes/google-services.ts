@@ -3,7 +3,7 @@ import { googleServicesManager } from '../services/google-services-manager';
 import { serviceAccountAuth } from '../services/service-account-auth';
 import { requireAuth, checkRole } from '../middleware/auth';
 import { db } from '../db';
-import { toolInventory, candidates, users, documents, calendarEvents } from '@shared/schema';
+import { toolInventory, candidates, users, documents, calendarEvents, calendarEventAttendees } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { emailService } from '../email-service';
@@ -240,18 +240,36 @@ router.post('/calendar/user-events', requireAuth, async (req, res) => {
       attendees: attendees?.length ? attendees : null,
     }).returning();
 
-    // Send email invites to attendees
+    // Create attendee records and send email invites
     if (attendees?.length > 0 && newEvent) {
       const organizerName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+      const baseUrl = process.env.BASE_URL || 'https://roof-hr-production.up.railway.app';
 
-      // Send invite emails asynchronously (don't wait for them)
+      // Create attendee records with RSVP tokens and send invite emails
       Promise.all(
-        attendees.map((attendeeEmail: string) => {
-          // Don't send invite to the organizer themselves
+        attendees.map(async (attendeeEmail: string) => {
+          // Don't create record or send invite to the organizer themselves
           if (attendeeEmail.toLowerCase() === userEmail?.toLowerCase()) {
             return Promise.resolve(true);
           }
 
+          // Generate unique RSVP token for this attendee
+          const rsvpToken = uuidv4();
+
+          // Create attendee record in database
+          try {
+            await db.insert(calendarEventAttendees).values({
+              id: uuidv4(),
+              eventId: newEvent.id,
+              email: attendeeEmail,
+              status: 'PENDING',
+              rsvpToken: rsvpToken,
+            });
+          } catch (err) {
+            console.error(`[Calendar] Failed to create attendee record for ${attendeeEmail}:`, err);
+          }
+
+          // Send invite email with RSVP token
           return emailService.sendCalendarInviteEmail(
             attendeeEmail,
             {
@@ -264,6 +282,8 @@ router.post('/calendar/user-events', requireAuth, async (req, res) => {
               organizerName,
               organizerEmail: userEmail,
               eventId: newEvent.id,
+              rsvpToken: rsvpToken,
+              baseUrl: baseUrl,
             },
             userEmail
           );
@@ -913,6 +933,170 @@ router.get('/docs/:documentId/export', requireAuth, async (req, res) => {
   } catch (error: any) {
     console.error('Error exporting document:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// PUBLIC RSVP endpoint - no auth required (called from email links)
+router.get('/calendar/rsvp/:token/:response', async (req, res) => {
+  try {
+    const { token, response } = req.params;
+
+    // Validate response type
+    const validResponses = ['ACCEPTED', 'MAYBE', 'DECLINED'];
+    const responseUpper = response.toUpperCase();
+    if (!validResponses.includes(responseUpper)) {
+      return res.status(400).send(`
+        <html>
+          <head><title>Invalid Response</title></head>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1 style="color: #dc2626;">Invalid Response</h1>
+            <p>The response type is not valid. Please use a valid link from your email.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Find the attendee record by RSVP token
+    const [attendee] = await db.select().from(calendarEventAttendees)
+      .where(eq(calendarEventAttendees.rsvpToken, token));
+
+    if (!attendee) {
+      return res.status(404).send(`
+        <html>
+          <head><title>Link Expired</title></head>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1 style="color: #dc2626;">Link Expired or Invalid</h1>
+            <p>This RSVP link is no longer valid. The event may have been cancelled or the link has expired.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Get the event details
+    const [event] = await db.select().from(calendarEvents)
+      .where(eq(calendarEvents.id, attendee.eventId));
+
+    if (!event) {
+      return res.status(404).send(`
+        <html>
+          <head><title>Event Not Found</title></head>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1 style="color: #dc2626;">Event Not Found</h1>
+            <p>The event associated with this invitation no longer exists.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Update the attendee status
+    await db.update(calendarEventAttendees)
+      .set({
+        status: responseUpper as 'PENDING' | 'ACCEPTED' | 'MAYBE' | 'DECLINED',
+        respondedAt: new Date(),
+      })
+      .where(eq(calendarEventAttendees.id, attendee.id));
+
+    console.log(`[RSVP] ${attendee.email} responded ${responseUpper} to event: ${event.title}`);
+
+    // Also update the Google Calendar event if possible
+    if (event.googleEventId) {
+      try {
+        const organizer = await db.select().from(users)
+          .where(eq(users.id, parseInt(event.userId)));
+
+        if (organizer.length > 0 && organizer[0].email && serviceAccountAuth.isConfigured()) {
+          const calendar = await serviceAccountAuth.getCalendarForUser(organizer[0].email);
+
+          // Map our status to Google Calendar response status
+          const googleResponseStatus = responseUpper === 'ACCEPTED' ? 'accepted' :
+            responseUpper === 'DECLINED' ? 'declined' : 'tentative';
+
+          // Get current event to update attendee status
+          const gEvent = await calendar.events.get({
+            calendarId: 'primary',
+            eventId: event.googleEventId,
+          });
+
+          if (gEvent.data.attendees) {
+            const updatedAttendees = gEvent.data.attendees.map(att => {
+              if (att.email?.toLowerCase() === attendee.email.toLowerCase()) {
+                return { ...att, responseStatus: googleResponseStatus };
+              }
+              return att;
+            });
+
+            await calendar.events.patch({
+              calendarId: 'primary',
+              eventId: event.googleEventId,
+              requestBody: { attendees: updatedAttendees },
+            });
+          }
+        }
+      } catch (gError) {
+        console.warn('[RSVP] Failed to update Google Calendar:', gError);
+      }
+    }
+
+    // Return a nice confirmation page
+    const responseText = responseUpper === 'ACCEPTED' ? 'Yes, attending' :
+      responseUpper === 'DECLINED' ? 'No, not attending' : 'Maybe';
+    const responseColor = responseUpper === 'ACCEPTED' ? '#22c55e' :
+      responseUpper === 'DECLINED' ? '#dc2626' : '#f59e0b';
+
+    const formatDateTime = (date: Date) => {
+      return date.toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    };
+
+    res.send(`
+      <html>
+        <head>
+          <title>RSVP Confirmed</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; padding: 30px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb;">
+            <div style="width: 60px; height: 60px; border-radius: 50%; background: ${responseColor}; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+              <span style="color: white; font-size: 24px;">${responseUpper === 'ACCEPTED' ? '✓' : responseUpper === 'DECLINED' ? '✕' : '?'}</span>
+            </div>
+            <h1 style="color: #1f2937; margin-bottom: 10px;">Response Recorded!</h1>
+            <p style="color: ${responseColor}; font-weight: bold; font-size: 18px; margin-bottom: 20px;">
+              ${responseText}
+            </p>
+            <div style="background: white; padding: 20px; border-radius: 8px; text-align: left; border: 1px solid #e5e7eb;">
+              <h2 style="margin-top: 0; color: #2563eb;">${event.title}</h2>
+              <p style="color: #6b7280; margin: 10px 0;">
+                <strong>When:</strong><br>
+                ${formatDateTime(event.startDate)}
+              </p>
+              ${event.location ? `<p style="color: #6b7280; margin: 10px 0;"><strong>Where:</strong> ${event.location}</p>` : ''}
+              ${event.meetLink ? `<p style="margin: 10px 0;"><a href="${event.meetLink}" style="color: #2563eb;">Join Meeting</a></p>` : ''}
+            </div>
+            <p style="color: #9ca3af; font-size: 14px; margin-top: 20px;">
+              You can close this window now.
+            </p>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (error: any) {
+    console.error('[RSVP] Error processing response:', error);
+    res.status(500).send(`
+      <html>
+        <head><title>Error</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+          <h1 style="color: #dc2626;">Something went wrong</h1>
+          <p>We couldn't process your response. Please try again or contact the event organizer.</p>
+        </body>
+      </html>
+    `);
   }
 });
 
