@@ -380,8 +380,9 @@ export default function Contracts() {
   console.log('Auth currentUser:', currentUser);
   console.log('Auth currentUser role:', currentUser?.role);
   
-  // Check if user has manager permissions - make sure Ahmed (ADMIN) always has access
-  const isManager = currentUser?.role && ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUser.role);
+  // Check if user has manager permissions - Ahmed always has access via email fallback
+  const isManager = currentUser?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    (currentUser?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUser.role));
   console.log('isManager:', isManager);
 
   // My contracts (for current user)

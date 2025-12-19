@@ -660,7 +660,9 @@ export default function CoiDocuments() {
     return daysUntilExpiration > 30;
   });
 
-  const isManager = currentUser?.role && ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUser.role);
+  // Ahmed always has manager access via email fallback
+  const isManager = currentUser?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    (currentUser?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUser.role));
 
   if (documentsLoading) {
     return <div className="flex items-center justify-center h-64">Loading COI documents...</div>;

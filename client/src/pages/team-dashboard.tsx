@@ -56,8 +56,9 @@ function TeamDashboard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Check if user is a manager
-  const isManager = user?.role && ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER'].includes(user.role);
+  // Check if user is a manager - Ahmed always has access via email fallback
+  const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    (user?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role));
 
   // Fetch team members (direct reports or department)
   const { data: teamMembers = [], isLoading: teamLoading } = useQuery<TeamMember[]>({

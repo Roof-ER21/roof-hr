@@ -356,7 +356,9 @@ export default function WorkflowBuilder() {
     setActiveId(null);
   };
 
-  const canEdit = ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'HR_MANAGER'].includes(user?.role || '');
+  // Ahmed always has access via email fallback
+  const canEdit = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER', 'HR_MANAGER'].includes(user?.role || '');
 
   return (
     <div className="container mx-auto p-6">

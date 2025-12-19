@@ -370,7 +370,9 @@ export default function PtoPolicies() {
   const isAhmed = currentUserTyped?.email === 'ahmed.mahmoud@theroofdocs.com' || currentUserTyped?.role === 'TRUE_ADMIN';
   // Allow edit for ADMIN role (consistent with system-wide permissions), General Manager, and specific users
   const canEdit = currentUserTyped?.role === 'ADMIN' || isFordBarsi || isAhmed;
-  const isManager = ['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN'].includes(currentUserTyped?.role || '');
+  // Ahmed always has manager access via email fallback
+  const isManager = currentUserTyped?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUserTyped?.role || '');
 
   if (policiesLoading) {
     return <div className="flex items-center justify-center h-64">Loading PTO policies...</div>;
