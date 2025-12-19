@@ -201,16 +201,51 @@ function EditCandidateForm({
   );
 }
 
-// Position colors for visual identification in Kanban and List views
+// Position colors for visual identification in Kanban and List views (with dark mode support)
 const POSITION_COLORS: Record<string, { bg: string; text: string; border: string; badge: string }> = {
-  'Insurance Sales': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300', badge: 'bg-red-500' },
-  'Retail Closer': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300', badge: 'bg-green-500' },
-  'Retail Marketing': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-300', badge: 'bg-purple-500' },
-  'Office': { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-300', badge: 'bg-orange-500' },
-  'Production Coordinator': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300', badge: 'bg-blue-500' },
-  'Field Tech': { bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-300', badge: 'bg-cyan-500' },
+  'Insurance Sales': {
+    bg: 'bg-red-100 dark:bg-red-900/40',
+    text: 'text-red-800 dark:text-red-300',
+    border: 'border-red-400 dark:border-red-500',
+    badge: 'bg-red-500'
+  },
+  'Retail Closer': {
+    bg: 'bg-green-100 dark:bg-green-900/40',
+    text: 'text-green-800 dark:text-green-300',
+    border: 'border-green-400 dark:border-green-500',
+    badge: 'bg-green-500'
+  },
+  'Retail Marketing': {
+    bg: 'bg-purple-100 dark:bg-purple-900/40',
+    text: 'text-purple-800 dark:text-purple-300',
+    border: 'border-purple-400 dark:border-purple-500',
+    badge: 'bg-purple-500'
+  },
+  'Office': {
+    bg: 'bg-orange-100 dark:bg-orange-900/40',
+    text: 'text-orange-800 dark:text-orange-300',
+    border: 'border-orange-400 dark:border-orange-500',
+    badge: 'bg-orange-500'
+  },
+  'Production Coordinator': {
+    bg: 'bg-blue-100 dark:bg-blue-900/40',
+    text: 'text-blue-800 dark:text-blue-300',
+    border: 'border-blue-400 dark:border-blue-500',
+    badge: 'bg-blue-500'
+  },
+  'Field Tech': {
+    bg: 'bg-cyan-100 dark:bg-cyan-900/40',
+    text: 'text-cyan-800 dark:text-cyan-300',
+    border: 'border-cyan-400 dark:border-cyan-500',
+    badge: 'bg-cyan-500'
+  },
   // Default fallback
-  'default': { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300', badge: 'bg-gray-500' },
+  'default': {
+    bg: 'bg-gray-100 dark:bg-gray-800/40',
+    text: 'text-gray-800 dark:text-gray-300',
+    border: 'border-gray-400 dark:border-gray-500',
+    badge: 'bg-gray-500'
+  },
 };
 
 // Get position color (returns default if not found)

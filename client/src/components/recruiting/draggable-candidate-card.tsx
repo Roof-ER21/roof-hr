@@ -16,18 +16,46 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// Position colors for visual identification
+// Position colors for visual identification (with dark mode support)
 const POSITION_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Insurance Sales': { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
-  'Retail Closer': { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
-  'Retail Marketing': { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-300' },
-  'Office': { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
-  'Production Coordinator': { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-300' },
-  'Field Tech': { bg: 'bg-cyan-100', text: 'text-cyan-700', border: 'border-cyan-300' },
+  'Insurance Sales': {
+    bg: 'bg-red-100 dark:bg-red-900/40',
+    text: 'text-red-700 dark:text-red-300',
+    border: 'border-red-400 dark:border-red-500'
+  },
+  'Retail Closer': {
+    bg: 'bg-green-100 dark:bg-green-900/40',
+    text: 'text-green-700 dark:text-green-300',
+    border: 'border-green-400 dark:border-green-500'
+  },
+  'Retail Marketing': {
+    bg: 'bg-purple-100 dark:bg-purple-900/40',
+    text: 'text-purple-700 dark:text-purple-300',
+    border: 'border-purple-400 dark:border-purple-500'
+  },
+  'Office': {
+    bg: 'bg-orange-100 dark:bg-orange-900/40',
+    text: 'text-orange-700 dark:text-orange-300',
+    border: 'border-orange-400 dark:border-orange-500'
+  },
+  'Production Coordinator': {
+    bg: 'bg-blue-100 dark:bg-blue-900/40',
+    text: 'text-blue-700 dark:text-blue-300',
+    border: 'border-blue-400 dark:border-blue-500'
+  },
+  'Field Tech': {
+    bg: 'bg-cyan-100 dark:bg-cyan-900/40',
+    text: 'text-cyan-700 dark:text-cyan-300',
+    border: 'border-cyan-400 dark:border-cyan-500'
+  },
 };
 
 function getPositionColor(position: string) {
-  return POSITION_COLORS[position] || { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' };
+  return POSITION_COLORS[position] || {
+    bg: 'bg-gray-100 dark:bg-gray-800/40',
+    text: 'text-gray-700 dark:text-gray-300',
+    border: 'border-gray-400 dark:border-gray-500'
+  };
 }
 
 interface Candidate {
