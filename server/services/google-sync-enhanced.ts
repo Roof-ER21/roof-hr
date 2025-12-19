@@ -560,7 +560,8 @@ class GoogleSyncEnhanced extends EventEmitter {
             quantity: parseInt(String(rowData[5])) || 0,
             availableQuantity: parseInt(String(rowData[6])) || 0,
             condition: rowData[7] || '',
-            location: rowData[10] || ''
+            location: rowData[10] || '',
+            createdBy: 'SYSTEM' // System-generated during Google Sheets sync
           });
         } else {
           // Check for updates
