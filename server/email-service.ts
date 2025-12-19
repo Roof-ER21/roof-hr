@@ -1050,6 +1050,136 @@ class EmailService {
       return false;
     }
   }
+
+  // ===========================================
+  // CALENDAR EVENT INVITE EMAILS
+  // ===========================================
+
+  /**
+   * Send calendar event invite email to attendees
+   * Includes event details and RSVP options
+   */
+  async sendCalendarInviteEmail(
+    attendeeEmail: string,
+    eventDetails: {
+      title: string;
+      description?: string;
+      startDate: Date;
+      endDate: Date;
+      location?: string;
+      meetLink?: string;
+      organizerName: string;
+      organizerEmail: string;
+      eventId: string;
+    },
+    fromUserEmail?: string
+  ): Promise<boolean> {
+    try {
+      const { title, description, startDate, endDate, location, meetLink, organizerName, organizerEmail, eventId } = eventDetails;
+
+      // Format date and time
+      const formatDateTime = (date: Date) => {
+        return date.toLocaleString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZoneName: 'short'
+        });
+      };
+
+      const subject = `Calendar Invite: ${title}`;
+
+      // Build location/meeting link HTML
+      let locationHtml = '';
+      if (location) {
+        locationHtml += `<p><strong>Location:</strong> ${location}</p>`;
+      }
+      if (meetLink) {
+        locationHtml += `<p><strong>Join Meeting:</strong> <a href="${meetLink}" style="color: #1155cc;">${meetLink}</a></p>`;
+      }
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background-color: #2563eb; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Calendar Invite</h1>
+          </div>
+
+          <div style="padding: 30px;">
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello,</p>
+
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">
+              <strong>${organizerName}</strong> has invited you to the following event:
+            </p>
+
+            <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
+              <h2 style="margin-top: 0; color: #1e40af; font-size: 20px;">${title}</h2>
+
+              <p><strong>When:</strong><br>
+                Start: ${formatDateTime(startDate)}<br>
+                End: ${formatDateTime(endDate)}
+              </p>
+
+              ${locationHtml}
+
+              ${description ? `<p><strong>Description:</strong><br>${description}</p>` : ''}
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Will you attend?</p>
+              <table cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                <tr>
+                  <td style="padding: 0 5px;">
+                    <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - Yes, I'll attend"
+                       style="display: inline-block; padding: 12px 25px; background-color: #22c55e; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                      Yes
+                    </a>
+                  </td>
+                  <td style="padding: 0 5px;">
+                    <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - Maybe"
+                       style="display: inline-block; padding: 12px 25px; background-color: #f59e0b; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                      Maybe
+                    </a>
+                  </td>
+                  <td style="padding: 0 5px;">
+                    <a href="mailto:${organizerEmail}?subject=RE: ${encodeURIComponent(title)} - No, I can't attend"
+                       style="display: inline-block; padding: 12px 25px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                      No
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <p style="font-size: 14px; color: #666;">
+              This event has also been added to your Google Calendar. You can respond directly from there as well.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+            <p style="color: #6b7280; font-size: 12px;">
+              This is an automated calendar invite from the Roof HR system.<br>
+              Organized by: ${organizerName} (${organizerEmail})
+            </p>
+          </div>
+        </div>
+      `;
+
+      console.log(`[Calendar Invite] Sending invite to: ${attendeeEmail} for event: ${title}`);
+
+      return await this.sendEmail({
+        to: attendeeEmail,
+        subject,
+        html,
+        fromUserEmail,
+      });
+    } catch (error) {
+      console.error('Failed to send calendar invite email:', error);
+      return false;
+    }
+  }
 }
 
 export { EmailService };

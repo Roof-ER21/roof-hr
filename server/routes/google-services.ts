@@ -6,6 +6,7 @@ import { db } from '../db';
 import { toolInventory, candidates, users, documents, calendarEvents } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { emailService } from '../email-service';
 
 const router = Router();
 
@@ -238,6 +239,42 @@ router.post('/calendar/user-events', requireAuth, async (req, res) => {
       interviewId: interviewId || null,
       attendees: attendees?.length ? attendees : null,
     }).returning();
+
+    // Send email invites to attendees
+    if (attendees?.length > 0 && newEvent) {
+      const organizerName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+
+      // Send invite emails asynchronously (don't wait for them)
+      Promise.all(
+        attendees.map((attendeeEmail: string) => {
+          // Don't send invite to the organizer themselves
+          if (attendeeEmail.toLowerCase() === userEmail?.toLowerCase()) {
+            return Promise.resolve(true);
+          }
+
+          return emailService.sendCalendarInviteEmail(
+            attendeeEmail,
+            {
+              title,
+              description: description || undefined,
+              startDate: new Date(startDate),
+              endDate: new Date(endDate),
+              location: location || undefined,
+              meetLink: meetLink || undefined,
+              organizerName,
+              organizerEmail: userEmail,
+              eventId: newEvent.id,
+            },
+            userEmail
+          );
+        })
+      ).then(results => {
+        const successCount = results.filter(Boolean).length;
+        console.log(`[Calendar] Sent ${successCount}/${attendees.length} invite emails for event: ${title}`);
+      }).catch(err => {
+        console.error('[Calendar] Error sending invite emails:', err);
+      });
+    }
 
     res.json(newEvent);
   } catch (error: any) {

@@ -51,7 +51,8 @@ const eventTypeColors: Record<string, { bg: string; text: string; border: string
   MEETING: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-700 dark:text-green-200', border: 'border-green-300 dark:border-green-700' },
   INTERVIEW: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-700 dark:text-blue-200', border: 'border-blue-300 dark:border-blue-700' },
   PTO: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-700 dark:text-red-200', border: 'border-red-300 dark:border-red-700' },
-  TEAM_PTO: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-700 dark:text-purple-200', border: 'border-purple-300 dark:border-purple-700' }
+  TEAM_PTO: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-700 dark:text-purple-200', border: 'border-purple-300 dark:border-purple-700' },
+  OTHER: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-700 dark:text-amber-200', border: 'border-amber-300 dark:border-amber-700' }
 };
 
 export default function MyCalendar() {
