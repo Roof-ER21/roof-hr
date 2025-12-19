@@ -69,7 +69,7 @@ export function EventFormModal({ open, onClose, event, selectedDate }: EventForm
 
   // Fetch employees for attendee suggestions
   const { data: employeesData } = useQuery<{ id: number; email: string; firstName: string; lastName: string; }[]>({
-    queryKey: ['/api/employees'],
+    queryKey: ['/api/users'],
     enabled: open,
   });
 

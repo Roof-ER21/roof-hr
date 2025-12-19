@@ -136,6 +136,20 @@ function PTO() {
     }
   });
 
+  // Fetch current user's PTO balance (same endpoint as My Portal for consistency)
+  const { data: myPtoBalance } = useQuery({
+    queryKey: ['/api/employee-portal/pto-balance'],
+    queryFn: async () => {
+      const response = await fetch('/api/employee-portal/pto-balance', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch PTO balance');
+      return response.json();
+    }
+  });
+
   const form = useForm<PTOFormData>({
     resolver: zodResolver(ptoSchema),
     defaultValues: {
@@ -498,6 +512,66 @@ function PTO() {
 
         {/* PTO Requests Tab */}
         <TabsContent value="requests" className="space-y-4">
+          {/* Your PTO Balance - same calculation as My Portal */}
+          {myPtoBalance && (
+            <Card className="mb-6 border-blue-200 dark:border-blue-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                  <Calendar className="h-5 w-5" />
+                  Your PTO Balance ({new Date().getFullYear()})
+                </CardTitle>
+                <CardDescription>
+                  Time off you've used and have remaining this year
+                  {myPtoBalance.policySource && (
+                    <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                      Policy: {myPtoBalance.policySource}
+                    </span>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Vacation</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {myPtoBalance.remainingVacation}/{myPtoBalance.vacationDays}
+                    </p>
+                    <p className="text-xs text-muted-foreground">remaining</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 dark:bg-green-950 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Sick</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {myPtoBalance.remainingSick}/{myPtoBalance.sickDays}
+                    </p>
+                    <p className="text-xs text-muted-foreground">remaining</p>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 dark:bg-purple-950 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Personal</p>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {myPtoBalance.remainingPersonal}/{myPtoBalance.personalDays}
+                    </p>
+                    <p className="text-xs text-muted-foreground">remaining</p>
+                  </div>
+                  <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">Total</p>
+                    <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
+                      {myPtoBalance.remainingDays}/{myPtoBalance.totalDays}
+                    </p>
+                    <p className="text-xs text-muted-foreground">remaining</p>
+                  </div>
+                </div>
+                {myPtoBalance.pendingDays > 0 && (
+                  <Alert className="mt-4 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
+                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                    <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                      You have <strong>{myPtoBalance.pendingDays} day(s)</strong> pending approval
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* PTO Policy Information */}
           {companyPolicy && (
         <Card className="mb-6">

@@ -1182,12 +1182,40 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     // Send notifications asynchronously without blocking the response
     (async () => {
       try {
+        console.log('[PTO Email] Starting email notifications for PTO request...');
         const emailService = new EmailService();
         await emailService.initialize();
+        console.log('[PTO Email] Email service initialized');
 
+        // First, send confirmation to the employee who submitted
+        try {
+          const employeeEmailSent = await emailService.sendEmail({
+            to: user.email,
+            subject: `PTO Request Submitted - Awaiting Approval`,
+            html: `
+              <h2>Your PTO Request Has Been Submitted</h2>
+              <p>Hi ${user.firstName},</p>
+              <p>Your PTO request has been submitted and is pending approval.</p>
+              <ul>
+                <li><strong>Start Date:</strong> ${new Date(req.body.startDate).toLocaleDateString()}</li>
+                <li><strong>End Date:</strong> ${new Date(req.body.endDate).toLocaleDateString()}</li>
+                <li><strong>Days:</strong> ${days}</li>
+                <li><strong>Reason:</strong> ${req.body.reason || 'Not specified'}</li>
+              </ul>
+              <p>You will receive another email once your request has been reviewed.</p>
+              <p>Best regards,<br>The HR Team</p>
+            `
+          });
+          console.log(`[PTO Email] Employee confirmation email ${employeeEmailSent ? 'SENT' : 'FAILED (dev mode?)'} to: ${user.email}`);
+        } catch (empEmailErr) {
+          console.error('[PTO Email] Failed to send employee confirmation:', empEmailErr);
+        }
+
+        // Then notify managers
+        let managerEmailsSent = 0;
         for (const managerEmail of PTO_MANAGER_EMAILS) {
           try {
-            await emailService.sendEmail({
+            const sent = await emailService.sendEmail({
               to: managerEmail,
               subject: `New PTO Request: ${user.firstName} ${user.lastName}`,
               html: `
@@ -1202,12 +1230,19 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
                 <p>Please review and approve/deny this request in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
               `
             });
+            if (sent) {
+              managerEmailsSent++;
+              console.log(`[PTO Email] Manager notification SENT to: ${managerEmail}`);
+            } else {
+              console.log(`[PTO Email] Manager notification NOT SENT (dev mode?) to: ${managerEmail}`);
+            }
           } catch (emailErr) {
-            console.error(`[PTO] Failed to notify manager ${managerEmail}:`, emailErr);
+            console.error(`[PTO Email] Failed to notify manager ${managerEmail}:`, emailErr);
           }
         }
+        console.log(`[PTO Email] Completed: ${managerEmailsSent}/${PTO_MANAGER_EMAILS.length} manager emails sent`);
       } catch (notifyError) {
-        console.error('[PTO] Error sending manager notifications:', notifyError);
+        console.error('[PTO Email] Error sending notifications:', notifyError);
       }
     })();
 
