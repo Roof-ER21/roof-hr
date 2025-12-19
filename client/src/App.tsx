@@ -9,6 +9,7 @@ import Dashboard from '@/pages/dashboard';
 import EnhancedEmployees from '@/pages/enhanced-employees';
 import PTO from '@/pages/pto';
 import EnhancedRecruiting from '@/pages/enhanced-recruiting';
+import RecruitingAnalytics from '@/pages/RecruitingAnalytics';
 import Documents from '@/pages/documents';
 import Reviews from '@/pages/reviews';
 import ChangePassword from '@/pages/change-password';
@@ -94,6 +95,7 @@ function AuthenticatedRoutes() {
         <Route path="/employees" element={<EnhancedEmployees />} />
         <Route path="/pto" element={<PTO />} />
         <Route path="/recruiting" element={<EnhancedRecruiting />} />
+        <Route path="/recruiting-analytics" element={<RecruitingAnalytics />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/reviews" element={<Reviews />} />
         <Route path="/settings" element={<Settings />} />

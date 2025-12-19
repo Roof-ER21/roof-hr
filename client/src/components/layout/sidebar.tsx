@@ -50,7 +50,16 @@ const navigation = [
       { name: 'Admin Dashboard', href: '/susan-ai-admin', icon: Shield, roles: ADMIN_ROLES }
     ]
   },
-  { name: 'Recruiting', href: '/recruiting', icon: Briefcase, roles: MANAGER_ROLES },
+  {
+    name: 'Recruiting',
+    href: '/recruiting',
+    icon: Briefcase,
+    roles: MANAGER_ROLES,
+    children: [
+      { name: 'Candidates', href: '/recruiting', icon: Briefcase, roles: MANAGER_ROLES },
+      { name: 'Analytics', href: '/recruiting-analytics', icon: BarChart, roles: MANAGER_ROLES }
+    ]
+  },
   {
     name: 'Documents',
     href: '/documents',
@@ -98,7 +107,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting']);
 
   const toggleExpanded = (name: string) => {
     setExpandedItems(prev => 

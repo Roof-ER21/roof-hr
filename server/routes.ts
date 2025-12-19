@@ -49,6 +49,7 @@ import attendanceRoutes from './routes/attendance';
 import equipmentReceiptRoutes from './routes/equipment-receipts';
 import employeePortalRoutes from './routes/employee-portal';
 import equipmentAgreementRoutes from './routes/equipment-agreements';
+import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
 import { googleDriveService } from './services/google-drive-service';
 import { googleCalendarService } from './services/google-calendar-service';
 import { serviceAccountAuth } from './services/service-account-auth';
@@ -2954,6 +2955,7 @@ export function registerRoutes(app: express.Application) {
   
   // Mount analytics routes
   app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/recruiting-analytics', recruitingAnalyticsRoutes);
   
   // Mount tools routes
   app.use('/api/tools', toolsRoutes);
