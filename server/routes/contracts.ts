@@ -609,7 +609,7 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
           contractTitle: contract.title,
           signedDate: updateData.signedDate,
           signature: updateData.signature
-        });
+        }, user.email); // Pass user email for Gmail impersonation
         
         res.json(updatedContract);
         return;
@@ -631,12 +631,13 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
         
         const updatedContract = await storage.updateEmployeeContract(req.params.id, updateData);
         
-        // Send notification to the recipient
+        // Send notification to the recipient via Gmail (from manager's email)
         await notifyRecipientOfNewContract(
           contract.recipientEmail,
           contract.recipientName,
           contract.title,
-          req.params.id
+          req.params.id,
+          user.email // Pass sender's email for Gmail impersonation
         );
         
         res.json(updatedContract);

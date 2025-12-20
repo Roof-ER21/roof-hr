@@ -13,7 +13,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Send, Eye, Check, X, PenTool, Plus, Edit, Upload, File, Trash2 } from 'lucide-react';
+import { FileText, Send, Eye, Check, X, PenTool, Plus, Edit, Upload, File, Trash2, Calendar } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -52,7 +53,11 @@ const contractFormSchema = z.object({
 });
 
 const signatureFormSchema = z.object({
-  signature: z.string().min(1, 'Signature is required')
+  signature: z.string().min(1, 'Signature is required'),
+  signatureDate: z.string().min(1, 'Date is required'),
+  agreeToSign: z.boolean().refine(val => val === true, {
+    message: 'You must agree to the electronic signature terms'
+  })
 });
 
 export default function Contracts() {
@@ -96,7 +101,9 @@ export default function Contracts() {
   const signatureForm = useForm<z.infer<typeof signatureFormSchema>>({
     resolver: zodResolver(signatureFormSchema),
     defaultValues: {
-      signature: ''
+      signature: '',
+      signatureDate: new Date().toISOString().split('T')[0],
+      agreeToSign: false
     }
   });
 
@@ -259,10 +266,10 @@ export default function Contracts() {
   });
 
   const signContractMutation = useMutation({
-    mutationFn: (data: { id: string; signature: string }) => 
+    mutationFn: (data: { id: string; signature: string; signatureDate: string }) =>
       apiRequest(`/api/employee-contracts/${data.id}/sign`, {
         method: 'POST',
-        body: JSON.stringify({ signature: data.signature }),
+        body: JSON.stringify({ signature: data.signature, signatureDate: data.signatureDate }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/employee-contracts'] });
@@ -316,7 +323,8 @@ export default function Contracts() {
     if (selectedContract) {
       signContractMutation.mutate({
         id: selectedContract.id,
-        signature: data.signature
+        signature: data.signature,
+        signatureDate: data.signatureDate
       });
     }
   };
@@ -1138,11 +1146,14 @@ export default function Contracts() {
 
       {/* Sign Contract Dialog */}
       <Dialog open={isSignDialogOpen} onOpenChange={setIsSignDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Sign Contract</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <PenTool className="h-5 w-5" />
+              Sign Contract
+            </DialogTitle>
             <DialogDescription>
-              Please enter your full name as your electronic signature
+              Please type your full legal name and confirm the date to electronically sign this contract
             </DialogDescription>
           </DialogHeader>
           <Form {...signatureForm}>
@@ -1152,21 +1163,61 @@ export default function Contracts() {
                 name="signature"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Electronic Signature</FormLabel>
+                    <FormLabel>Type your full legal name</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Type your full name" 
-                        {...field} 
+                      <Input
+                        placeholder="e.g., John Michael Smith"
+                        className="text-lg"
+                        {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      By typing your name, you agree to the terms of the contract
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <DialogFooter>
+              <FormField
+                control={signatureForm.control}
+                name="signatureDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Date
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={signatureForm.control}
+                name="agreeToSign"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 bg-muted/50">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="cursor-pointer">
+                        I agree that typing my name constitutes a legal electronic signature
+                      </FormLabel>
+                      <FormDescription>
+                        This signature will be legally binding
+                      </FormDescription>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter className="gap-2 sm:gap-0">
                 <Button
                   type="button"
                   variant="outline"
@@ -1183,9 +1234,11 @@ export default function Contracts() {
                     }
                   }}
                 >
+                  <X className="h-4 w-4 mr-2" />
                   Reject
                 </Button>
-                <Button type="submit" disabled={signContractMutation.isPending}>
+                <Button type="submit" disabled={signContractMutation.isPending || !signatureForm.watch('agreeToSign')}>
+                  <Check className="h-4 w-4 mr-2" />
                   {signContractMutation.isPending ? 'Signing...' : 'Sign Contract'}
                 </Button>
               </DialogFooter>

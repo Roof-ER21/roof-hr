@@ -1,5 +1,5 @@
 import { storage } from '../storage';
-import { emailService } from '../email-service';
+import { gmailService } from './gmail-service';
 
 interface ContractSignedNotification {
   contractId: string;
@@ -9,8 +9,11 @@ interface ContractSignedNotification {
   signature: string;
 }
 
-export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification) {
+export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification, senderEmail?: string) {
   try {
+    // Initialize Gmail service
+    await gmailService.initialize();
+
     // Get all managers and HR personnel
     const managers = await storage.getUsersByRoles(['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN']);
     
@@ -60,25 +63,26 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
       </div>
     `;
     
-    // Send emails to all managers and HR
+    // Send emails to all managers and HR via Gmail
     const emailPromises = managersToNotify.map(async (manager) => {
       try {
-        const sent = await emailService.sendEmail({
+        const result = await gmailService.sendEmail({
           to: manager.email,
           subject,
-          html: htmlContent
+          html: htmlContent,
+          userEmail: senderEmail // Impersonate sender if provided
         });
-        
-        if (sent) {
-          console.log(`Contract signed notification sent to ${manager.email}`);
+
+        if (result.success) {
+          console.log(`Contract signed notification sent to ${manager.email} via Gmail`);
           // Update the notified managers list
           const updatedNotifiedList = [...notifiedManagers, manager.id];
           await storage.updateEmployeeContract(notification.contractId, {
             notifiedManagers: updatedNotifiedList
           });
         }
-        
-        return sent;
+
+        return result.success;
       } catch (error) {
         console.error(`Failed to send notification to ${manager.email}:`, error);
         return false;
@@ -110,9 +114,13 @@ export async function notifyRecipientOfNewContract(
   recipientEmail: string,
   recipientName: string,
   contractTitle: string,
-  contractId: string
+  contractId: string,
+  senderEmail?: string // Email of the user sending this (for Gmail impersonation)
 ) {
   try {
+    // Initialize Gmail service
+    await gmailService.initialize();
+
     const subject = `New Contract for Review: ${contractTitle}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -154,17 +162,18 @@ export async function notifyRecipientOfNewContract(
       </div>
     `;
     
-    const sent = await emailService.sendEmail({
+    const result = await gmailService.sendEmail({
       to: recipientEmail,
       subject,
-      html: htmlContent
+      html: htmlContent,
+      userEmail: senderEmail // Send from manager's email via impersonation
     });
-    
-    if (sent) {
-      console.log(`Contract notification sent to ${recipientEmail}`);
+
+    if (result.success) {
+      console.log(`Contract notification sent to ${recipientEmail} via Gmail`);
     }
-    
-    return sent;
+
+    return result.success;
     
   } catch (error) {
     console.error('Error sending contract notification:', error);
