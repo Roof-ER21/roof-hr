@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { storage } from './storage';
 import { v4 as uuidv4 } from 'uuid';
 import { serviceAccountAuth } from './services/service-account-auth';
+import { timezoneService } from './services/timezone-service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -1133,7 +1134,10 @@ class EmailService {
     try {
       const { title, description, startDate, endDate, location, meetLink, organizerName, organizerEmail, eventId, rsvpToken, baseUrl } = eventDetails;
 
-      // Format date and time in Eastern timezone (DC time)
+      // Get attendee's timezone (fallback to Eastern)
+      const attendeeTimezone = await timezoneService.getUserTimezoneByEmail(attendeeEmail);
+
+      // Format date and time in attendee's timezone
       const formatDateTime = (date: Date) => {
         return date.toLocaleString('en-US', {
           weekday: 'long',
@@ -1143,7 +1147,7 @@ class EmailService {
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
-          timeZone: 'America/New_York',
+          timeZone: attendeeTimezone,
           timeZoneName: 'short'
         });
       };

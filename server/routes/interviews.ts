@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { storage } from '../storage';
 import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewReminderSchema } from '@shared/schema';
 import { getConflictDetector } from '../services/calendar-conflict-detector';
+import { timezoneService } from '../services/timezone-service';
 
 const router = Router();
 
@@ -259,6 +260,9 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
         const startDateTime = new Date(data.scheduledDate);
         const endDateTime = new Date(startDateTime.getTime() + data.duration * 60 * 1000);
 
+        // Get interviewer's timezone (fallback to 'America/New_York')
+        const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId!);
+
         // Create detailed interview description
         const description = `
 Interview Details:
@@ -297,7 +301,8 @@ Please use the HR system to record interview feedback.
               startDateTime,
               endDateTime,
               attendees,
-              sendNotifications: true
+              sendNotifications: true,
+              timeZone: interviewerTimezone
             }
           );
 
@@ -318,6 +323,7 @@ Please use the HR system to record interview feedback.
               endDateTime,
               attendees,
               sendNotifications: true,
+              timeZone: interviewerTimezone,
               reminders: {
                 useDefault: false,
                 overrides: [
@@ -591,14 +597,20 @@ router.patch('/:id', requireAuth, async (req, res) => {
             const startDateTime = new Date(updatedInterview.scheduledDate);
             const endDateTime = new Date(startDateTime.getTime() + updatedInterview.duration * 60 * 1000);
 
+            // Get interviewer's timezone for the updated event
+            let interviewerTimezone = 'America/New_York';
+            if (updatedInterview.interviewerId) {
+              interviewerTimezone = await timezoneService.getUserTimezone(updatedInterview.interviewerId);
+            }
+
             await calendarService.updateEvent(existingInterview.googleEventId, {
               start: {
                 dateTime: startDateTime.toISOString(),
-                timeZone: 'America/New_York'
+                timeZone: interviewerTimezone
               },
               end: {
                 dateTime: endDateTime.toISOString(),
-                timeZone: 'America/New_York'
+                timeZone: interviewerTimezone
               },
               location: updatedInterview.location || updatedInterview.meetingLink,
             });
@@ -694,16 +706,40 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       // Don't return here - still try to send candidate email
     }
 
-    const interviewDate = new Date(interview.scheduledDate).toLocaleDateString('en-US', {
+    // Get timezones for candidate and interviewer
+    const candidateTimezone = candidate.email ? await timezoneService.getUserTimezoneByEmail(candidate.email) : 'America/New_York';
+    const interviewerTimezone = interviewer?.email ? await timezoneService.getUserTimezoneByEmail(interviewer.email) : 'America/New_York';
+
+    // Format date and time for candidate (in their timezone)
+    const candidateInterviewDate = new Date(interview.scheduledDate).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: candidateTimezone,
     });
 
-    const interviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
+    const candidateInterviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: candidateTimezone,
+      timeZoneName: 'short',
+    });
+
+    // Format date and time for interviewer (in their timezone)
+    const interviewerInterviewDate = new Date(interview.scheduledDate).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: interviewerTimezone,
+    });
+
+    const interviewerInterviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: interviewerTimezone,
+      timeZoneName: 'short',
     });
 
     // Import email service
@@ -714,7 +750,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       ? `${interviewer.firstName} ${interviewer.lastName}`
       : interview.customInterviewerName || 'TBD';
 
-    // Email HTML to candidate
+    // Email HTML to candidate (with their timezone)
     const candidateHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Interview Scheduled - ROOF-ER</h2>
@@ -722,8 +758,8 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
         <p>Your interview has been scheduled for the <strong>${candidate.position}</strong> position at ROOF-ER.</p>
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
-          <p><strong>Date:</strong> ${interviewDate}</p>
-          <p><strong>Time:</strong> ${interviewTime}</p>
+          <p><strong>Date:</strong> ${candidateInterviewDate}</p>
+          <p><strong>Time:</strong> ${candidateInterviewTime}</p>
           <p><strong>Duration:</strong> ${interview.duration} minutes</p>
           <p><strong>Type:</strong> ${interview.type}</p>
           ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
@@ -762,7 +798,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
       errors.push(error);
     }
 
-    // Send email to interviewer (only if interviewer exists in system)
+    // Send email to interviewer (only if interviewer exists in system) (with their timezone)
     if (interviewer && interviewer.email) {
       const interviewerHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -771,8 +807,8 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
           <p>You have an interview scheduled with <strong>${candidate.firstName} ${candidate.lastName}</strong> for the <strong>${candidate.position}</strong> position.</p>
           <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
-            <p><strong>Date:</strong> ${interviewDate}</p>
-            <p><strong>Time:</strong> ${interviewTime}</p>
+            <p><strong>Date:</strong> ${interviewerInterviewDate}</p>
+            <p><strong>Time:</strong> ${interviewerInterviewTime}</p>
             <p><strong>Duration:</strong> ${interview.duration} minutes</p>
             <p><strong>Type:</strong> ${interview.type}</p>
             ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}

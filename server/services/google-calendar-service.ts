@@ -40,23 +40,25 @@ class GoogleCalendarService {
     endDateTime: Date;
     attendees?: string[];
     sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
     reminders?: {
       useDefault: boolean;
       overrides?: Array<{ method: string; minutes: number }>;
     };
   }) {
     try {
+      const timeZone = options.timeZone || 'America/New_York';
       const event = {
         summary: options.summary,
         description: options.description,
         location: options.location,
         start: {
           dateTime: options.startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: options.endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         attendees: options.attendees?.map(email => ({ email })),
         reminders: options.reminders || {
@@ -253,6 +255,7 @@ class GoogleCalendarService {
     summary?: string;
     startDateTime?: Date;
     durationMinutes?: number;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
   } = {}) {
     try {
       if (!this.calendar) {
@@ -261,16 +264,17 @@ class GoogleCalendarService {
 
       const startDateTime = options.startDateTime || new Date();
       const endDateTime = new Date(startDateTime.getTime() + (options.durationMinutes || 60) * 60000);
+      const timeZone = options.timeZone || 'America/New_York';
 
       const event = {
         summary: options.summary || 'Video Interview',
         start: {
           dateTime: startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         conferenceData: {
           createRequest: {
@@ -315,23 +319,25 @@ class GoogleCalendarService {
     endDateTime: Date;
     attendees?: string[];
     sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
   }) {
     try {
       if (!this.calendar) {
         await this.initialize();
       }
 
+      const timeZone = options.timeZone || 'America/New_York';
       const event = {
         summary: options.summary,
         description: options.description,
         location: options.location,
         start: {
           dateTime: options.startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: options.endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         attendees: options.attendees?.map(email => ({ email })),
         conferenceData: {
@@ -381,6 +387,7 @@ class GoogleCalendarService {
     endDateTime: Date;
     attendees?: string[];
     sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
     reminders?: {
       useDefault: boolean;
       overrides?: Array<{ method: string; minutes: number }>;
@@ -389,17 +396,18 @@ class GoogleCalendarService {
     try {
       const calendar = await this.getCalendarForUser(userEmail);
 
+      const timeZone = options.timeZone || 'America/New_York';
       const event = {
         summary: options.summary,
         description: options.description,
         location: options.location,
         start: {
           dateTime: options.startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: options.endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         attendees: options.attendees?.map(email => ({ email })),
         reminders: options.reminders || {
@@ -437,21 +445,23 @@ class GoogleCalendarService {
     endDateTime: Date;
     attendees?: string[];
     sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
   }) {
     try {
       const calendar = await this.getCalendarForUser(userEmail);
 
+      const timeZone = options.timeZone || 'America/New_York';
       const event = {
         summary: options.summary,
         description: options.description,
         location: options.location,
         start: {
           dateTime: options.startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: options.endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         attendees: options.attendees?.map(email => ({ email })),
         conferenceData: {

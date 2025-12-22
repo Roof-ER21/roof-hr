@@ -9,15 +9,16 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Settings as SettingsIcon, 
-  Building, 
-  Clock, 
-  Globe, 
-  Phone, 
+import {
+  Settings as SettingsIcon,
+  Building,
+  Clock,
+  Globe,
+  Phone,
   Mail,
   MapPin,
-  Save
+  Save,
+  User
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
@@ -39,6 +40,24 @@ const companySettingsSchema = z.object({
 
 type CompanySettingsFormData = z.infer<typeof companySettingsSchema>;
 
+// Common timezones for US-based operations
+const COMMON_TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (ET)', offset: 'UTC-5/-4' },
+  { value: 'America/Chicago', label: 'Central Time (CT)', offset: 'UTC-6/-5' },
+  { value: 'America/Denver', label: 'Mountain Time (MT)', offset: 'UTC-7/-6' },
+  { value: 'America/Phoenix', label: 'Arizona (MST, no DST)', offset: 'UTC-7' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)', offset: 'UTC-8/-7' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKT)', offset: 'UTC-9/-8' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)', offset: 'UTC-10' },
+  { value: 'America/Puerto_Rico', label: 'Puerto Rico (AST)', offset: 'UTC-4' },
+  { value: 'Pacific/Guam', label: 'Guam (ChST)', offset: 'UTC+10' },
+  { value: 'Europe/London', label: 'London (GMT/BST)', offset: 'UTC+0/+1' },
+  { value: 'Europe/Paris', label: 'Paris (CET/CEST)', offset: 'UTC+1/+2' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST)', offset: 'UTC+9' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEDT/AEST)', offset: 'UTC+10/+11' },
+  { value: 'UTC', label: 'UTC (Coordinated Universal Time)', offset: 'UTC+0' },
+];
+
 function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -55,6 +74,29 @@ function Settings() {
       return response.json();
     }
   });
+
+  // Fetch current user info for personal settings
+  const { data: currentUser } = useQuery({
+    queryKey: ['/api/user'],
+    queryFn: async () => {
+      const response = await fetch('/api/user', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch user info');
+      return response.json();
+    }
+  });
+
+  const [selectedTimezone, setSelectedTimezone] = useState<string>('America/New_York');
+
+  // Update selected timezone when user data loads
+  useEffect(() => {
+    if (currentUser?.timezone) {
+      setSelectedTimezone(currentUser.timezone);
+    }
+  }, [currentUser]);
 
   const form = useForm<CompanySettingsFormData>({
     resolver: zodResolver(companySettingsSchema),
@@ -122,8 +164,42 @@ function Settings() {
     }
   });
 
+  // Mutation to update user timezone
+  const updateTimezoneMutation = useMutation({
+    mutationFn: async (timezone: string) => {
+      const response = await fetch(`/api/users/${currentUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ timezone })
+      });
+      if (!response.ok) throw new Error('Failed to update timezone');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      toast({
+        title: 'Success',
+        description: 'Your timezone has been updated successfully'
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: 'Failed to update timezone',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const onSubmit = (data: CompanySettingsFormData) => {
     updateSettingsMutation.mutate(data);
+  };
+
+  const handleTimezoneUpdate = () => {
+    updateTimezoneMutation.mutate(selectedTimezone);
   };
 
   if (isLoading) {
@@ -139,8 +215,12 @@ function Settings() {
         </p>
       </div>
 
-      <Tabs defaultValue="company" className="space-y-6">
+      <Tabs defaultValue="personal" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="personal">
+            <User className="w-4 h-4 mr-2" />
+            Personal Settings
+          </TabsTrigger>
           <TabsTrigger value="company">
             <Building className="w-4 h-4 mr-2" />
             Company Info
@@ -150,6 +230,66 @@ function Settings() {
             Business Hours
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="personal" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Globe className="w-5 h-5 mr-2" />
+                Timezone Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="timezone">Your Timezone</Label>
+                <p className="text-sm text-gray-600">
+                  This timezone will be used for displaying interview times and calendar events.
+                </p>
+                <select
+                  id="timezone"
+                  value={selectedTimezone}
+                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label} ({tz.offset})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Current Selection</h4>
+                <p className="text-sm text-blue-700">
+                  {COMMON_TIMEZONES.find(tz => tz.value === selectedTimezone)?.label || selectedTimezone}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Local time: {new Date().toLocaleString('en-US', {
+                    timeZone: selectedTimezone,
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZoneName: 'short'
+                  })}
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                onClick={handleTimezoneUpdate}
+                disabled={updateTimezoneMutation.isPending || selectedTimezone === currentUser?.timezone}
+                className="w-full"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {updateTimezoneMutation.isPending ? 'Saving...' : 'Save Timezone'}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <TabsContent value="company" className="space-y-6">
