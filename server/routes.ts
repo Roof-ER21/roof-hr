@@ -36,6 +36,7 @@ import ptoPolicyRoutes from './routes/pto-policies';
 import coiDocumentRoutes from './routes/coi-documents';
 import employeeAssignmentRoutes from './routes/employee-assignments';
 import contractRoutes from './routes/contracts';
+import sourcerAssignmentRoutes from './routes/sourcer-assignments';
 import susanAIRoutes from './routes/susan-ai';
 import googleServicesRoutes from './routes/google-services';
 import googleSyncRoutes from './routes/google-sync';
@@ -2967,7 +2968,8 @@ export function registerRoutes(app: express.Application) {
   app.use(coiDocumentRoutes);
   app.use(employeeAssignmentRoutes);
   app.use(contractRoutes);
-  
+  app.use(sourcerAssignmentRoutes);
+
   // Mount Susan AI routes - both endpoints for compatibility
   app.use('/api/susan-ai', susanAIRoutes);
   app.use('/api/susan', susanAIRoutes); // Support both endpoints for orb and main page

@@ -9,7 +9,7 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
-  role: text('role').$type<'SYSTEM_ADMIN' | 'HR_ADMIN' | 'GENERAL_MANAGER' | 'TERRITORY_MANAGER' | 'MANAGER' | 'TEAM_LEAD' | 'EMPLOYEE' | 'FIELD_TECH' | 'SALES_REP' | 'CONTRACTOR' | 'TRUE_ADMIN' | 'ADMIN' | 'TERRITORY_SALES_MANAGER'>().notNull(),
+  role: text('role').$type<'SYSTEM_ADMIN' | 'HR_ADMIN' | 'GENERAL_MANAGER' | 'TERRITORY_MANAGER' | 'MANAGER' | 'TEAM_LEAD' | 'EMPLOYEE' | 'FIELD_TECH' | 'SALES_REP' | 'CONTRACTOR' | 'TRUE_ADMIN' | 'ADMIN' | 'TERRITORY_SALES_MANAGER' | 'SOURCER'>().notNull(),
   employmentType: text('employment_type').$type<'W2' | '1099' | 'CONTRACTOR' | 'SUB_CONTRACTOR'>().notNull(),
   department: text('department').notNull(),
   position: text('position').notNull(),
@@ -23,6 +23,7 @@ export const users = pgTable('users', {
   emergencyContact: text('emergency_contact'),
   emergencyPhone: text('emergency_phone'),
   shirtSize: text('shirt_size').$type<'S' | 'M' | 'L' | 'XL' | 'XXL' | '3X'>(), // New field for shirt size
+  timezone: text('timezone').notNull().default('America/New_York'), // User's timezone for interviews and calendar events
   passwordHash: text('password_hash').notNull(),
   mustChangePassword: boolean('must_change_password').notNull().default(true),
   lastPasswordChange: timestamp('last_password_change'),
@@ -1779,7 +1780,7 @@ export const registerSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  role: z.enum(['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'MANAGER', 'EMPLOYEE', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH']),
+  role: z.enum(['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'TERRITORY_SALES_MANAGER', 'MANAGER', 'EMPLOYEE', 'CONTRACTOR', 'SALES_REP', 'FIELD_TECH', 'SOURCER']),
   employmentType: z.enum(['W2', '1099', 'CONTRACTOR', 'SUB_CONTRACTOR']),
   department: z.string().min(1),
   position: z.string().min(1),
