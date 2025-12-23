@@ -657,9 +657,21 @@ router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any,
 
     const limited = filtered.slice(0, Number(limit));
 
-    res.json({
-      success: true,
-      candidates: limited.map((c: any) => ({
+    // Enrich with sourcer info for display
+    const enrichedCandidates = await Promise.all(limited.map(async (c: any) => {
+      let sourcer = null;
+      if (c.assignedTo) {
+        const sourcerUser = await storage.getUserById(c.assignedTo);
+        if (sourcerUser) {
+          sourcer = {
+            id: sourcerUser.id,
+            firstName: sourcerUser.firstName,
+            lastName: sourcerUser.lastName,
+            screenerColor: (sourcerUser as any).screenerColor || '#6B7280'
+          };
+        }
+      }
+      return {
         id: c.id,
         firstName: c.firstName,
         lastName: c.lastName,
@@ -668,8 +680,15 @@ router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any,
         status: c.status,
         stage: c.stage,
         source: c.source,
-        appliedDate: c.appliedDate
-      })),
+        appliedDate: c.appliedDate,
+        assignedTo: c.assignedTo,
+        sourcer
+      };
+    }));
+
+    res.json({
+      success: true,
+      candidates: enrichedCandidates,
       total: filtered.length
     });
 

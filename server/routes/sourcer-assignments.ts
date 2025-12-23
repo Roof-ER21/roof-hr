@@ -46,17 +46,25 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManager, a
     const candidateId = req.params.id;
     const { hrMemberId, role = 'PRIMARY', notes, sendNotification = true } = req.body;
 
+    console.log(`[Sourcer Assignment] Request: candidateId=${candidateId}, hrMemberId=${hrMemberId}, role=${role}`);
+
     // Validate candidate exists
     const candidate = await storage.getCandidateById(candidateId);
     if (!candidate) {
+      console.log(`[Sourcer Assignment] ERROR: Candidate ${candidateId} not found`);
       return res.status(404).json({ error: 'Candidate not found' });
     }
+
+    console.log(`[Sourcer Assignment] Found candidate: ${candidate.firstName} ${candidate.lastName}`);
 
     // Validate HR member (sourcer) exists
     const hrMember = await storage.getUserById(hrMemberId);
     if (!hrMember) {
+      console.log(`[Sourcer Assignment] ERROR: HR member ${hrMemberId} not found`);
       return res.status(404).json({ error: 'HR member not found' });
     }
+
+    console.log(`[Sourcer Assignment] Found sourcer: ${hrMember.firstName} ${hrMember.lastName}`);
 
     // Auto-assign screener color if sourcer doesn't have one
     if (!(hrMember as any).screenerColor) {
@@ -86,6 +94,7 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManager, a
     }
 
     // Create the assignment
+    console.log(`[Sourcer Assignment] Creating HR assignment...`);
     const assignment = await storage.createHrAssignment({
       type: 'CANDIDATE',
       assigneeId: candidateId,
@@ -97,10 +106,13 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManager, a
       startDate: new Date(),
       tasksCompleted: 0,
     });
+    console.log(`[Sourcer Assignment] Created assignment: ${assignment.id}`);
 
     // Update candidate's assignedTo field for primary assignments
     if (role === 'PRIMARY') {
+      console.log(`[Sourcer Assignment] Updating candidate assignedTo field...`);
       await storage.updateCandidate(candidateId, { assignedTo: hrMemberId });
+      console.log(`[Sourcer Assignment] SUCCESS: ${candidate.firstName} ${candidate.lastName} assigned to ${hrMember.firstName} ${hrMember.lastName}`);
     }
 
     // Send email notification to sourcer

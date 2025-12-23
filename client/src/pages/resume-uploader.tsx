@@ -251,7 +251,7 @@ export default function ResumeUploaderPage() {
   const handleAssignmentComplete = async () => {
     if (selectedSourcer && pendingCandidate) {
       try {
-        await fetch(`/api/candidates/${pendingCandidate.id}/assign-sourcer`, {
+        const response = await fetch(`/api/candidates/${pendingCandidate.id}/assign-sourcer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -260,15 +260,22 @@ export default function ResumeUploaderPage() {
           credentials: 'include',
           body: JSON.stringify({ hrMemberId: selectedSourcer }),
         });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Assignment failed with status ${response.status}`);
+        }
+
         const sourcerName = sourcers?.find(s => s.id === selectedSourcer);
         toast({
           title: 'Candidate Created & Assigned',
           description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}`,
         });
-      } catch (error) {
+      } catch (error: any) {
+        console.error('[Assignment] Failed:', error);
         toast({
-          title: 'Candidate Created',
-          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} created (assignment failed)`,
+          title: 'Assignment Failed',
+          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} created but assignment failed: ${error.message}`,
           variant: 'destructive',
         });
       }
@@ -284,6 +291,7 @@ export default function ResumeUploaderPage() {
     setSelectedSourcer('');
     refetchRecent();
     queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/sourcers/available'] });
   };
 
   return (
