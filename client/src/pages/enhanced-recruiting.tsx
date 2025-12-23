@@ -442,9 +442,11 @@ function ResumeUploaderContent() {
 
   // Handle sourcer assignment completion
   const handleAssignmentComplete = async () => {
+    console.log('[Assignment] handleAssignmentComplete called', { selectedSourcer, pendingCandidate });
     if (selectedSourcer && pendingCandidate) {
       try {
         const token = localStorage.getItem('token');
+        console.log('[Assignment] Making API call to assign sourcer', { candidateId: pendingCandidate.id, hrMemberId: selectedSourcer });
         const response = await fetch(`/api/candidates/${pendingCandidate.id}/assign-sourcer`, {
           method: 'POST',
           headers: {
@@ -454,6 +456,7 @@ function ResumeUploaderContent() {
           credentials: 'include',
           body: JSON.stringify({ hrMemberId: selectedSourcer }),
         });
+        console.log('[Assignment] API response status:', response.status);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
