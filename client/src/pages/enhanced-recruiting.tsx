@@ -440,9 +440,9 @@ function ResumeUploaderContent() {
 
   const activeCategoryData = RESUME_CATEGORIES.find(c => c.id === activeCategory)!;
 
-  // Handle sourcer assignment completion
+  // Handle sourcer assignment completion (v2)
   const handleAssignmentComplete = async () => {
-    console.log('[Assignment] handleAssignmentComplete called', { selectedSourcer, pendingCandidate });
+    console.log('[Assignment v2] handleAssignmentComplete called', { selectedSourcer, pendingCandidate });
     if (selectedSourcer && pendingCandidate) {
       try {
         const token = localStorage.getItem('token');
