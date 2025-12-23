@@ -69,11 +69,18 @@ async function runMigrations() {
     `);
     logger.info('[Migration] ✅ Timezone index ready');
 
+    // Add screener_color column for sourcer identification
+    await db.execute(sql`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS screener_color TEXT
+    `);
+    logger.info('[Migration] ✅ Screener color column ready');
+
     logger.info('[Migration] All migrations completed successfully');
   } catch (error: any) {
     // If the column already exists, that's fine
     if (error?.code === '42701') { // duplicate_column
-      logger.info('[Migration] Timezone column already exists, skipping');
+      logger.info('[Migration] Column already exists, skipping');
     } else {
       logger.error('[Migration] Migration failed:', error);
       // Don't exit - let the server start anyway, migrations might not be critical

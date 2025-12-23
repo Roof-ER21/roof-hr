@@ -389,40 +389,76 @@ router.post('/api/auth/register', async (req, res) => {
 router.post('/api/auth/login', async (req, res) => {
   try {
     // Debug: log what's being received
+    console.log('[Login] Step 1: Received request');
     console.log('[Login] Request body:', JSON.stringify(req.body));
-    console.log('[Login] Request headers content-type:', req.headers['content-type']);
 
-    const data = loginSchema.parse(req.body);
+    let data;
+    try {
+      data = loginSchema.parse(req.body);
+      console.log('[Login] Step 2: Schema validation passed');
+    } catch (validationError: any) {
+      console.error('[Login] Schema validation failed:', validationError?.issues);
+      return res.status(400).json({
+        error: 'Invalid request data',
+        details: validationError?.issues?.map((i: any) => ({ field: i.path.join('.'), message: i.message }))
+      });
+    }
 
     // Validate email domain - only @theroofdocs.com allowed
     const ALLOWED_DOMAIN = 'theroofdocs.com';
     const emailDomain = data.email.split('@')[1]?.toLowerCase();
     if (emailDomain !== ALLOWED_DOMAIN) {
+      console.log('[Login] Rejected: Invalid email domain');
       return res.status(403).json({
         error: 'Access restricted to @theroofdocs.com email addresses only'
       });
     }
+    console.log('[Login] Step 3: Email domain validated');
 
-    const user = await storage.getUserByEmail(data.email);
+    let user;
+    try {
+      user = await storage.getUserByEmail(data.email);
+      console.log('[Login] Step 4: User lookup completed, found:', !!user);
+    } catch (dbError: any) {
+      console.error('[Login] Database error during user lookup:', dbError?.message || dbError);
+      return res.status(500).json({ error: 'Database error. Please try again.' });
+    }
+
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
+    let isPasswordValid;
+    try {
+      isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
+      console.log('[Login] Step 5: Password validation completed');
+    } catch (bcryptError: any) {
+      console.error('[Login] Bcrypt error:', bcryptError?.message || bcryptError);
+      return res.status(500).json({ error: 'Authentication error. Please try again.' });
+    }
+
     if (!isPasswordValid) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    const token = generateSessionToken();
-    await storage.createSession({
-      userId: user.id,
-      token,
-      expiresAt: getSessionExpiry(),
-    });
-    
+    let token;
+    try {
+      token = generateSessionToken();
+      await storage.createSession({
+        userId: user.id,
+        token,
+        expiresAt: getSessionExpiry(),
+      });
+      console.log('[Login] Step 6: Session created');
+    } catch (sessionError: any) {
+      console.error('[Login] Session creation error:', sessionError?.message || sessionError);
+      return res.status(500).json({ error: 'Session error. Please try again.' });
+    }
+
     // Also set the session for cookie-based auth
     (req as any).session.userId = user.id;
 
+    console.log('[Login] Step 7: Login successful for', user.email);
     res.json({
       user: {
         id: user.id,
@@ -438,19 +474,8 @@ router.post('/api/auth/login', async (req, res) => {
       token,
     });
   } catch (error: any) {
-    console.error('Login error:', error);
-
-    // Provide specific error messages based on error type
-    if (error?.name === 'ZodError' || error?.issues) {
-      console.error('Login validation error:', JSON.stringify(error.issues, null, 2));
-      return res.status(400).json({
-        error: 'Invalid request data',
-        details: error.issues?.map((i: any) => ({ field: i.path.join('.'), message: i.message }))
-      });
-    }
-
-    // Database or other errors
-    console.error('Login error details:', error?.message || error);
+    console.error('[Login] Unexpected error:', error?.message || error);
+    console.error('[Login] Error stack:', error?.stack);
     res.status(500).json({ error: 'Login failed. Please try again.' });
   }
 });
