@@ -154,7 +154,8 @@ function Recruiting() {
 
   const createInterviewMutation = useMutation({
     mutationFn: async (data: InterviewFormData) => {
-      const response = await fetch('/api/interviews', {
+      // Use /schedule endpoint for full Google Calendar + email integration
+      const response = await fetch('/api/interviews/schedule', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,6 +164,8 @@ function Recruiting() {
         body: JSON.stringify({
           ...data,
           interviewerId: localStorage.getItem('userId') || '', // Should get from auth context
+          sendCalendarInvite: true,
+          sendReminders: true,
         })
       });
       if (!response.ok) throw new Error('Failed to create interview');

@@ -348,6 +348,14 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     }
   };
 
+  // Format 24-hour time to 12-hour AM/PM format
+  const formatTime12Hour = (time24: string): string => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
   // The actual scheduler content (shared between controlled and uncontrolled modes)
   const schedulerContent = (
     <Tabs defaultValue="schedule" className="mt-4">
@@ -527,15 +535,15 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           ? getAvailableTimeSlots()
                           : [];
 
-                        // If we have availability-based slots, use them; otherwise use defaults
+                        // If we have availability-based slots, use them; otherwise use defaults (7 AM - 6 PM ET)
                         const timeSlots = availableSlots.length > 0 ? availableSlots : [
-                          '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-                          '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
-                          '16:00', '16:30', '17:00', '17:30', '18:00'
+                          '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+                          '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+                          '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'
                         ];
 
                         return timeSlots.map(time => (
-                          <SelectItem key={time} value={time}>{time}</SelectItem>
+                          <SelectItem key={time} value={time}>{formatTime12Hour(time)} ET</SelectItem>
                         ));
                       })()}
                     </SelectContent>
@@ -543,7 +551,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
                   {selectedDate && (
                     <p className="text-sm text-muted-foreground mt-2">
-                      Scheduled for: {format(selectedDate, 'MMMM d, yyyy')} at {selectedTime}
+                      Scheduled for: {format(selectedDate, 'MMMM d, yyyy')} at {formatTime12Hour(selectedTime)} ET
                     </p>
                   )}
                 </div>
@@ -745,7 +753,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                                   setShowConflictOverride(false);
                                 }}
                               >
-                                {format(time, 'MMM d, h:mm a')}
+                                {format(time, 'MMM d, h:mm a')} ET
                               </Button>
                             ))}
                           </div>
@@ -860,7 +868,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           </Badge>
                         </div>
                         <CardDescription>
-                          {format(new Date(interview.scheduledDate), 'PPP p')}
+                          {format(new Date(interview.scheduledDate), 'PPP p')} ET
                         </CardDescription>
                       </CardHeader>
                       <CardContent>

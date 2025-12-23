@@ -216,7 +216,12 @@ class ApiClient {
   }
 
   async createInterview(interviewData: any) {
-    return this.post<any>('/api/interviews', interviewData);
+    // Use /schedule endpoint for full Google Calendar + email integration
+    return this.post<any>('/api/interviews/schedule', {
+      ...interviewData,
+      sendCalendarInvite: true,
+      sendReminders: true,
+    });
   }
 
   // Documents
