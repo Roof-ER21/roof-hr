@@ -456,6 +456,7 @@ router.get('/api/sourcers/available', requireAuth, requireManager, async (req, r
           lastName: sourcer.lastName,
           email: sourcer.email,
           role: sourcer.role,
+          screenerColor: (sourcer as any).screenerColor || '#6B7280',
           activeAssignments: activeAssignments.length,
         };
       })
