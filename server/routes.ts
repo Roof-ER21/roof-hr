@@ -388,6 +388,10 @@ router.post('/api/auth/register', async (req, res) => {
 
 router.post('/api/auth/login', async (req, res) => {
   try {
+    // Debug: log what's being received
+    console.log('[Login] Request body:', JSON.stringify(req.body));
+    console.log('[Login] Request headers content-type:', req.headers['content-type']);
+
     const data = loginSchema.parse(req.body);
 
     // Validate email domain - only @theroofdocs.com allowed
@@ -433,9 +437,21 @@ router.post('/api/auth/login', async (req, res) => {
       },
       token,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
-    res.status(400).json({ error: 'Invalid request data' });
+
+    // Provide specific error messages based on error type
+    if (error?.name === 'ZodError' || error?.issues) {
+      console.error('Login validation error:', JSON.stringify(error.issues, null, 2));
+      return res.status(400).json({
+        error: 'Invalid request data',
+        details: error.issues?.map((i: any) => ({ field: i.path.join('.'), message: i.message }))
+      });
+    }
+
+    // Database or other errors
+    console.error('Login error details:', error?.message || error);
+    res.status(500).json({ error: 'Login failed. Please try again.' });
   }
 });
 
