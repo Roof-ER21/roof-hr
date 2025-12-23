@@ -2,6 +2,7 @@ import express from 'express';
 import { storage } from '../storage';
 import { emailService } from '../email-service';
 import { v4 as uuidv4 } from 'uuid';
+import { getNextAvailableColor, DEFAULT_SCREENER_COLOR } from '../../shared/constants/screener-colors';
 
 const router = express.Router();
 
@@ -57,6 +58,22 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManager, a
       return res.status(404).json({ error: 'HR member not found' });
     }
 
+    // Auto-assign screener color if sourcer doesn't have one
+    if (!(hrMember as any).screenerColor) {
+      try {
+        const allUsers = await storage.getAllUsers();
+        const usedColors = allUsers
+          .filter((u: any) => u.screenerColor)
+          .map((u: any) => u.screenerColor as string);
+        const newColor = getNextAvailableColor(usedColors);
+        await storage.updateUser(hrMemberId, { screenerColor: newColor } as any);
+        (hrMember as any).screenerColor = newColor;
+        console.log(`[Sourcer Assignment] Auto-assigned color ${newColor} to ${hrMember.firstName} ${hrMember.lastName}`);
+      } catch (colorError: any) {
+        console.error('[Sourcer Assignment] Failed to auto-assign color:', colorError.message);
+      }
+    }
+
     // Check if this is a primary assignment and if one already exists
     if (role === 'PRIMARY') {
       const existingAssignments = await storage.getHrAssignmentsByCandidateId(candidateId);
@@ -80,6 +97,11 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManager, a
       startDate: new Date(),
       tasksCompleted: 0,
     });
+
+    // Update candidate's assignedTo field for primary assignments
+    if (role === 'PRIMARY') {
+      await storage.updateCandidate(candidateId, { assignedTo: hrMemberId });
+    }
 
     // Send email notification to sourcer
     if (sendNotification && hrMember.email) {

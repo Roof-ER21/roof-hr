@@ -23,6 +23,7 @@ export const users = pgTable('users', {
   emergencyContact: text('emergency_contact'),
   emergencyPhone: text('emergency_phone'),
   shirtSize: text('shirt_size').$type<'S' | 'M' | 'L' | 'XL' | 'XXL' | '3X'>(), // New field for shirt size
+  screenerColor: text('screener_color'), // HEX color for sourcer identification (e.g., '#EC4899')
   timezone: text('timezone').notNull().default('America/New_York'), // User's timezone for interviews and calendar events
   passwordHash: text('password_hash').notNull(),
   mustChangePassword: boolean('must_change_password').notNull().default(true),

@@ -722,6 +722,7 @@ export default function EnhancedRecruiting() {
   const { toast } = useToast();
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
+  const [filterSourcer, setFilterSourcer] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'interviews' | 'campaigns' | 'workflows' | 'resume-uploads'>('kanban');
   const [showInterviewScheduler, setShowInterviewScheduler] = useState(false);
@@ -902,6 +903,20 @@ export default function EnhancedRecruiting() {
 
   const { data: candidates = [], isLoading } = useQuery<Candidate[]>({
     queryKey: ['/api/candidates'],
+  });
+
+  // Fetch available sourcers for filtering
+  const { data: sourcers = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; screenerColor?: string }>>({
+    queryKey: ['/api/sourcers/available'],
+    queryFn: async () => {
+      const response = await fetch('/api/sourcers/available', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) return [];
+      return response.json();
+    }
   });
 
   // Fetch available employees for assignment
@@ -1157,11 +1172,12 @@ export default function EnhancedRecruiting() {
     const matchesFilter = filterStatus === 'ALL' ||
       (filterStatus === 'DEAD' ? (candidate.status === 'DEAD_BY_US' || candidate.status === 'DEAD_BY_CANDIDATE') : candidate.status === filterStatus);
     const matchesPosition = filterPosition === 'ALL' || candidate.position === filterPosition;
-    const matchesSearch = searchTerm === '' || 
+    const matchesSourcer = filterSourcer === 'ALL' || (candidate as any).assignedTo === filterSourcer;
+    const matchesSearch = searchTerm === '' ||
       `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.position.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesPosition && matchesSearch;
+    return matchesFilter && matchesPosition && matchesSourcer && matchesSearch;
   });
 
   const candidatesByStatus = {
@@ -1418,6 +1434,25 @@ export default function EnhancedRecruiting() {
                   <SelectItem value="ALL">All Positions</SelectItem>
                   {positionTypes.map(position => (
                     <SelectItem key={position} value={position}>{position}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterSourcer} onValueChange={setFilterSourcer}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by sourcer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Sourcers</SelectItem>
+                  {sourcers.map((sourcer) => (
+                    <SelectItem key={sourcer.id} value={sourcer.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                        />
+                        <span>{sourcer.firstName} {sourcer.lastName}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

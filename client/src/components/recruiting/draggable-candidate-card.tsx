@@ -74,6 +74,13 @@ interface Candidate {
   notes?: string;
   aiMatchScore?: number;
   aiPotentialScore?: number;
+  assignedTo?: string;
+  sourcer?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    screenerColor: string;
+  };
 }
 
 interface DraggableCandidateCardProps {
@@ -137,11 +144,19 @@ export function DraggableCandidateCard({
       onClick={handleCardClick}
       {...attributes}
     >
-      {/* Name and dead type badge */}
+      {/* Name, sourcer dot, and dead type badge */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
           {candidate.firstName} {candidate.lastName}
         </span>
+        {/* Sourcer color dot indicator */}
+        {candidate.sourcer && (
+          <div
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white shadow-sm"
+            style={{ backgroundColor: candidate.sourcer.screenerColor }}
+            title={`Assigned to: ${candidate.sourcer.firstName} ${candidate.sourcer.lastName}`}
+          />
+        )}
         {/* Show dead type badge if applicable */}
         {candidate.status === 'DEAD_BY_US' && (
           <Badge className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0 flex-shrink-0">

@@ -297,7 +297,7 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth as any, requir
 router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
-    const { category } = req.body;
+    const { category, assignedTo } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ error: 'Resume file is required' });
@@ -434,6 +434,43 @@ router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any
 
     console.log('[Resume Upload] Candidate created:', candidate.id, candidate.firstName, candidate.lastName);
 
+    // 6. Handle sourcer assignment if provided
+    let assignedSourcer = null;
+    if (assignedTo) {
+      try {
+        // Update candidate with assignedTo
+        await storage.updateCandidate(candidate.id, { assignedTo });
+
+        // Create HR assignment record for tracking
+        await storage.createHrAssignment({
+          type: 'CANDIDATE',
+          assigneeId: candidate.id,
+          hrMemberId: assignedTo,
+          assignedBy: user.id,
+          role: 'PRIMARY',
+          status: 'ACTIVE',
+          notes: `Assigned during resume upload by ${user.firstName} ${user.lastName}`,
+          startDate: new Date(),
+          tasksCompleted: 0,
+        });
+
+        // Get sourcer details for response
+        const sourcerUser = await storage.getUserById(assignedTo);
+        if (sourcerUser) {
+          assignedSourcer = {
+            id: sourcerUser.id,
+            firstName: sourcerUser.firstName,
+            lastName: sourcerUser.lastName,
+            screenerColor: (sourcerUser as any).screenerColor || '#6B7280'
+          };
+        }
+
+        console.log('[Resume Upload] Candidate assigned to sourcer:', assignedTo);
+      } catch (assignError: any) {
+        console.error('[Resume Upload] Assignment error (continuing):', assignError.message);
+      }
+    }
+
     res.json({
       success: true,
       candidate: {
@@ -443,11 +480,13 @@ router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any
         position: candidate.position,
         resumeUrl: candidate.resumeUrl,
         status: candidate.status,
-        stage: candidate.stage
+        stage: candidate.stage,
+        assignedTo: assignedTo || null,
+        sourcer: assignedSourcer
       },
       googleDriveUrl: resumeUrl || null,
       driveConfigured,
-      message: `Candidate ${parsedData.firstName} ${parsedData.lastName} created from resume${!driveConfigured ? ' (Google Drive not configured - resume not stored in cloud)' : ''}`
+      message: `Candidate ${parsedData.firstName} ${parsedData.lastName} created from resume${!driveConfigured ? ' (Google Drive not configured - resume not stored in cloud)' : ''}${assignedSourcer ? ` and assigned to ${assignedSourcer.firstName} ${assignedSourcer.lastName}` : ''}`
     });
 
   } catch (error: any) {

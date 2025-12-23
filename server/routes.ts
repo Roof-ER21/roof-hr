@@ -1466,10 +1466,38 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
 });
 
 // Recruiting routes
-router.get('/api/candidates', requireAuth, async (req, res) => {
+router.get('/api/candidates', requireAuth, async (req: any, res) => {
   try {
-    const candidates = await storage.getAllCandidates();
-    res.json(candidates);
+    const user = req.user;
+    let candidates = await storage.getAllCandidates();
+
+    // Manager-level roles see all candidates
+    const managerRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER',
+                          'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
+
+    // Sourcers only see their assigned candidates (not unassigned ones)
+    if (!managerRoles.includes(user.role)) {
+      candidates = candidates.filter((c: any) => c.assignedTo === user.id);
+    }
+
+    // Enrich with sourcer info for color display
+    const enriched = await Promise.all(candidates.map(async (c: any) => {
+      let sourcer = null;
+      if (c.assignedTo) {
+        const sourcerUser = await storage.getUserById(c.assignedTo);
+        if (sourcerUser) {
+          sourcer = {
+            id: sourcerUser.id,
+            firstName: sourcerUser.firstName,
+            lastName: sourcerUser.lastName,
+            screenerColor: (sourcerUser as any).screenerColor || '#6B7280'
+          };
+        }
+      }
+      return { ...c, sourcer };
+    }));
+
+    res.json(enriched);
   } catch (error: any) {
     console.error('[Candidates API] Error fetching candidates:', error);
     res.status(500).json({ error: 'Failed to fetch candidates', details: error?.message });
