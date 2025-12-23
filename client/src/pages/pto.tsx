@@ -604,15 +604,6 @@ function PTO() {
               <p className="text-3xl font-bold text-primary">{companyPolicy.totalDays} days</p>
             </div>
             
-            {companyPolicy.rolloverAllowed && (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Rollover Policy:</strong> Up to {companyPolicy.maxRolloverDays} days can be carried over to the next year.
-                </AlertDescription>
-              </Alert>
-            )}
-
             {/* Check for department-specific policy */}
             {user && departmentSettings?.find((d: any) => d.department === user.department) && (
               <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
@@ -844,11 +835,9 @@ function PTO() {
                 vacationDays: parseInt(formData.get('vacationDays') as string),
                 sickDays: parseInt(formData.get('sickDays') as string),
                 personalDays: parseInt(formData.get('personalDays') as string),
-                totalDays: parseInt(formData.get('vacationDays') as string) + 
-                          parseInt(formData.get('sickDays') as string) + 
+                totalDays: parseInt(formData.get('vacationDays') as string) +
+                          parseInt(formData.get('sickDays') as string) +
                           parseInt(formData.get('personalDays') as string),
-                rolloverAllowed: formData.get('rolloverAllowed') === 'on',
-                maxRolloverDays: parseInt(formData.get('maxRolloverDays') as string) || 0,
                 accrualRate: formData.get('accrualRate') as string || 'MONTHLY',
                 waitingPeriodDays: parseInt(formData.get('waitingPeriodDays') as string) || 90,
                 lastUpdatedBy: user?.id
@@ -858,11 +847,11 @@ function PTO() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="vacationDays">Vacation Days</Label>
-                  <Input 
-                    id="vacationDays" 
-                    name="vacationDays" 
-                    type="number" 
-                    defaultValue={companyPolicy?.vacationDays || 10}
+                  <Input
+                    id="vacationDays"
+                    name="vacationDays"
+                    type="number"
+                    defaultValue={companyPolicy?.vacationDays || 5}
                     min="0"
                     required
                   />
@@ -880,11 +869,11 @@ function PTO() {
                 </div>
                 <div>
                   <Label htmlFor="personalDays">Personal Days</Label>
-                  <Input 
-                    id="personalDays" 
-                    name="personalDays" 
-                    type="number" 
-                    defaultValue={companyPolicy?.personalDays || 3}
+                  <Input
+                    id="personalDays"
+                    name="personalDays"
+                    type="number"
+                    defaultValue={companyPolicy?.personalDays || 2}
                     min="0"
                     required
                   />
@@ -912,29 +901,6 @@ function PTO() {
                     name="waitingPeriodDays" 
                     type="number" 
                     defaultValue={companyPolicy?.waitingPeriodDays || 90}
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="rolloverAllowed"
-                    name="rolloverAllowed"
-                    defaultChecked={companyPolicy?.rolloverAllowed || false}
-                    className="h-4 w-4"
-                  />
-                  <Label htmlFor="rolloverAllowed">Allow PTO Rollover</Label>
-                </div>
-                <div>
-                  <Label htmlFor="maxRolloverDays">Max Rollover Days</Label>
-                  <Input 
-                    id="maxRolloverDays" 
-                    name="maxRolloverDays" 
-                    type="number" 
-                    defaultValue={companyPolicy?.maxRolloverDays || 5}
                     min="0"
                   />
                 </div>
@@ -973,15 +939,6 @@ function PTO() {
                 <div>
                   <Label>Total Annual PTO</Label>
                   <p className="text-3xl font-bold text-primary">{companyPolicy.totalDays} days</p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch checked={companyPolicy.rolloverAllowed} disabled />
-                  <Label>Rollover Allowed</Label>
-                  {companyPolicy.rolloverAllowed && (
-                    <span className="text-sm text-muted-foreground">
-                      (Max: {companyPolicy.maxRolloverDays} days)
-                    </span>
-                  )}
                 </div>
               </div>
             ) : (

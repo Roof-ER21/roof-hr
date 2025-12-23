@@ -6,15 +6,15 @@ import { storage } from './storage';
 import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { db } from './db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne, or, lte, gte } from 'drizzle-orm';
 import {
   loginSchema, registerSchema, insertPtoRequestSchema,
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
   insertEmployeeReviewSchema, insertTaskSchema, insertCompanySettingsSchema,
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
-  ptoRequests
+  ptoRequests, users
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee } from '../shared/constants/roles';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
 import googleAuthRoutes from './routes/google-auth';
@@ -1167,12 +1167,14 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     // Calculate days from startDate and endDate BEFORE validation
     const startDate = new Date(req.body.startDate);
     const endDate = new Date(req.body.endDate);
-    
+    const startDateStr = req.body.startDate; // YYYY-MM-DD string
+    const endDateStr = req.body.endDate;     // YYYY-MM-DD string
+
     let days: number;
-    
+
     // Check if this is a half-day request
     const halfDay = req.body.halfDay || false;
-    
+
     if (halfDay) {
       // For half-day requests, store as 1 day but flag it as half-day
       // The halfDay flag will indicate it's actually 0.5 days
@@ -1183,18 +1185,76 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 for inclusive
       days = diffDays;
     }
-    
+
+    // Get the requesting user
+    const user = req.user!;
+
+    // ========================================================================
+    // DEPARTMENT CONFLICT CHECK - Prevent >1 person per department on PTO
+    // ========================================================================
+    if (user.department) {
+      // Find any approved PTO requests from same department that overlap
+      const overlappingPTO = await db.select({
+        id: ptoRequests.id,
+        employeeId: ptoRequests.employeeId,
+        startDate: ptoRequests.startDate,
+        endDate: ptoRequests.endDate,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(ptoRequests)
+      .innerJoin(users, eq(users.id, ptoRequests.employeeId))
+      .where(and(
+        eq(users.department, user.department),
+        eq(ptoRequests.status, 'APPROVED'),
+        ne(ptoRequests.employeeId, user.id),
+        // Check for date overlap: new request overlaps with existing approved PTO
+        or(
+          // New start date falls within existing PTO range
+          and(
+            gte(ptoRequests.startDate, startDateStr),
+            lte(ptoRequests.startDate, endDateStr)
+          ),
+          // New end date falls within existing PTO range
+          and(
+            gte(ptoRequests.endDate, startDateStr),
+            lte(ptoRequests.endDate, endDateStr)
+          ),
+          // New request completely contains existing PTO
+          and(
+            lte(ptoRequests.startDate, startDateStr),
+            gte(ptoRequests.endDate, endDateStr)
+          ),
+          // Existing PTO completely contains new request
+          and(
+            gte(ptoRequests.startDate, startDateStr),
+            lte(ptoRequests.endDate, endDateStr)
+          )
+        )
+      ));
+
+      if (overlappingPTO.length > 0) {
+        const conflictingEmployee = overlappingPTO[0];
+        return res.status(400).json({
+          error: 'Department conflict',
+          message: `Cannot request PTO for these dates. ${conflictingEmployee.firstName} ${conflictingEmployee.lastName} in your department (${user.department}) already has approved PTO during this period (${conflictingEmployee.startDate} to ${conflictingEmployee.endDate}). Please choose different dates.`,
+          conflictingEmployee: `${conflictingEmployee.firstName} ${conflictingEmployee.lastName}`,
+          conflictDates: { start: conflictingEmployee.startDate, end: conflictingEmployee.endDate }
+        });
+      }
+    }
+    // ========================================================================
+
     // Add calculated days to the request body BEFORE validation
     const dataWithDays = {
       ...req.body,
       days
     };
-    
+
     // Now parse with the days field included
     const data = insertPtoRequestSchema.parse(dataWithDays);
-    
+
     // Create the PTO request with calculated days
-    const user = req.user!;
     const { status: _, ...ptoData } = data as any;
     const ptoRequest = await storage.createPtoRequest({
       ...ptoData,
@@ -1202,13 +1262,10 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
       status: 'PENDING' as const,
     });
 
-    // Send notifications to PTO managers (non-blocking)
-    const PTO_MANAGER_EMAILS = [
-      'ford.barsi@theroofdocs.com',
-      'oliver.brown@theroofdocs.com',
-      'reese.samala@theroofdocs.com',
-      'ahmed.mahmoud@theroofdocs.com'
-    ];
+    // Get appropriate approvers based on who is requesting
+    // Ford/Reese requests go to Oliver & Ahmed only
+    // Everyone else goes to all 4 approvers
+    const approverEmails = getPTOApproversForEmployee(user.email);
 
     // Send notifications asynchronously without blocking the response
     (async () => {
@@ -1242,20 +1299,22 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
           console.error('[PTO Email] Failed to send employee confirmation:', empEmailErr);
         }
 
-        // Then notify managers
+        // Then notify the appropriate approvers (Ford/Reese → Oliver & Ahmed only, others → all 4)
         let managerEmailsSent = 0;
-        for (const managerEmail of PTO_MANAGER_EMAILS) {
+        console.log(`[PTO Email] Notifying ${approverEmails.length} approvers for ${user.email}'s request`);
+        for (const approverEmail of approverEmails) {
           try {
             const sent = await emailService.sendEmail({
-              to: managerEmail,
+              to: approverEmail,
               subject: `New PTO Request: ${user.firstName} ${user.lastName}`,
               html: `
                 <h2>New PTO Request Submitted</h2>
-                <p><strong>${user.firstName} ${user.lastName}</strong> has requested PTO:</p>
+                <p><strong>${user.firstName} ${user.lastName}</strong> (${user.department || 'No Department'}) has requested PTO:</p>
                 <ul>
                   <li><strong>Start Date:</strong> ${new Date(req.body.startDate).toLocaleDateString()}</li>
                   <li><strong>End Date:</strong> ${new Date(req.body.endDate).toLocaleDateString()}</li>
                   <li><strong>Days:</strong> ${days}</li>
+                  <li><strong>Type:</strong> ${req.body.type || 'VACATION'}</li>
                   <li><strong>Reason:</strong> ${req.body.reason || 'Not specified'}</li>
                 </ul>
                 <p>Please review and approve/deny this request in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
@@ -1263,15 +1322,15 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
             });
             if (sent) {
               managerEmailsSent++;
-              console.log(`[PTO Email] Manager notification SENT to: ${managerEmail}`);
+              console.log(`[PTO Email] Approver notification SENT to: ${approverEmail}`);
             } else {
-              console.log(`[PTO Email] Manager notification NOT SENT (dev mode?) to: ${managerEmail}`);
+              console.log(`[PTO Email] Approver notification NOT SENT (dev mode?) to: ${approverEmail}`);
             }
           } catch (emailErr) {
-            console.error(`[PTO Email] Failed to notify manager ${managerEmail}:`, emailErr);
+            console.error(`[PTO Email] Failed to notify approver ${approverEmail}:`, emailErr);
           }
         }
-        console.log(`[PTO Email] Completed: ${managerEmailsSent}/${PTO_MANAGER_EMAILS.length} manager emails sent`);
+        console.log(`[PTO Email] Completed: ${managerEmailsSent}/${approverEmails.length} approver emails sent`);
       } catch (notifyError) {
         console.error('[PTO Email] Error sending notifications:', notifyError);
       }

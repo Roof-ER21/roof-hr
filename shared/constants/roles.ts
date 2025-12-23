@@ -185,6 +185,33 @@ export const PTO_APPROVER_EMAILS = [
   'oliver.brown@theroofdocs.com'
 ];
 
+// Senior managers (Ford/Reese) - their PTO requests only go to Oliver & Ahmed
+export const SENIOR_MANAGER_EMAILS = [
+  'ford.barsi@theroofdocs.com',
+  'reese.samala@theroofdocs.com'
+];
+
+// Senior approvers (Oliver & Ahmed) - approve Ford/Reese PTO requests
+export const SENIOR_PTO_APPROVER_EMAILS = [
+  'ahmed.mahmoud@theroofdocs.com',
+  'oliver.brown@theroofdocs.com'
+];
+
+// PTO reminder recipients - all 4 managers receive reminders
+export const PTO_REMINDER_RECIPIENTS = PTO_APPROVER_EMAILS;
+
+/**
+ * Get the appropriate PTO approvers for an employee
+ * Ford/Reese requests go only to Oliver & Ahmed
+ * Everyone else's requests go to all 4 approvers
+ */
+export function getPTOApproversForEmployee(employeeEmail: string): string[] {
+  if (SENIOR_MANAGER_EMAILS.includes(employeeEmail.toLowerCase())) {
+    return SENIOR_PTO_APPROVER_EMAILS; // Ford/Reese → Oliver & Ahmed only
+  }
+  return PTO_APPROVER_EMAILS; // Everyone else → all 4
+}
+
 // Check if user can approve PTO (email-based restriction)
 export function canApprovePtoRequests(user: { role?: string; email?: string } | null): boolean {
   if (!user) return false;

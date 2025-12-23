@@ -322,6 +322,16 @@ app.use((req, res, next) => {
         logger.error('Failed to start termination reminder job:', error);
         // Continue - job can be triggered manually via API
       }
+
+      // Initialize PTO reminder job (runs daily at 9 PM EST)
+      try {
+        const { startPTOReminderJob } = await import('./jobs/pto-reminder-job');
+        startPTOReminderJob();
+        logger.info('PTO reminder job scheduler started (9 PM EST daily)');
+      } catch (error) {
+        logger.error('Failed to start PTO reminder job:', error);
+        // Continue - job can be triggered manually via API
+      }
     } catch (error) {
       logger.error('Error during server initialization:', error);
     }

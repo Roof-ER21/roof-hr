@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Star } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, isWithinInterval } from 'date-fns';
+import { isHoliday, getHolidayName, getHolidaysForYear } from '@shared/constants/holidays';
 
 interface PtoRequest {
   id: string;
@@ -152,7 +153,10 @@ export function PtoCalendar() {
             const dayPtos = getPtosForDay(day);
             const isCurrentMonth = isSameMonth(day, currentDate);
             const isTodayDate = isToday(day);
-            
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const holidayName = getHolidayName(dateStr);
+            const isHolidayDay = !!holidayName;
+
             return (
               <div
                 key={index}
@@ -160,15 +164,28 @@ export function PtoCalendar() {
                   min-h-[100px] p-2 border rounded-lg transition-colors
                   ${!isCurrentMonth ? 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500' : 'bg-white dark:bg-gray-800'}
                   ${isTodayDate ? 'border-blue-500 border-2' : 'border-gray-200 dark:border-gray-600'}
+                  ${isHolidayDay ? 'bg-green-50 dark:bg-green-900/30' : ''}
                   ${dayPtos.length > 0 ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ''}
                 `}
               >
-                <div className="text-sm font-medium mb-1 text-gray-900 dark:text-white">
-                  {format(day, 'd')}
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {format(day, 'd')}
+                  </span>
+                  {isHolidayDay && (
+                    <Star className="h-3 w-3 text-green-600 dark:text-green-400" />
+                  )}
                 </div>
-                
+
+                {/* Holiday indicator */}
+                {isHolidayDay && (
+                  <div className="text-[10px] text-green-700 dark:text-green-300 font-medium mb-1 truncate" title={holidayName}>
+                    {holidayName}
+                  </div>
+                )}
+
                 {dayPtos.length > 0 && (
-                  <ScrollArea className="h-[70px]">
+                  <ScrollArea className={isHolidayDay ? "h-[50px]" : "h-[70px]"}>
                     <div className="space-y-1">
                       {dayPtos.slice(0, 3).map((pto, ptoIndex) => (
                         <div
@@ -197,8 +214,29 @@ export function PtoCalendar() {
           })}
         </div>
 
-        {/* Legend */}
+        {/* Company Holidays Legend */}
         <div className="mt-6 pt-4 border-t dark:border-gray-700">
+          <h3 className="text-sm font-medium mb-3 flex items-center gap-2 text-gray-900 dark:text-white">
+            <Star className="h-4 w-4 text-green-600" />
+            Company Holidays ({currentDate.getFullYear()})
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-6">
+            {getHolidaysForYear(currentDate.getFullYear()).map((holiday) => (
+              <div
+                key={holiday.date}
+                className="text-xs p-2 rounded bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700"
+              >
+                <div className="font-medium text-green-800 dark:text-green-200">{holiday.name}</div>
+                <div className="text-green-600 dark:text-green-400">
+                  {format(parseISO(holiday.date), 'MMM d, yyyy')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Time Off Summary */}
+        <div className="pt-4 border-t dark:border-gray-700">
           <h3 className="text-sm font-medium mb-3 text-gray-900 dark:text-white">Time Off Summary</h3>
           <div className="space-y-2">
             {ptosWithEmployees.map(pto => (

@@ -75,12 +75,11 @@ export const insertTerritorySchema = createInsertSchema(territories).omit({
 // Company-wide PTO Policy - NEW
 export const companyPtoPolicy = pgTable('company_pto_policy', {
   id: text('id').primaryKey(),
-  vacationDays: integer('vacation_days').notNull().default(10),
-  sickDays: integer('sick_days').notNull().default(5),
-  personalDays: integer('personal_days').notNull().default(3),
-  totalDays: integer('total_days').notNull().default(18),
-  rolloverAllowed: boolean('rollover_allowed').notNull().default(false),
-  maxRolloverDays: integer('max_rollover_days').default(0),
+  vacationDays: integer('vacation_days').notNull().default(5),  // Updated: 5 vacation days
+  sickDays: integer('sick_days').notNull().default(5),          // 5 sick days
+  personalDays: integer('personal_days').notNull().default(2),  // Updated: 2 personal days
+  totalDays: integer('total_days').notNull().default(12),       // Updated: 12 total
+  // rolloverAllowed and maxRolloverDays removed - no rollover feature
   blackoutDates: text('blackout_dates'), // JSON array of date ranges
   holidaySchedule: text('holiday_schedule'), // JSON array of company holidays
   policyNotes: text('policy_notes'),
@@ -101,9 +100,9 @@ export const ptoPolicies = pgTable('pto_policies', {
   id: text('id').primaryKey(),
   employeeId: text('employee_id').notNull().unique(),
   policyLevel: text('policy_level').$type<'COMPANY' | 'DEPARTMENT' | 'INDIVIDUAL'>().notNull().default('COMPANY'),
-  vacationDays: integer('vacation_days').notNull().default(10), // Vacation days
-  sickDays: integer('sick_days').notNull().default(5), // Sick days
-  personalDays: integer('personal_days').notNull().default(3), // Personal days
+  vacationDays: integer('vacation_days').notNull().default(5),  // 5 vacation days
+  sickDays: integer('sick_days').notNull().default(5),          // 5 sick days
+  personalDays: integer('personal_days').notNull().default(2),  // 2 personal days
   baseDays: integer('base_days').notNull(), // Base allocation from company/department
   additionalDays: integer('additional_days').notNull().default(0), // Manager customization
   totalDays: integer('total_days').notNull(), // Total available days
