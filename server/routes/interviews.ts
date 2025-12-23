@@ -251,10 +251,20 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
 
       // Initialize with service account
       await calendarService.initialize();
+      console.log('[INTERVIEW] Calendar service initialized successfully');
 
       // Get candidate and interviewer info for attendees
       const candidateDetails = await storage.getCandidateById(data.candidateId);
       const interviewerDetails = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
+
+      console.log('[INTERVIEW] Calendar event details:', {
+        candidateId: data.candidateId,
+        interviewerId: data.interviewerId,
+        candidateEmail: candidateDetails?.email,
+        interviewerEmail: interviewerDetails?.email,
+        interviewType: data.type,
+        scheduledDate: data.scheduledDate
+      });
 
       if (candidateDetails && interviewerDetails && interviewerDetails.email) {
         const startDateTime = new Date(data.scheduledDate);
@@ -352,7 +362,13 @@ Please use the HR system to record interview feedback.
         console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available');
       }
     } catch (calendarError: any) {
-      console.error('[INTERVIEW] Failed to create Google Calendar event:', calendarError);
+      console.error('[INTERVIEW] ❌ Failed to create Google Calendar event:', {
+        error: calendarError.message,
+        code: calendarError.code,
+        status: calendarError.status,
+        errors: calendarError.errors,
+        stack: calendarError.stack?.split('\n').slice(0, 5).join('\n')
+      });
       // Send a warning in the response but don't fail the interview creation
       res.locals.calendarWarning = `Interview scheduled but calendar event creation failed: ${calendarError.message}`;
     }

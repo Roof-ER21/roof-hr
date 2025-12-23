@@ -394,7 +394,15 @@ class GoogleCalendarService {
     };
   }) {
     try {
+      console.log(`[Google Calendar] Creating event for user: ${userEmail}`, {
+        summary: options.summary,
+        startDateTime: options.startDateTime,
+        attendees: options.attendees,
+        timeZone: options.timeZone
+      });
+
       const calendar = await this.getCalendarForUser(userEmail);
+      console.log(`[Google Calendar] Successfully got impersonated calendar for: ${userEmail}`);
 
       const timeZone = options.timeZone || 'America/New_York';
       const event = {
@@ -448,7 +456,15 @@ class GoogleCalendarService {
     timeZone?: string; // Optional timezone, defaults to America/New_York
   }) {
     try {
+      console.log(`[Google Calendar] Creating event with Meet for user: ${userEmail}`, {
+        summary: options.summary,
+        startDateTime: options.startDateTime,
+        attendees: options.attendees,
+        timeZone: options.timeZone
+      });
+
       const calendar = await this.getCalendarForUser(userEmail);
+      console.log(`[Google Calendar] Successfully got impersonated calendar for Meet: ${userEmail}`);
 
       const timeZone = options.timeZone || 'America/New_York';
       const event = {

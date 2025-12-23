@@ -68,14 +68,27 @@ class ServiceAccountAuth {
    * Get Calendar service for a specific user
    */
   async getCalendarForUser(userEmail: string) {
+    console.log(`[ServiceAccount] Getting calendar for user: ${userEmail}`);
+
     const scopes = [
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events'
     ];
-    
+
     const auth = this.getImpersonatedClient(userEmail, scopes);
-    await auth.authorize();
-    
+
+    try {
+      await auth.authorize();
+      console.log(`[ServiceAccount] ✅ Successfully authorized impersonation for: ${userEmail}`);
+    } catch (error: any) {
+      console.error(`[ServiceAccount] ❌ Failed to authorize impersonation for ${userEmail}:`, {
+        message: error.message,
+        code: error.code,
+        status: error.status
+      });
+      throw error;
+    }
+
     return google.calendar({ version: 'v3', auth });
   }
 
