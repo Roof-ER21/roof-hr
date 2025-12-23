@@ -294,14 +294,14 @@ export class CalendarConflictDetector {
       warnings.push('Interview scheduled during typical lunch hours (12pm-1pm)');
     }
 
-    // Early morning warning (before 9am)
-    if (hour < 9) {
-      warnings.push('Interview scheduled before typical business hours (before 9am)');
+    // Early morning warning (before 7am)
+    if (hour < 7) {
+      warnings.push('Interview scheduled before office hours (before 7am)');
     }
 
-    // Late afternoon warning (after 5pm)
-    if (hour >= 17) {
-      warnings.push('Interview scheduled after typical business hours (after 5pm)');
+    // Late afternoon warning (after 6pm)
+    if (hour >= 18) {
+      warnings.push('Interview scheduled after office hours (after 6pm)');
     }
 
     // Friday afternoon warning
@@ -336,8 +336,8 @@ export class CalendarConflictDetector {
         continue;
       }
 
-      // Check hourly slots from 9am to 5pm
-      for (let hour = 9; hour < 17 && suggestions.length < maxSuggestions; hour++) {
+      // Check hourly slots from 7am to 6pm (office hours)
+      for (let hour = 7; hour < 18 && suggestions.length < maxSuggestions; hour++) {
         const slotStart = new Date(checkDate);
         slotStart.setHours(hour, 0, 0, 0);
         const slotEnd = new Date(checkDate);
