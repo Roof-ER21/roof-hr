@@ -146,7 +146,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     any
   >({
     mutationFn: async (data: any) => {
-      const response: any = await apiRequest('/api/interviews', {
+      // Use /api/interviews/schedule for full integration (calendar + emails)
+      const response: any = await apiRequest('/api/interviews/schedule', {
         method: 'POST',
         body: JSON.stringify(data),
       });
