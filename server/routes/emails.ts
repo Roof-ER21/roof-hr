@@ -1,9 +1,22 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { MailService } from '@sendgrid/mail';
-import { gmailService } from '../services/gmail';
+import { gmailService } from '../services/gmail-service';
 
 const router = Router();
+
+// Initialize Gmail service on first use
+let gmailInitialized = false;
+async function ensureGmailInitialized() {
+  if (!gmailInitialized && gmailService.isConfigured()) {
+    try {
+      await gmailService.initialize();
+      gmailInitialized = true;
+    } catch (error) {
+      console.error('[Gmail] Failed to initialize:', error);
+    }
+  }
+}
 
 // Initialize SendGrid (only if API key is available)
 let mailService: MailService | null = null;
@@ -24,20 +37,21 @@ router.post('/send', async (req, res) => {
   try {
     const { to, subject, body, templateType } = sendEmailSchema.parse(req.body);
 
-    // Try Gmail first if configured
-    if (gmailService.isConfigured()) {
+    // Try Gmail first if configured (using service account with impersonation)
+    await ensureGmailInitialized();
+    if (gmailInitialized) {
       try {
         await gmailService.sendEmail({
           to,
           subject,
-          body,
+          text: body,
           html: body.replace(/\n/g, '<br>')
         });
-        
+
         console.log('[GMAIL SENT] Successfully sent email to:', to);
-        
-        return res.json({ 
-          success: true, 
+
+        return res.json({
+          success: true,
           message: 'Email sent successfully via Gmail',
           emailId: `gmail_${Date.now()}`
         });

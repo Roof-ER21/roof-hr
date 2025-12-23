@@ -3,7 +3,7 @@ import { storage } from '../storage';
 import { googleSyncEnhanced } from '../services/google-sync-enhanced';
 import { susanAI } from '../services/susan-ai/core';
 import { EmailService } from '../email-service';
-import { googleCalendarService } from '../services/google-calendar';
+import { googleCalendarService } from '../services/google-calendar-service';
 import { googleDriveService } from '../services/google-drive-service';
 import { aiEnhancementService } from '../services/ai-enhancement';
 import { v4 as uuidv4 } from 'uuid';

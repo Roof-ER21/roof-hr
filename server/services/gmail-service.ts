@@ -173,6 +173,13 @@ class GmailService {
       throw error;
     }
   }
+
+  /**
+   * Check if the Gmail service is configured and ready to send emails
+   */
+  isConfigured(): boolean {
+    return serviceAccountAuth.isConfigured();
+  }
 }
 
 export const gmailService = new GmailService();

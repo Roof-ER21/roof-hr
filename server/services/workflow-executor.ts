@@ -1,8 +1,22 @@
 import { storage } from '../storage';
-import { gmailService } from './gmail';
-import { googleCalendarService } from './google-calendar';
+import { gmailService } from './gmail-service';
+import { googleCalendarService } from './google-calendar-service';
 import OpenAI from 'openai';
 import { logger } from '../utils/logger';
+
+// Initialize services on first use
+let servicesInitialized = false;
+async function ensureServicesInitialized() {
+  if (!servicesInitialized) {
+    try {
+      await gmailService.initialize();
+      await googleCalendarService.initialize();
+      servicesInitialized = true;
+    } catch (error) {
+      logger.error('[WorkflowExecutor] Failed to initialize Google services:', error);
+    }
+  }
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -91,7 +105,10 @@ export class WorkflowExecutor {
   }
 
   private async executeNotification(step: any, config: any, context: WorkflowContext) {
-    if (step.actionType === 'SEND_EMAIL' && gmailService.isConfigured()) {
+    // Ensure services are initialized before sending
+    await ensureServicesInitialized();
+
+    if (step.actionType === 'SEND_EMAIL' && servicesInitialized) {
       // Get candidate or employee data
       let recipient = '';
       let subject = '';
@@ -111,7 +128,7 @@ export class WorkflowExecutor {
         await gmailService.sendEmail({
           to: recipient,
           subject,
-          body,
+          text: body,
           html: body.replace(/\n/g, '<br>')
         });
         logger.info(`Email sent to ${recipient}`);
@@ -188,26 +205,30 @@ export class WorkflowExecutor {
   }
 
   private async scheduleInterview(config: any, context: WorkflowContext) {
-    if (!context.candidateId || !googleCalendarService.isConfigured()) return;
+    if (!context.candidateId) return;
+
+    // Ensure services are initialized
+    await ensureServicesInitialized();
+    if (!servicesInitialized) return;
 
     const candidate = await storage.getCandidateById(context.candidateId);
     if (!candidate) return;
 
     const candidateName = `${candidate.firstName} ${candidate.lastName}`;
 
-    // Create calendar event
-    const event = {
-      summary: `Interview with ${candidateName}`,
-      description: `Interview for ${candidate.position} position`,
-      startTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
-      endTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(), // 1 hour duration
-      attendees: [
-        { email: candidate.email }
-      ],
-    };
+    // Create calendar event with correct API format
+    const startDateTime = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+    const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
 
     try {
-      const createdEvent = await googleCalendarService.createEvent(event);
+      const createdEvent = await googleCalendarService.createEvent({
+        summary: `Interview with ${candidateName}`,
+        description: `Interview for ${candidate.position} position`,
+        startDateTime,
+        endDateTime,
+        attendees: candidate.email ? [candidate.email] : [],
+        sendNotifications: true,
+      });
       logger.info(`Interview scheduled for ${candidateName}:`, createdEvent);
     } catch (error) {
       logger.error('Failed to schedule interview:', error);
