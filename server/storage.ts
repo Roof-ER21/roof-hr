@@ -70,7 +70,11 @@ import {
   EquipmentAgreement, RoleEquipmentDefault,
   InsertEquipmentAgreement, InsertRoleEquipmentDefault,
   // Susan AI Chat Sessions
-  SusanChatSession, InsertSusanChatSession, susanChatSessions
+  SusanChatSession, InsertSusanChatSession, susanChatSessions,
+  // HR Assignments and Performance Metrics
+  hrAssignments, hrPerformanceMetrics,
+  hrAssignmentSchema, insertHrAssignmentSchema,
+  hrPerformanceMetricSchema, insertHrPerformanceMetricSchema
 } from '@shared/schema';
 import { db } from './db';
 import { eq, and, lt, inArray, or, sql, gte, lte } from 'drizzle-orm';
@@ -79,6 +83,14 @@ import { v4 as uuidv4 } from 'uuid';
 // Type definitions for AI Criteria
 type AiCriteria = typeof aiCriteria.$inferSelect;
 type InsertAiCriteria = typeof aiCriteria.$inferInsert;
+
+// Type definitions for HR Assignments
+type HrAssignment = typeof hrAssignments.$inferSelect;
+type InsertHrAssignment = typeof hrAssignments.$inferInsert;
+
+// Type definitions for HR Performance Metrics
+type HrPerformanceMetric = typeof hrPerformanceMetrics.$inferSelect;
+type InsertHrPerformanceMetric = typeof hrPerformanceMetrics.$inferInsert;
 
 export interface IStorage {
   // User management
@@ -353,7 +365,22 @@ export interface IStorage {
   getEmployeeAssignmentsByAssignedToId(assignedToId: string): Promise<EmployeeAssignment[]>;
   updateEmployeeAssignment(id: string, data: Partial<InsertEmployeeAssignment>): Promise<EmployeeAssignment>;
   deleteEmployeeAssignment(id: string): Promise<void>;
-  
+
+  // HR Assignment Management (Sourcer Assignments) - NEW
+  createHrAssignment(data: Omit<InsertHrAssignment, 'id' | 'createdAt' | 'updatedAt'>): Promise<HrAssignment>;
+  getHrAssignmentById(id: string): Promise<HrAssignment | null>;
+  getHrAssignmentsByCandidateId(candidateId: string): Promise<HrAssignment[]>;
+  getActiveAssignmentsByHrMemberId(hrMemberId: string): Promise<HrAssignment[]>;
+  getAllHrAssignments(): Promise<HrAssignment[]>;
+  updateHrAssignment(id: string, data: Partial<InsertHrAssignment>): Promise<HrAssignment>;
+  deleteHrAssignment(id: string): Promise<void>;
+
+  // HR Performance Metrics - NEW
+  createHrPerformanceMetric(data: Omit<InsertHrPerformanceMetric, 'id' | 'createdAt' | 'updatedAt'>): Promise<HrPerformanceMetric>;
+  getHrPerformanceMetricById(id: string): Promise<HrPerformanceMetric | null>;
+  getHrPerformanceMetricsByHrMemberId(hrMemberId: string): Promise<HrPerformanceMetric[]>;
+  updateHrPerformanceMetric(id: string, data: Partial<InsertHrPerformanceMetric>): Promise<HrPerformanceMetric>;
+
   // Contract Template Management - NEW
   createContractTemplate(data: InsertContractTemplate): Promise<ContractTemplate>;
   getContractTemplateById(id: string): Promise<ContractTemplate | null>;
@@ -1862,7 +1889,82 @@ class DrizzleStorage implements IStorage {
   async deleteEmployeeAssignment(id: string): Promise<void> {
     await db.delete(employeeAssignments).where(eq(employeeAssignments.id, id));
   }
-  
+
+  // HR Assignment Management Implementation (Sourcer Assignments) - NEW
+  async createHrAssignment(data: Omit<InsertHrAssignment, 'id' | 'createdAt' | 'updatedAt'>): Promise<HrAssignment> {
+    const id = uuidv4();
+    const [assignment] = await db.insert(hrAssignments).values({ ...data, id }).returning();
+    return assignment;
+  }
+
+  async getHrAssignmentById(id: string): Promise<HrAssignment | null> {
+    const [assignment] = await db.select().from(hrAssignments)
+      .where(eq(hrAssignments.id, id));
+    return assignment || null;
+  }
+
+  async getHrAssignmentsByCandidateId(candidateId: string): Promise<HrAssignment[]> {
+    return await db.select().from(hrAssignments)
+      .where(and(
+        eq(hrAssignments.assigneeId, candidateId),
+        eq(hrAssignments.type, 'CANDIDATE')
+      ))
+      .orderBy(hrAssignments.createdAt);
+  }
+
+  async getActiveAssignmentsByHrMemberId(hrMemberId: string): Promise<HrAssignment[]> {
+    return await db.select().from(hrAssignments)
+      .where(and(
+        eq(hrAssignments.hrMemberId, hrMemberId),
+        eq(hrAssignments.status, 'ACTIVE')
+      ))
+      .orderBy(hrAssignments.createdAt);
+  }
+
+  async getAllHrAssignments(): Promise<HrAssignment[]> {
+    return await db.select().from(hrAssignments)
+      .orderBy(hrAssignments.createdAt);
+  }
+
+  async updateHrAssignment(id: string, data: Partial<InsertHrAssignment>): Promise<HrAssignment> {
+    const [assignment] = await db.update(hrAssignments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(hrAssignments.id, id))
+      .returning();
+    return assignment;
+  }
+
+  async deleteHrAssignment(id: string): Promise<void> {
+    await db.delete(hrAssignments).where(eq(hrAssignments.id, id));
+  }
+
+  // HR Performance Metrics Implementation - NEW
+  async createHrPerformanceMetric(data: Omit<InsertHrPerformanceMetric, 'id' | 'createdAt' | 'updatedAt'>): Promise<HrPerformanceMetric> {
+    const id = uuidv4();
+    const [metric] = await db.insert(hrPerformanceMetrics).values({ ...data, id }).returning();
+    return metric;
+  }
+
+  async getHrPerformanceMetricById(id: string): Promise<HrPerformanceMetric | null> {
+    const [metric] = await db.select().from(hrPerformanceMetrics)
+      .where(eq(hrPerformanceMetrics.id, id));
+    return metric || null;
+  }
+
+  async getHrPerformanceMetricsByHrMemberId(hrMemberId: string): Promise<HrPerformanceMetric[]> {
+    return await db.select().from(hrPerformanceMetrics)
+      .where(eq(hrPerformanceMetrics.hrMemberId, hrMemberId))
+      .orderBy(hrPerformanceMetrics.period);
+  }
+
+  async updateHrPerformanceMetric(id: string, data: Partial<InsertHrPerformanceMetric>): Promise<HrPerformanceMetric> {
+    const [metric] = await db.update(hrPerformanceMetrics)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(hrPerformanceMetrics.id, id))
+      .returning();
+    return metric;
+  }
+
   // Contract Template Management Implementation - NEW
   async createContractTemplate(data: InsertContractTemplate): Promise<ContractTemplate> {
     const id = uuidv4();

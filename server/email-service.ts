@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { storage } from './storage';
 import { v4 as uuidv4 } from 'uuid';
 import { serviceAccountAuth } from './services/service-account-auth';
+import { timezoneService } from './services/timezone-service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -212,15 +213,25 @@ class EmailService {
           }
         }
 
-        console.log(`[Email] Successfully sent email from ${config.fromUserEmail} via impersonation`, {
+        console.log(`[Email] ✅ Successfully sent email from ${config.fromUserEmail} via impersonation`, {
           to: config.to,
           subject: config.subject,
           messageId: result.data.id,
         });
 
         return true;
-      } catch (impersonationError) {
-        console.warn('[Email] Impersonation failed, falling back to default transporter:', impersonationError);
+      } catch (impersonationError: any) {
+        console.error('[Email] ❌ Service account impersonation failed:', {
+          fromUser: config.fromUserEmail,
+          to: config.to,
+          subject: config.subject,
+          errorType: impersonationError?.constructor?.name,
+          errorMessage: impersonationError?.message,
+          errorCode: impersonationError?.code,
+          errorDetails: impersonationError?.errors || impersonationError?.response?.data,
+        });
+        console.error('[Email] Full impersonation error stack:', impersonationError?.stack);
+        console.warn('[Email] ⚠️ Falling back to default nodemailer transporter...');
         // Fall through to default transporter
       }
     }
@@ -231,96 +242,140 @@ class EmailService {
     }
 
     if (!this.transporter) {
-      console.error('Email transporter not initialized');
+      const errorMsg = 'Email transporter not initialized - check email service configuration';
+      console.error('[Email] ❌', errorMsg);
       if (emailLogId) {
         try {
           await storage.updateEmailLog(emailLogId, {
             status: 'FAILED',
-            errorMessage: 'Email transporter not initialized',
+            errorMessage: errorMsg,
           });
         } catch (logError) {
-          console.error('Failed to update email log:', logError);
+          console.error('[Email] Failed to update email log:', logError);
         }
       }
       return false;
     }
 
-    try {
-      const mailOptions: any = {
-        from: process.env.GOOGLE_USER_EMAIL || 'ahmed.mahmoud@theroofdocs.com',
-        to: config.to,
-        subject: config.subject,
-        html: config.html,
-      };
+    // Retry logic for transient failures
+    const maxRetries = 3;
+    const retryDelayMs = 1000; // 1 second
+    let lastError: any = null;
 
-      // Add CC recipients if provided
-      if (config.cc && config.cc.length > 0) {
-        mailOptions.cc = config.cc.join(', ');
-        console.log(`[Email] CC recipients: ${mailOptions.cc}`);
-      }
-
-      // Add attachments if provided
-      if (config.attachments && config.attachments.length > 0) {
-        console.log(`[Email] Processing ${config.attachments.length} attachments...`);
-        mailOptions.attachments = config.attachments.map(att => {
-          console.log(`[Email] Attachment: ${att.filename}, path: ${att.path}, exists: ${att.path ? fs.existsSync(att.path) : 'N/A (using content)'}`);
-          return {
-            filename: att.filename,
-            path: att.path,
-            content: att.content,
-            contentType: att.contentType || 'application/pdf',
-          };
-        });
-        console.log(`[Email] Attachments added to mailOptions:`, mailOptions.attachments.map((a: any) => a.filename));
-      }
-
-      const result = await this.transporter.sendMail(mailOptions);
-
-      // Update log with success
-      if (emailLogId) {
-        try {
-          await storage.updateEmailLog(emailLogId, {
-            status: 'SENT',
-            sentAt: new Date().toISOString(),
-          });
-        } catch (logError) {
-          console.error('Failed to update email log:', logError);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 1) {
+          console.log(`[Email] Retry attempt ${attempt}/${maxRetries} for email to ${config.to}`);
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt));
         }
-      }
 
-      if (this.isDevelopmentMode) {
-        console.warn('[Email] ⚠️ DEV MODE: Email logged but NOT actually sent:', {
+        const mailOptions: any = {
+          from: process.env.GOOGLE_USER_EMAIL || 'ahmed.mahmoud@theroofdocs.com',
           to: config.to,
           subject: config.subject,
-        });
-        // Return false in development mode so caller knows email wasn't sent
-        return false;
-      }
+          html: config.html,
+        };
 
-      console.log('[Email] ✅ Email sent successfully:', {
-        to: config.to,
-        subject: config.subject,
-        messageId: result.messageId,
-      });
+        // Add CC recipients if provided
+        if (config.cc && config.cc.length > 0) {
+          mailOptions.cc = config.cc.join(', ');
+          console.log(`[Email] CC recipients: ${mailOptions.cc}`);
+        }
 
-      return true;
-    } catch (error) {
-      console.error('Failed to send email:', error);
-
-      // Update log with failure
-      if (emailLogId) {
-        try {
-          await storage.updateEmailLog(emailLogId, {
-            status: 'FAILED',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        // Add attachments if provided
+        if (config.attachments && config.attachments.length > 0) {
+          console.log(`[Email] Processing ${config.attachments.length} attachments...`);
+          mailOptions.attachments = config.attachments.map(att => {
+            console.log(`[Email] Attachment: ${att.filename}, path: ${att.path}, exists: ${att.path ? fs.existsSync(att.path) : 'N/A (using content)'}`);
+            return {
+              filename: att.filename,
+              path: att.path,
+              content: att.content,
+              contentType: att.contentType || 'application/pdf',
+            };
           });
-        } catch (logError) {
-          console.error('Failed to update email log:', logError);
+          console.log(`[Email] Attachments added to mailOptions:`, mailOptions.attachments.map((a: any) => a.filename));
+        }
+
+        const result = await this.transporter.sendMail(mailOptions);
+
+        // Update log with success
+        if (emailLogId) {
+          try {
+            await storage.updateEmailLog(emailLogId, {
+              status: 'SENT',
+              sentAt: new Date().toISOString(),
+            });
+          } catch (logError) {
+            console.error('[Email] Failed to update email log:', logError);
+          }
+        }
+
+        if (this.isDevelopmentMode) {
+          console.warn('[Email] ⚠️ DEV MODE: Email logged but NOT actually sent:', {
+            to: config.to,
+            subject: config.subject,
+          });
+          // Return false in development mode so caller knows email wasn't sent
+          return false;
+        }
+
+        console.log('[Email] ✅ Email sent successfully via nodemailer:', {
+          to: config.to,
+          subject: config.subject,
+          messageId: result.messageId,
+          attempt: attempt > 1 ? `${attempt}/${maxRetries}` : '1',
+        });
+
+        return true;
+      } catch (error: any) {
+        lastError = error;
+        const isTransientError =
+          error?.code === 'ETIMEDOUT' ||
+          error?.code === 'ECONNRESET' ||
+          error?.code === 'ENOTFOUND' ||
+          error?.responseCode === 421 ||
+          error?.responseCode === 450 ||
+          error?.responseCode === 451;
+
+        console.error(`[Email] ❌ Failed to send email (attempt ${attempt}/${maxRetries}):`, {
+          to: config.to,
+          subject: config.subject,
+          errorType: error?.constructor?.name,
+          errorMessage: error?.message,
+          errorCode: error?.code,
+          responseCode: error?.responseCode,
+          isTransientError,
+        });
+
+        // Don't retry if it's not a transient error
+        if (!isTransientError && attempt === 1) {
+          console.error('[Email] Non-transient error detected, skipping retries');
+          break;
+        }
+
+        // If this was the last attempt, log the full stack
+        if (attempt === maxRetries) {
+          console.error('[Email] All retry attempts exhausted. Full error stack:', error?.stack);
         }
       }
-
-      return false;
     }
+
+    // All attempts failed - update log with failure
+    const errorMessage = lastError instanceof Error ? lastError.message : 'Unknown error after retries';
+    if (emailLogId) {
+      try {
+        await storage.updateEmailLog(emailLogId, {
+          status: 'FAILED',
+          errorMessage: `${errorMessage} (after ${maxRetries} attempts)`,
+        });
+      } catch (logError) {
+        console.error('[Email] Failed to update email log:', logError);
+      }
+    }
+
+    return false;
   }
 
   async sendInterviewScheduledEmail(candidateId: string, interviewId: string, fromUserEmail?: string) {
@@ -1079,7 +1134,10 @@ class EmailService {
     try {
       const { title, description, startDate, endDate, location, meetLink, organizerName, organizerEmail, eventId, rsvpToken, baseUrl } = eventDetails;
 
-      // Format date and time in Eastern timezone (DC time)
+      // Get attendee's timezone (fallback to Eastern)
+      const attendeeTimezone = await timezoneService.getUserTimezoneByEmail(attendeeEmail);
+
+      // Format date and time in attendee's timezone
       const formatDateTime = (date: Date) => {
         return date.toLocaleString('en-US', {
           weekday: 'long',
@@ -1089,7 +1147,7 @@ class EmailService {
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
-          timeZone: 'America/New_York',
+          timeZone: attendeeTimezone,
           timeZoneName: 'short'
         });
       };

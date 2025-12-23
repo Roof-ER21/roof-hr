@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { googleAuthService } from './google-auth';
+import { serviceAccountAuth } from './service-account-auth';
 
 class GoogleCalendarService {
   private calendar: any;
@@ -16,6 +17,21 @@ class GoogleCalendarService {
     }
   }
 
+  /**
+   * Get a calendar service impersonating a specific user
+   * This is used to create events in the user's calendar instead of the service account's
+   */
+  private async getCalendarForUser(userEmail: string) {
+    try {
+      const calendarService = await serviceAccountAuth.getCalendarForUser(userEmail);
+      console.log(`[Google Calendar] Using impersonated calendar for user: ${userEmail}`);
+      return calendarService;
+    } catch (error) {
+      console.error(`[Google Calendar] Failed to get calendar for user ${userEmail}:`, error);
+      throw error;
+    }
+  }
+
   async createEvent(options: {
     summary: string;
     description?: string;
@@ -24,23 +40,25 @@ class GoogleCalendarService {
     endDateTime: Date;
     attendees?: string[];
     sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
     reminders?: {
       useDefault: boolean;
       overrides?: Array<{ method: string; minutes: number }>;
     };
   }) {
     try {
+      const timeZone = options.timeZone || 'America/New_York';
       const event = {
         summary: options.summary,
         description: options.description,
         location: options.location,
         start: {
           dateTime: options.startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: options.endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         attendees: options.attendees?.map(email => ({ email })),
         reminders: options.reminders || {
@@ -237,6 +255,7 @@ class GoogleCalendarService {
     summary?: string;
     startDateTime?: Date;
     durationMinutes?: number;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
   } = {}) {
     try {
       if (!this.calendar) {
@@ -245,16 +264,17 @@ class GoogleCalendarService {
 
       const startDateTime = options.startDateTime || new Date();
       const endDateTime = new Date(startDateTime.getTime() + (options.durationMinutes || 60) * 60000);
+      const timeZone = options.timeZone || 'America/New_York';
 
       const event = {
         summary: options.summary || 'Video Interview',
         start: {
           dateTime: startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         conferenceData: {
           createRequest: {
@@ -299,23 +319,25 @@ class GoogleCalendarService {
     endDateTime: Date;
     attendees?: string[];
     sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
   }) {
     try {
       if (!this.calendar) {
         await this.initialize();
       }
 
+      const timeZone = options.timeZone || 'America/New_York';
       const event = {
         summary: options.summary,
         description: options.description,
         location: options.location,
         start: {
           dateTime: options.startDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         end: {
           dateTime: options.endDateTime.toISOString(),
-          timeZone: 'America/New_York'
+          timeZone: timeZone
         },
         attendees: options.attendees?.map(email => ({ email })),
         conferenceData: {
@@ -349,6 +371,130 @@ class GoogleCalendarService {
       };
     } catch (error) {
       console.error('[Google Calendar] Error creating event with Meet:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create an event in a specific user's calendar (with impersonation)
+   * The event will appear in the user's calendar and attendees will be invited
+   */
+  async createEventForUser(userEmail: string, options: {
+    summary: string;
+    description?: string;
+    location?: string;
+    startDateTime: Date;
+    endDateTime: Date;
+    attendees?: string[];
+    sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
+    reminders?: {
+      useDefault: boolean;
+      overrides?: Array<{ method: string; minutes: number }>;
+    };
+  }) {
+    try {
+      const calendar = await this.getCalendarForUser(userEmail);
+
+      const timeZone = options.timeZone || 'America/New_York';
+      const event = {
+        summary: options.summary,
+        description: options.description,
+        location: options.location,
+        start: {
+          dateTime: options.startDateTime.toISOString(),
+          timeZone: timeZone
+        },
+        end: {
+          dateTime: options.endDateTime.toISOString(),
+          timeZone: timeZone
+        },
+        attendees: options.attendees?.map(email => ({ email })),
+        reminders: options.reminders || {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 24 * 60 },
+            { method: 'popup', minutes: 30 }
+          ]
+        }
+      };
+
+      const response = await calendar.events.insert({
+        calendarId: 'primary', // Primary calendar of the impersonated user
+        resource: event,
+        sendNotifications: options.sendNotifications ?? true
+      });
+
+      console.log(`[Google Calendar] Event created in ${userEmail}'s calendar:`, response.data.id);
+      return response.data;
+    } catch (error) {
+      console.error(`[Google Calendar] Error creating event for user ${userEmail}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create an event with Google Meet in a specific user's calendar (with impersonation)
+   * The event will appear in the user's calendar with a Meet link and attendees will be invited
+   */
+  async createEventWithMeetForUser(userEmail: string, options: {
+    summary: string;
+    description?: string;
+    location?: string;
+    startDateTime: Date;
+    endDateTime: Date;
+    attendees?: string[];
+    sendNotifications?: boolean;
+    timeZone?: string; // Optional timezone, defaults to America/New_York
+  }) {
+    try {
+      const calendar = await this.getCalendarForUser(userEmail);
+
+      const timeZone = options.timeZone || 'America/New_York';
+      const event = {
+        summary: options.summary,
+        description: options.description,
+        location: options.location,
+        start: {
+          dateTime: options.startDateTime.toISOString(),
+          timeZone: timeZone
+        },
+        end: {
+          dateTime: options.endDateTime.toISOString(),
+          timeZone: timeZone
+        },
+        attendees: options.attendees?.map(email => ({ email })),
+        conferenceData: {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+            conferenceSolutionKey: {
+              type: 'hangoutsMeet'
+            }
+          }
+        },
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 60 },
+            { method: 'popup', minutes: 15 }
+          ]
+        }
+      };
+
+      const response = await calendar.events.insert({
+        calendarId: 'primary', // Primary calendar of the impersonated user
+        resource: event,
+        sendNotifications: options.sendNotifications ?? true,
+        conferenceDataVersion: 1
+      });
+
+      console.log(`[Google Calendar] Event with Meet created in ${userEmail}'s calendar:`, response.data.id);
+      return {
+        ...response.data,
+        meetLink: response.data.hangoutLink || response.data.conferenceData?.entryPoints?.[0]?.uri
+      };
+    } catch (error) {
+      console.error(`[Google Calendar] Error creating event with Meet for user ${userEmail}:`, error);
       throw error;
     }
   }

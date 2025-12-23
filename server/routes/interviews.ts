@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { storage } from '../storage';
 import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewReminderSchema } from '@shared/schema';
 import { getConflictDetector } from '../services/calendar-conflict-detector';
+import { timezoneService } from '../services/timezone-service';
 
 const router = Router();
 
@@ -241,24 +242,27 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
       });
     }
 
-    // Create Google Calendar event using service account
+    // Create Google Calendar event in the interviewer's calendar using impersonation
     let googleEventId: string | undefined;
     try {
       // Import and initialize the service account-based calendar service
       const GoogleCalendarService = (await import('../services/google-calendar-service')).default;
       const calendarService = new GoogleCalendarService();
-      
+
       // Initialize with service account
       await calendarService.initialize();
-      
+
       // Get candidate and interviewer info for attendees
       const candidateDetails = await storage.getCandidateById(data.candidateId);
       const interviewerDetails = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
-      
-      if (candidateDetails && interviewerDetails) {
+
+      if (candidateDetails && interviewerDetails && interviewerDetails.email) {
         const startDateTime = new Date(data.scheduledDate);
         const endDateTime = new Date(startDateTime.getTime() + data.duration * 60 * 1000);
-        
+
+        // Get interviewer's timezone (fallback to 'America/New_York')
+        const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId!);
+
         // Create detailed interview description
         const description = `
 Interview Details:
@@ -278,8 +282,8 @@ ${data.notes ? `Notes:\n${data.notes}` : ''}
 
 Please use the HR system to record interview feedback.
         `.trim();
-        
-        // Prepare attendee list
+
+        // Prepare attendee list (both candidate and interviewer)
         const attendees: string[] = [];
         if (candidateDetails.email) attendees.push(candidateDetails.email);
         if (interviewerDetails.email) attendees.push(interviewerDetails.email);
@@ -287,16 +291,20 @@ Please use the HR system to record interview feedback.
         let calendarEvent: any;
         let autoMeetLink: string | undefined;
 
-        // For VIDEO interviews, auto-generate Google Meet link
+        // For VIDEO interviews, auto-generate Google Meet link in the interviewer's calendar
         if (data.type === 'VIDEO') {
-          calendarEvent = await calendarService.createEventWithMeet({
-            summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
-            description,
-            startDateTime,
-            endDateTime,
-            attendees,
-            sendNotifications: true
-          });
+          calendarEvent = await calendarService.createEventWithMeetForUser(
+            interviewerDetails.email, // Create in the interviewer's calendar
+            {
+              summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+              description,
+              startDateTime,
+              endDateTime,
+              attendees,
+              sendNotifications: true,
+              timeZone: interviewerTimezone
+            }
+          );
 
           // Extract the auto-generated Meet link
           autoMeetLink = calendarEvent.meetLink || calendarEvent.hangoutLink;
@@ -304,28 +312,32 @@ Please use the HR system to record interview feedback.
             console.log('[INTERVIEW] Auto-generated Google Meet link:', autoMeetLink);
           }
         } else {
-          // For PHONE and IN_PERSON, create regular event without Meet
-          calendarEvent = await calendarService.createEvent({
-            summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
-            description,
-            location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
-            startDateTime,
-            endDateTime,
-            attendees,
-            sendNotifications: true,
-            reminders: {
-              useDefault: false,
-              overrides: [
-                { method: 'email', minutes: 24 * 60 }, // 1 day before
-                { method: 'email', minutes: 60 }, // 1 hour before
-                { method: 'popup', minutes: 15 } // 15 minutes before
-              ]
+          // For PHONE and IN_PERSON, create regular event in the interviewer's calendar
+          calendarEvent = await calendarService.createEventForUser(
+            interviewerDetails.email, // Create in the interviewer's calendar
+            {
+              summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+              description,
+              location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
+              startDateTime,
+              endDateTime,
+              attendees,
+              sendNotifications: true,
+              timeZone: interviewerTimezone,
+              reminders: {
+                useDefault: false,
+                overrides: [
+                  { method: 'email', minutes: 24 * 60 }, // 1 day before
+                  { method: 'email', minutes: 60 }, // 1 hour before
+                  { method: 'popup', minutes: 15 } // 15 minutes before
+                ]
+              }
             }
-          });
+          );
         }
 
         googleEventId = calendarEvent.id;
-        console.log('[INTERVIEW] Google Calendar event created successfully:', googleEventId);
+        console.log('[INTERVIEW] Google Calendar event created in interviewer\'s calendar:', googleEventId);
 
         // Update interview with calendar event ID and auto-generated Meet link (for VIDEO)
         if (googleEventId) {
@@ -336,6 +348,8 @@ Please use the HR system to record interview feedback.
           }
           await storage.updateInterview(interview.id, updateData);
         }
+      } else if (!interviewerDetails || !interviewerDetails.email) {
+        console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available');
       }
     } catch (calendarError: any) {
       console.error('[INTERVIEW] Failed to create Google Calendar event:', calendarError);
@@ -344,7 +358,17 @@ Please use the HR system to record interview feedback.
     }
 
     // Send immediate confirmation emails (from the logged-in user's email)
-    await sendInterviewScheduledEmails(interview, (req as any).user?.email);
+    const emailResult = await sendInterviewScheduledEmails(interview, (req as any).user?.email);
+
+    // Log email sending results
+    if (!emailResult.success) {
+      console.error('[INTERVIEW SCHEDULED] ⚠️ Email notification failures:', {
+        interviewId: interview.id,
+        errors: emailResult.errors,
+      });
+      // Store warning for response
+      res.locals.emailWarning = `Interview scheduled but email notifications failed: ${emailResult.errors.join(', ')}`;
+    }
 
     // Update candidate status to INTERVIEW
     await storage.updateCandidate(data.candidateId, {
@@ -356,10 +380,26 @@ Please use the HR system to record interview feedback.
       candidate: data.candidateId,
       interviewer: data.interviewerId,
       scheduledDate: data.scheduledDate,
-      remindersEnabled: data.sendReminders
+      remindersEnabled: data.sendReminders,
+      emailsSuccessful: emailResult.success,
     });
 
-    res.json(interview);
+    // Build response with warnings if any
+    const response: any = { ...interview };
+    const warnings: string[] = [];
+
+    if (res.locals.calendarWarning) {
+      warnings.push(res.locals.calendarWarning);
+    }
+    if (res.locals.emailWarning) {
+      warnings.push(res.locals.emailWarning);
+    }
+
+    if (warnings.length > 0) {
+      response.warnings = warnings;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('[INTERVIEW SCHEDULE ERROR]', error);
     
@@ -557,14 +597,20 @@ router.patch('/:id', requireAuth, async (req, res) => {
             const startDateTime = new Date(updatedInterview.scheduledDate);
             const endDateTime = new Date(startDateTime.getTime() + updatedInterview.duration * 60 * 1000);
 
+            // Get interviewer's timezone for the updated event
+            let interviewerTimezone = 'America/New_York';
+            if (updatedInterview.interviewerId) {
+              interviewerTimezone = await timezoneService.getUserTimezone(updatedInterview.interviewerId);
+            }
+
             await calendarService.updateEvent(existingInterview.googleEventId, {
               start: {
                 dateTime: startDateTime.toISOString(),
-                timeZone: 'America/New_York'
+                timeZone: interviewerTimezone
               },
               end: {
                 dateTime: endDateTime.toISOString(),
-                timeZone: 'America/New_York'
+                timeZone: interviewerTimezone
               },
               location: updatedInterview.location || updatedInterview.meetingLink,
             });
@@ -630,33 +676,81 @@ router.get('/candidate/:candidateId', requireAuth, async (req, res) => {
 });
 
 // Send interview scheduled emails
-async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: string) {
+async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: string): Promise<{ success: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  let candidateEmailSent = false;
+  let interviewerEmailSent = false;
+
   try {
     // Get candidate and interviewer details
     const candidate = await storage.getCandidateById(interview.candidateId);
-    const interviewer = await storage.getUserById(interview.interviewerId);
+    const interviewer = interview.interviewerId ? await storage.getUserById(interview.interviewerId) : null;
 
-    if (!candidate || !interviewer) {
-      console.error('Missing candidate or interviewer data for email');
-      return;
+    if (!candidate) {
+      const error = 'Cannot send emails: Candidate not found';
+      console.error(`[INTERVIEW EMAIL] ❌ ${error}`, {
+        candidateId: interview.candidateId,
+        interviewId: interview.id,
+      });
+      errors.push(error);
+      return { success: false, errors };
     }
 
-    const interviewDate = new Date(interview.scheduledDate).toLocaleDateString('en-US', {
+    if (!interviewer && interview.interviewerId) {
+      const error = 'Cannot send interviewer email: Interviewer not found';
+      console.error(`[INTERVIEW EMAIL] ⚠️ ${error}`, {
+        interviewerId: interview.interviewerId,
+        interviewId: interview.id,
+      });
+      errors.push(error);
+      // Don't return here - still try to send candidate email
+    }
+
+    // Get timezones for candidate and interviewer
+    const candidateTimezone = candidate.email ? await timezoneService.getUserTimezoneByEmail(candidate.email) : 'America/New_York';
+    const interviewerTimezone = interviewer?.email ? await timezoneService.getUserTimezoneByEmail(interviewer.email) : 'America/New_York';
+
+    // Format date and time for candidate (in their timezone)
+    const candidateInterviewDate = new Date(interview.scheduledDate).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: candidateTimezone,
     });
 
-    const interviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
+    const candidateInterviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: candidateTimezone,
+      timeZoneName: 'short',
+    });
+
+    // Format date and time for interviewer (in their timezone)
+    const interviewerInterviewDate = new Date(interview.scheduledDate).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: interviewerTimezone,
+    });
+
+    const interviewerInterviewTime = new Date(interview.scheduledDate).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: interviewerTimezone,
+      timeZoneName: 'short',
     });
 
     // Import email service
     const { emailService } = await import('../email-service');
 
-    // Email HTML to candidate
+    // Build interviewer info (could be custom interviewer)
+    const interviewerName = interviewer
+      ? `${interviewer.firstName} ${interviewer.lastName}`
+      : interview.customInterviewerName || 'TBD';
+
+    // Email HTML to candidate (with their timezone)
     const candidateHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Interview Scheduled - ROOF-ER</h2>
@@ -664,13 +758,13 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
         <p>Your interview has been scheduled for the <strong>${candidate.position}</strong> position at ROOF-ER.</p>
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
-          <p><strong>Date:</strong> ${interviewDate}</p>
-          <p><strong>Time:</strong> ${interviewTime}</p>
+          <p><strong>Date:</strong> ${candidateInterviewDate}</p>
+          <p><strong>Time:</strong> ${candidateInterviewTime}</p>
           <p><strong>Duration:</strong> ${interview.duration} minutes</p>
           <p><strong>Type:</strong> ${interview.type}</p>
           ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
           ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
-          <p><strong>Interviewer:</strong> ${interviewer.firstName} ${interviewer.lastName}</p>
+          <p><strong>Interviewer:</strong> ${interviewerName}</p>
           ${interview.notes ? `<p><strong>Notes:</strong> ${interview.notes}</p>` : ''}
         </div>
         <p>If you need to reschedule or have any questions, please contact us immediately.</p>
@@ -680,55 +774,107 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
     `;
 
     // Send email to candidate (from the logged-in user's email)
-    await emailService.sendEmail({
-      to: candidate.email,
-      subject: `Interview Scheduled - ${candidate.position} at ROOF-ER`,
-      html: candidateHtml,
-      candidateId: candidate.id,
-      interviewId: interview.id,
-      fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
-    });
+    console.log(`[INTERVIEW EMAIL] Sending confirmation email to candidate: ${candidate.email}`);
+    try {
+      candidateEmailSent = await emailService.sendEmail({
+        to: candidate.email,
+        subject: `Interview Scheduled - ${candidate.position} at ROOF-ER`,
+        html: candidateHtml,
+        candidateId: candidate.id,
+        interviewId: interview.id,
+        fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
+      });
 
-    // Email HTML to interviewer
-    const interviewerHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563eb;">Interview Scheduled</h2>
-        <p>Hello ${interviewer.firstName},</p>
-        <p>You have an interview scheduled with <strong>${candidate.firstName} ${candidate.lastName}</strong> for the <strong>${candidate.position}</strong> position.</p>
-        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
-          <p><strong>Date:</strong> ${interviewDate}</p>
-          <p><strong>Time:</strong> ${interviewTime}</p>
-          <p><strong>Duration:</strong> ${interview.duration} minutes</p>
-          <p><strong>Type:</strong> ${interview.type}</p>
-          ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
-          ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
+      if (candidateEmailSent) {
+        console.log(`[INTERVIEW EMAIL] ✅ Candidate email sent successfully to ${candidate.email}`);
+      } else {
+        const error = `Failed to send email to candidate: ${candidate.email}`;
+        console.error(`[INTERVIEW EMAIL] ❌ ${error}`);
+        errors.push(error);
+      }
+    } catch (candidateEmailError: any) {
+      const error = `Error sending email to candidate: ${candidateEmailError?.message || 'Unknown error'}`;
+      console.error(`[INTERVIEW EMAIL] ❌ ${error}`, candidateEmailError);
+      errors.push(error);
+    }
+
+    // Send email to interviewer (only if interviewer exists in system) (with their timezone)
+    if (interviewer && interviewer.email) {
+      const interviewerHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2563eb;">Interview Scheduled</h2>
+          <p>Hello ${interviewer.firstName},</p>
+          <p>You have an interview scheduled with <strong>${candidate.firstName} ${candidate.lastName}</strong> for the <strong>${candidate.position}</strong> position.</p>
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
+            <p><strong>Date:</strong> ${interviewerInterviewDate}</p>
+            <p><strong>Time:</strong> ${interviewerInterviewTime}</p>
+            <p><strong>Duration:</strong> ${interview.duration} minutes</p>
+            <p><strong>Type:</strong> ${interview.type}</p>
+            ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
+            ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
+          </div>
+          <div style="background-color: #e0f2fe; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #0369a1;">Candidate Information</h3>
+            <p><strong>Name:</strong> ${candidate.firstName} ${candidate.lastName}</p>
+            <p><strong>Email:</strong> ${candidate.email}</p>
+            <p><strong>Phone:</strong> ${candidate.phone}</p>
+          </div>
+          ${interview.notes ? `<p><strong>Interview Notes:</strong> ${interview.notes}</p>` : ''}
+          <p>Please review the candidate's profile before the interview.</p>
+          <p>Best regards,<br>ROOF-ER HR System</p>
         </div>
-        <div style="background-color: #e0f2fe; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #0369a1;">Candidate Information</h3>
-          <p><strong>Name:</strong> ${candidate.firstName} ${candidate.lastName}</p>
-          <p><strong>Email:</strong> ${candidate.email}</p>
-          <p><strong>Phone:</strong> ${candidate.phone}</p>
-        </div>
-        ${interview.notes ? `<p><strong>Interview Notes:</strong> ${interview.notes}</p>` : ''}
-        <p>Please review the candidate's profile before the interview.</p>
-        <p>Best regards,<br>ROOF-ER HR System</p>
-      </div>
-    `;
+      `;
 
-    // Send email to interviewer (from the logged-in user's email)
-    await emailService.sendEmail({
-      to: interviewer.email,
-      subject: `Interview Scheduled - ${candidate.firstName} ${candidate.lastName}`,
-      html: interviewerHtml,
+      console.log(`[INTERVIEW EMAIL] Sending confirmation email to interviewer: ${interviewer.email}`);
+      try {
+        interviewerEmailSent = await emailService.sendEmail({
+          to: interviewer.email,
+          subject: `Interview Scheduled - ${candidate.firstName} ${candidate.lastName}`,
+          html: interviewerHtml,
+          interviewId: interview.id,
+          fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
+        });
+
+        if (interviewerEmailSent) {
+          console.log(`[INTERVIEW EMAIL] ✅ Interviewer email sent successfully to ${interviewer.email}`);
+        } else {
+          const error = `Failed to send email to interviewer: ${interviewer.email}`;
+          console.error(`[INTERVIEW EMAIL] ❌ ${error}`);
+          errors.push(error);
+        }
+      } catch (interviewerEmailError: any) {
+        const error = `Error sending email to interviewer: ${interviewerEmailError?.message || 'Unknown error'}`;
+        console.error(`[INTERVIEW EMAIL] ❌ ${error}`, interviewerEmailError);
+        errors.push(error);
+      }
+    } else {
+      console.log('[INTERVIEW EMAIL] ℹ️ Skipping interviewer email (custom interviewer or no email)');
+    }
+
+    // Summary logging
+    if (candidateEmailSent || interviewerEmailSent) {
+      console.log('[INTERVIEW EMAIL] ✅ Email summary:', {
+        interviewId: interview.id,
+        candidateEmailSent,
+        interviewerEmailSent,
+        totalErrors: errors.length,
+      });
+    }
+
+    return {
+      success: (candidateEmailSent || interviewerEmailSent) && errors.length === 0,
+      errors,
+    };
+
+  } catch (error: any) {
+    const errorMsg = `Unexpected error sending interview emails: ${error?.message || 'Unknown error'}`;
+    console.error(`[INTERVIEW EMAIL] ❌ ${errorMsg}`, {
       interviewId: interview.id,
-      fromUserEmail: fromUserEmail || process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com',
+      stack: error?.stack,
     });
-
-    console.log('[INTERVIEW] Confirmation emails sent to candidate and interviewer');
-
-  } catch (error) {
-    console.error('Failed to send interview scheduled emails:', error);
+    errors.push(errorMsg);
+    return { success: false, errors };
   }
 }
 
