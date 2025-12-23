@@ -155,7 +155,26 @@ router.use(async (req: any, res, next) => {
 
 // Health check endpoint
 router.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.1.0-screener-fix' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.1.1-debug' });
+});
+
+// Debug endpoint to test user lookup
+router.get('/api/debug/user-exists/:email', async (req, res) => {
+  try {
+    const user = await storage.getUserByEmail(req.params.email);
+    if (!user) {
+      return res.json({ exists: false });
+    }
+    return res.json({
+      exists: true,
+      hasPasswordHash: !!user.passwordHash,
+      passwordHashLength: user.passwordHash?.length || 0,
+      id: user.id,
+      role: user.role
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
 });
 
 // ===== PUBLIC ROUTES (No Authentication Required) =====
