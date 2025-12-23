@@ -155,74 +155,7 @@ router.use(async (req: any, res, next) => {
 
 // Health check endpoint
 router.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.1.2-test-login' });
-});
-
-// Debug endpoint to test user lookup
-router.get('/api/debug/user-exists/:email', async (req, res) => {
-  try {
-    const user = await storage.getUserByEmail(req.params.email);
-    if (!user) {
-      return res.json({ exists: false });
-    }
-    return res.json({
-      exists: true,
-      hasPasswordHash: !!user.passwordHash,
-      passwordHashLength: user.passwordHash?.length || 0,
-      id: user.id,
-      role: user.role
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Unknown error' });
-  }
-});
-
-// Debug endpoint to test full login flow
-router.post('/api/debug/test-login', async (req, res) => {
-  const steps: string[] = [];
-  try {
-    steps.push('1. Got request');
-    steps.push(`2. Body: ${JSON.stringify(req.body)}`);
-
-    const { email, password } = req.body || {};
-    steps.push(`3. Email: ${email}, Password: ${password ? '***' : 'missing'}`);
-
-    if (!email || !password) {
-      return res.json({ success: false, steps, error: 'Missing email or password' });
-    }
-
-    steps.push('4. Looking up user');
-    const user = await storage.getUserByEmail(email);
-    steps.push(`5. User found: ${!!user}`);
-
-    if (!user) {
-      return res.json({ success: false, steps, error: 'User not found' });
-    }
-
-    steps.push(`6. Password hash exists: ${!!user.passwordHash}`);
-
-    steps.push('7. Comparing password');
-    const isValid = await bcrypt.compare(password, user.passwordHash);
-    steps.push(`8. Password valid: ${isValid}`);
-
-    if (!isValid) {
-      return res.json({ success: false, steps, error: 'Invalid password' });
-    }
-
-    steps.push('9. Creating session');
-    const token = generateSessionToken();
-    await storage.createSession({
-      userId: user.id,
-      token,
-      expiresAt: getSessionExpiry(),
-    });
-    steps.push('10. Session created');
-
-    return res.json({ success: true, steps, userId: user.id });
-  } catch (err: any) {
-    steps.push(`ERROR: ${err?.message || err}`);
-    return res.json({ success: false, steps, error: err?.message || 'Unknown error' });
-  }
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.2.0' });
 });
 
 // ===== PUBLIC ROUTES (No Authentication Required) =====
@@ -455,42 +388,18 @@ router.post('/api/auth/register', async (req, res) => {
 
 router.post('/api/auth/login', async (req, res) => {
   try {
-    // Debug: log what's being received
-    console.log('[Login] Step 1: Received request');
-    console.log('[Login] Request body:', JSON.stringify(req.body));
-
-    let data;
-    try {
-      data = loginSchema.parse(req.body);
-      console.log('[Login] Step 2: Schema validation passed');
-    } catch (validationError: any) {
-      console.error('[Login] Schema validation failed:', validationError?.issues);
-      return res.status(400).json({
-        error: 'Invalid request data',
-        details: validationError?.issues?.map((i: any) => ({ field: i.path.join('.'), message: i.message }))
-      });
-    }
+    const data = loginSchema.parse(req.body);
 
     // Validate email domain - only @theroofdocs.com allowed
     const ALLOWED_DOMAIN = 'theroofdocs.com';
     const emailDomain = data.email.split('@')[1]?.toLowerCase();
     if (emailDomain !== ALLOWED_DOMAIN) {
-      console.log('[Login] Rejected: Invalid email domain');
       return res.status(403).json({
         error: 'Access restricted to @theroofdocs.com email addresses only'
       });
     }
-    console.log('[Login] Step 3: Email domain validated');
 
-    let user;
-    try {
-      user = await storage.getUserByEmail(data.email);
-      console.log('[Login] Step 4: User lookup completed, found:', !!user);
-    } catch (dbError: any) {
-      console.error('[Login] Database error during user lookup:', dbError?.message || dbError);
-      return res.status(500).json({ error: 'Database error. Please try again.' });
-    }
-
+    const user = await storage.getUserByEmail(data.email);
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
@@ -501,37 +410,21 @@ router.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Account error. Please contact support to reset your password.' });
     }
 
-    let isPasswordValid;
-    try {
-      isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-      console.log('[Login] Step 5: Password validation completed');
-    } catch (bcryptError: any) {
-      console.error('[Login] Bcrypt error for user:', user.email, bcryptError?.message || bcryptError);
-      return res.status(500).json({ error: 'Authentication error. Please try again.' });
-    }
-
+    const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
     if (!isPasswordValid) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    let token;
-    try {
-      token = generateSessionToken();
-      await storage.createSession({
-        userId: user.id,
-        token,
-        expiresAt: getSessionExpiry(),
-      });
-      console.log('[Login] Step 6: Session created');
-    } catch (sessionError: any) {
-      console.error('[Login] Session creation error:', sessionError?.message || sessionError);
-      return res.status(500).json({ error: 'Session error. Please try again.' });
-    }
+    const token = generateSessionToken();
+    await storage.createSession({
+      userId: user.id,
+      token,
+      expiresAt: getSessionExpiry(),
+    });
 
     // Also set the session for cookie-based auth
     (req as any).session.userId = user.id;
 
-    console.log('[Login] Step 7: Login successful for', user.email);
     res.json({
       user: {
         id: user.id,
@@ -547,8 +440,10 @@ router.post('/api/auth/login', async (req, res) => {
       token,
     });
   } catch (error: any) {
-    console.error('[Login] Unexpected error:', error?.message || error);
-    console.error('[Login] Error stack:', error?.stack);
+    console.error('[Login] Error:', error?.message || error);
+    if (error?.name === 'ZodError' || error?.issues) {
+      return res.status(400).json({ error: 'Invalid request data' });
+    }
     res.status(500).json({ error: 'Login failed. Please try again.' });
   }
 });
