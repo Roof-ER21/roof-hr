@@ -149,13 +149,17 @@ export function DraggableCandidateCard({
         <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
           {candidate.firstName} {candidate.lastName}
         </span>
-        {/* Sourcer color dot indicator */}
-        {candidate.sourcer && (
+        {/* Sourcer color dot or unassigned indicator */}
+        {candidate.sourcer ? (
           <div
             className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white shadow-sm"
             style={{ backgroundColor: candidate.sourcer.screenerColor }}
             title={`Assigned to: ${candidate.sourcer.firstName} ${candidate.sourcer.lastName}`}
           />
+        ) : (
+          <Badge variant="outline" className="text-[10px] px-1 py-0 text-gray-400 border-gray-300 dark:text-gray-500 dark:border-gray-600">
+            Unassigned
+          </Badge>
         )}
         {/* Show dead type badge if applicable */}
         {candidate.status === 'DEAD_BY_US' && (

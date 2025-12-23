@@ -309,6 +309,11 @@ function ResumeUploaderContent() {
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [sourceFolderId, setSourceFolderId] = useState('');
 
+  // Sourcer assignment dialog state
+  const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+  const [pendingCandidate, setPendingCandidate] = useState<any>(null);
+  const [selectedSourcer, setSelectedSourcer] = useState<string>('');
+
   // Query for recent uploads
   const { data: recentData, isLoading: isLoadingRecent, refetch: refetchRecent } = useQuery({
     queryKey: ['/api/resumes/recent', activeCategory],
@@ -321,6 +326,20 @@ function ResumeUploaderContent() {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch recent resumes');
+      return res.json();
+    }
+  });
+
+  // Fetch available sourcers for assignment dialog
+  const { data: sourcers } = useQuery<{id: string; firstName: string; lastName: string; screenerColor?: string; activeAssignments?: number}[]>({
+    queryKey: ['/api/sourcers/available'],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/sourcers/available', {
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
+      });
+      if (!res.ok) return [];
       return res.json();
     }
   });
@@ -349,12 +368,9 @@ function ResumeUploaderContent() {
       return response.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: 'Resume Uploaded',
-        description: `Created candidate: ${data.candidate.firstName} ${data.candidate.lastName}`,
-      });
-      refetchRecent();
-      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      // Show sourcer assignment dialog instead of just toast
+      setPendingCandidate(data.candidate);
+      setShowAssignmentDialog(true);
     },
     onError: (error: Error) => {
       toast({
@@ -423,6 +439,54 @@ function ResumeUploaderContent() {
   });
 
   const activeCategoryData = RESUME_CATEGORIES.find(c => c.id === activeCategory)!;
+
+  // Handle sourcer assignment completion
+  const handleAssignmentComplete = async () => {
+    if (selectedSourcer && pendingCandidate) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`/api/candidates/${pendingCandidate.id}/assign-sourcer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({ hrMemberId: selectedSourcer }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Assignment failed');
+        }
+
+        const sourcerName = sourcers?.find(s => s.id === selectedSourcer);
+        toast({
+          title: 'Candidate Created & Assigned',
+          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}`,
+        });
+      } catch (error: any) {
+        console.error('[Assignment] Failed:', error);
+        toast({
+          title: 'Assignment Failed',
+          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} created but assignment failed: ${error.message}`,
+          variant: 'destructive',
+        });
+      }
+    } else {
+      toast({
+        title: 'Resume Uploaded',
+        description: `Created candidate: ${pendingCandidate?.firstName} ${pendingCandidate?.lastName}`,
+      });
+    }
+    // Clean up
+    setShowAssignmentDialog(false);
+    setPendingCandidate(null);
+    setSelectedSourcer('');
+    refetchRecent();
+    queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/sourcers/available'] });
+  };
 
   return (
     <div className="space-y-6">
@@ -713,6 +777,64 @@ function ResumeUploaderContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sourcer Assignment Dialog */}
+      <Dialog open={showAssignmentDialog} onOpenChange={setShowAssignmentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Sourcer</DialogTitle>
+            <DialogDescription>
+              Candidate <strong>{pendingCandidate?.firstName} {pendingCandidate?.lastName}</strong> created successfully.
+              Would you like to assign a sourcer?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Select Sourcer (optional)</Label>
+            <Select value={selectedSourcer} onValueChange={setSelectedSourcer}>
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder="Select a sourcer..." />
+              </SelectTrigger>
+              <SelectContent>
+                {sourcers?.map((sourcer) => (
+                  <SelectItem key={sourcer.id} value={sourcer.id}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                      />
+                      <span>{sourcer.firstName} {sourcer.lastName}</span>
+                      <span className="text-muted-foreground text-xs">
+                        ({sourcer.activeAssignments || 0} active)
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAssignmentDialog(false);
+                setPendingCandidate(null);
+                setSelectedSourcer('');
+                toast({
+                  title: 'Resume Uploaded',
+                  description: `Created candidate: ${pendingCandidate?.firstName} ${pendingCandidate?.lastName}`,
+                });
+                refetchRecent();
+                queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+              }}
+            >
+              Skip
+            </Button>
+            <Button onClick={handleAssignmentComplete}>
+              {selectedSourcer ? 'Assign & Continue' : 'Continue'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
