@@ -155,7 +155,7 @@ router.use(async (req: any, res, next) => {
 
 // Health check endpoint
 router.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.1.1-debug' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.1.2-test-login' });
 });
 
 // Debug endpoint to test user lookup
@@ -174,6 +174,54 @@ router.get('/api/debug/user-exists/:email', async (req, res) => {
     });
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Unknown error' });
+  }
+});
+
+// Debug endpoint to test full login flow
+router.post('/api/debug/test-login', async (req, res) => {
+  const steps: string[] = [];
+  try {
+    steps.push('1. Got request');
+    steps.push(`2. Body: ${JSON.stringify(req.body)}`);
+
+    const { email, password } = req.body || {};
+    steps.push(`3. Email: ${email}, Password: ${password ? '***' : 'missing'}`);
+
+    if (!email || !password) {
+      return res.json({ success: false, steps, error: 'Missing email or password' });
+    }
+
+    steps.push('4. Looking up user');
+    const user = await storage.getUserByEmail(email);
+    steps.push(`5. User found: ${!!user}`);
+
+    if (!user) {
+      return res.json({ success: false, steps, error: 'User not found' });
+    }
+
+    steps.push(`6. Password hash exists: ${!!user.passwordHash}`);
+
+    steps.push('7. Comparing password');
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    steps.push(`8. Password valid: ${isValid}`);
+
+    if (!isValid) {
+      return res.json({ success: false, steps, error: 'Invalid password' });
+    }
+
+    steps.push('9. Creating session');
+    const token = generateSessionToken();
+    await storage.createSession({
+      userId: user.id,
+      token,
+      expiresAt: getSessionExpiry(),
+    });
+    steps.push('10. Session created');
+
+    return res.json({ success: true, steps, userId: user.id });
+  } catch (err: any) {
+    steps.push(`ERROR: ${err?.message || err}`);
+    return res.json({ success: false, steps, error: err?.message || 'Unknown error' });
   }
 });
 
