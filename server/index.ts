@@ -8,7 +8,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 import { storage } from "./storage";
-import { testConnection } from "./db";
+import { testConnection, db } from "./db";
+import { sql } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { config, validateConfig } from './config';
 import { rateLimit, sanitizeInput, configureCORS, securityLogger, clearRateLimit } from './middleware/security';
@@ -47,6 +48,36 @@ async function createAdminUser() {
     }
   } catch (error) {
     logger.error('Failed to create admin user:', error);
+  }
+}
+
+// Run database migrations at startup
+async function runMigrations() {
+  try {
+    logger.info('[Migration] Running database migrations...');
+
+    // Add timezone column to users table if it doesn't exist
+    await db.execute(sql`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/New_York'
+    `);
+    logger.info('[Migration] ✅ Timezone column ready');
+
+    // Create index for timezone lookups (if not exists)
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_users_timezone ON users(timezone)
+    `);
+    logger.info('[Migration] ✅ Timezone index ready');
+
+    logger.info('[Migration] All migrations completed successfully');
+  } catch (error: any) {
+    // If the column already exists, that's fine
+    if (error?.code === '42701') { // duplicate_column
+      logger.info('[Migration] Timezone column already exists, skipping');
+    } else {
+      logger.error('[Migration] Migration failed:', error);
+      // Don't exit - let the server start anyway, migrations might not be critical
+    }
   }
 }
 
@@ -161,6 +192,12 @@ app.use((req, res, next) => {
   }
   logger.info('Database connection established successfully');
 
+  // Run database migrations
+  await runMigrations();
+
+  // Create admin user if not exists
+  await createAdminUser();
+
   // Create server instance
   const server = createServer(app);
   
@@ -246,10 +283,7 @@ app.use((req, res, next) => {
       const { clearRateLimit } = await import('./middleware/security');
       clearRateLimit();
       logger.info('Rate limits cleared on server startup');
-      
-      // Production initialization - create admin user if not exists
-      await createAdminUser();
-      
+
       // Initialize HR agents in production
       if (process.env.NODE_ENV === 'production' && config.agents.enabled) {
         const { agentManager } = await import('./agents/agent-manager');
