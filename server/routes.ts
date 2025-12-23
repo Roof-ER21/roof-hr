@@ -155,7 +155,7 @@ router.use(async (req: any, res, next) => {
 
 // Health check endpoint
 router.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'v2.1.0-screener-fix' });
 });
 
 // ===== PUBLIC ROUTES (No Authentication Required) =====
@@ -428,12 +428,18 @@ router.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
+    // Check for corrupted user record (missing password hash)
+    if (!user.passwordHash) {
+      console.error('[Login] User has no password hash:', user.email);
+      return res.status(400).json({ error: 'Account error. Please contact support to reset your password.' });
+    }
+
     let isPasswordValid;
     try {
       isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
       console.log('[Login] Step 5: Password validation completed');
     } catch (bcryptError: any) {
-      console.error('[Login] Bcrypt error:', bcryptError?.message || bcryptError);
+      console.error('[Login] Bcrypt error for user:', user.email, bcryptError?.message || bcryptError);
       return res.status(500).json({ error: 'Authentication error. Please try again.' });
     }
 
