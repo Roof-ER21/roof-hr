@@ -103,9 +103,10 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
     }
 
     // Ensure all required fields are set and calculate totals correctly
-    const vacationDays = parseInt(req.body.vacationDays) || 10;
+    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+    const vacationDays = parseInt(req.body.vacationDays) || 5;
     const sickDays = parseInt(req.body.sickDays) || 5;
-    const personalDays = parseInt(req.body.personalDays) || 3;
+    const personalDays = parseInt(req.body.personalDays) || 2;
 
     const settingsData = {
       department: req.body.department,
@@ -283,10 +284,11 @@ router.get('/api/pto-policies/employee/:employeeId', requireAuth, async (req, re
       const user = await storage.getUserById(req.params.employeeId);
       if (user) {
         const deptSetting = await storage.getDepartmentPtoSettingByDepartment(user.department);
-        const totalDays = deptSetting?.totalDays || 18; // Default 18 days if no department setting
-        const vacationDays = deptSetting?.vacationDays || 10;
+        // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+        const totalDays = deptSetting?.totalDays || 12;
+        const vacationDays = deptSetting?.vacationDays || 5;
         const sickDays = deptSetting?.sickDays || 5;
-        const personalDays = deptSetting?.personalDays || 3;
+        const personalDays = deptSetting?.personalDays || 2;
 
         const newPolicy = await storage.createPtoPolicy({
           employeeId: req.params.employeeId,
@@ -328,11 +330,12 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
     }
 
     // Get department base days
+    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
     const deptSetting = await storage.getDepartmentPtoSettingByDepartment(employee.department);
-    const baseDays = deptSetting?.totalDays || 18;
-    const vacationDays = deptSetting?.vacationDays || 10;
+    const baseDays = deptSetting?.totalDays || 12;
+    const vacationDays = deptSetting?.vacationDays || 5;
     const sickDays = deptSetting?.sickDays || 5;
-    const personalDays = deptSetting?.personalDays || 3;
+    const personalDays = deptSetting?.personalDays || 2;
 
     // Check if policy exists
     const existingPolicy = await storage.getPtoPolicyByEmployeeId(employeeId);

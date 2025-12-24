@@ -146,10 +146,11 @@ function EmployeeDashboard() {
       });
       if (!response.ok) {
         // Return defaults if endpoint doesn't exist yet
+        // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
         return {
-          vacationDays: 10,
+          vacationDays: 5,
           sickDays: 5,
-          personalDays: 3,
+          personalDays: 2,
           usedVacation: 0,
           usedSick: 0,
           usedPersonal: 0,

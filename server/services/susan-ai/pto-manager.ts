@@ -169,7 +169,8 @@ export class SusanPTOManager {
         .where(eq(ptoPolicies.policyLevel, 'COMPANY'))
         .limit(1);
 
-      const totalDays = policy?.totalDays || 20; // Default to 20 if no policy
+      // Default to company standard: 5 vacation + 5 sick + 2 personal = 12 total
+      const totalDays = policy?.totalDays || 12;
       const currentBalance = totalDays - usedDays;
       const newBalance = currentBalance + adjustment;
 

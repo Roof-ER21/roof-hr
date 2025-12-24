@@ -100,18 +100,19 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
         phone: user.phone || null,
         hireDate: user.hireDate
       },
+      // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
       ptoBalance: ptoPolicy ? {
-        vacationDays: ptoPolicy.vacationDays || 10,
+        vacationDays: ptoPolicy.vacationDays || 5,
         sickDays: ptoPolicy.sickDays || 5,
-        personalDays: ptoPolicy.personalDays || 3,
+        personalDays: ptoPolicy.personalDays || 2,
         usedVacation,
         usedSick,
         usedPersonal,
         pendingDays: pendingDaysTotal
       } : {
-        vacationDays: 10,
+        vacationDays: 5,
         sickDays: 5,
-        personalDays: 3,
+        personalDays: 2,
         usedVacation: 0,
         usedSick: 0,
         usedPersonal: 0,
@@ -159,25 +160,26 @@ router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res
     const companyPolicy = await storage.getCompanyPtoPolicy();
 
     // Determine effective PTO allowance (individual > department > company > defaults)
-    let vacationDays = 10;
+    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+    let vacationDays = 5;
     let sickDays = 5;
-    let personalDays = 3;
+    let personalDays = 2;
     let policySource = 'default';
 
     if (individualPolicy) {
-      vacationDays = individualPolicy.vacationDays || 10;
+      vacationDays = individualPolicy.vacationDays || 5;
       sickDays = individualPolicy.sickDays || 5;
-      personalDays = individualPolicy.personalDays || 3;
+      personalDays = individualPolicy.personalDays || 2;
       policySource = 'individual';
     } else if (deptSetting && !deptSetting.inheritFromCompany) {
-      vacationDays = deptSetting.vacationDays || 10;
+      vacationDays = deptSetting.vacationDays || 5;
       sickDays = deptSetting.sickDays || 5;
-      personalDays = deptSetting.personalDays || 3;
+      personalDays = deptSetting.personalDays || 2;
       policySource = 'department';
     } else if (companyPolicy) {
-      vacationDays = companyPolicy.vacationDays || 10;
+      vacationDays = companyPolicy.vacationDays || 5;
       sickDays = companyPolicy.sickDays || 5;
-      personalDays = companyPolicy.personalDays || 3;
+      personalDays = companyPolicy.personalDays || 2;
       policySource = 'company';
     }
 

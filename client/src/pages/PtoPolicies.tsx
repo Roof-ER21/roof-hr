@@ -87,31 +87,33 @@ export default function PtoPolicies() {
     }
   });
 
+  // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
   const departmentForm = useForm<z.infer<typeof departmentFormSchema>>({
     resolver: zodResolver(departmentFormSchema),
     defaultValues: {
       department: '',
-      baseDays: 10,
-      vacationDays: 10,
+      baseDays: 12,
+      vacationDays: 5,
       sickDays: 5,
-      personalDays: 3
+      personalDays: 2
     }
   });
 
+  // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
   const editPolicyForm = useForm<z.infer<typeof individualPolicyEditSchema>>({
     resolver: zodResolver(individualPolicyEditSchema),
     defaultValues: {
-      vacationDays: 10,
+      vacationDays: 5,
       sickDays: 5,
-      personalDays: 3,
+      personalDays: 2,
       notes: ''
     }
   });
 
   const createPolicyMutation = useMutation({
     mutationFn: (data: z.infer<typeof policyFormSchema>) => {
-      // Calculate totalDays based on company policy or default
-      const baseDays = companyPolicy?.vacationDays || 10;
+      // Calculate totalDays based on company policy or default (5 vacation, 5 sick, 2 personal = 12 total)
+      const baseDays = companyPolicy?.vacationDays || 5;
       const totalDays = baseDays + (data.additionalDays || 0);
       
       return apiRequest('/api/pto/individual-policies', {
@@ -188,9 +190,10 @@ export default function PtoPolicies() {
 
   const updateDepartmentSettingMutation = useMutation({
     mutationFn: (data: z.infer<typeof departmentFormSchema>) => {
-      const vacationDays = data.vacationDays || data.baseDays || 10;
+      // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+      const vacationDays = data.vacationDays || data.baseDays || 5;
       const sickDays = data.sickDays || 5;
-      const personalDays = data.personalDays || 3;
+      const personalDays = data.personalDays || 2;
       const totalDays = vacationDays + sickDays + personalDays;
       
       return apiRequest('/api/pto/department-settings', {
@@ -238,28 +241,30 @@ export default function PtoPolicies() {
 
   const handleEditDepartmentSetting = (dept: string) => {
     const deptSetting = (departmentSettings as DepartmentPtoSetting[]).find((s: DepartmentPtoSetting) => s.department === dept);
+    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
     if (deptSetting) {
       departmentForm.setValue('department', dept);
-      departmentForm.setValue('vacationDays', deptSetting.vacationDays || 10);
+      departmentForm.setValue('vacationDays', deptSetting.vacationDays || 5);
       departmentForm.setValue('sickDays', deptSetting.sickDays || 5);
-      departmentForm.setValue('personalDays', deptSetting.personalDays || 3);
-      departmentForm.setValue('baseDays', deptSetting.totalDays || 18);
+      departmentForm.setValue('personalDays', deptSetting.personalDays || 2);
+      departmentForm.setValue('baseDays', deptSetting.totalDays || 12);
     } else {
       // If no setting exists, use company defaults
       departmentForm.setValue('department', dept);
-      departmentForm.setValue('vacationDays', companyPolicy?.vacationDays || 10);
+      departmentForm.setValue('vacationDays', companyPolicy?.vacationDays || 5);
       departmentForm.setValue('sickDays', companyPolicy?.sickDays || 5);
-      departmentForm.setValue('personalDays', companyPolicy?.personalDays || 3);
-      departmentForm.setValue('baseDays', (companyPolicy?.vacationDays || 10) + (companyPolicy?.sickDays || 5) + (companyPolicy?.personalDays || 3));
+      departmentForm.setValue('personalDays', companyPolicy?.personalDays || 2);
+      departmentForm.setValue('baseDays', (companyPolicy?.vacationDays || 5) + (companyPolicy?.sickDays || 5) + (companyPolicy?.personalDays || 2));
     }
     setIsDepartmentDialogOpen(true);
   };
 
   const handleEditPolicy = (policy: PtoPolicy) => {
     setSelectedPolicy(policy);
-    editPolicyForm.setValue('vacationDays', policy.vacationDays || 10);
+    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+    editPolicyForm.setValue('vacationDays', policy.vacationDays || 5);
     editPolicyForm.setValue('sickDays', policy.sickDays || 5);
-    editPolicyForm.setValue('personalDays', policy.personalDays || 3);
+    editPolicyForm.setValue('personalDays', policy.personalDays || 2);
     editPolicyForm.setValue('notes', policy.notes || '');
     setIsEditDialogOpen(true);
   };
