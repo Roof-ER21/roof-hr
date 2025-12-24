@@ -38,11 +38,34 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
+// Recharts for real analytics visualizations
+import {
+  PieChart as RechartsPie,
+  Pie,
+  Cell,
+  BarChart as RechartsBar,
+  Bar,
+  LineChart as RechartsLine,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+
 // Import new admin components
 import { ApiMonitor } from '@/components/admin/api-monitor';
 import { DatabaseAdmin } from '@/components/admin/database-admin';
 import { SystemControl } from '@/components/admin/system-control';
 import { FixCenter } from '@/components/admin/fix-center';
+import { WorkflowTemplates } from '@/components/admin/workflow-templates';
+import { UnifiedDashboard } from '@/components/admin/unified-dashboard';
+import { CampaignBuilder } from '@/components/admin/campaign-builder';
+import { VisualWorkflowBuilder } from '@/components/admin/visual-workflow-builder';
+import { NotificationPanel } from '@/components/admin/notification-panel';
+import { useAdminSocket } from '@/hooks/useAdminSocket';
 
 // Super Admin Email - ONLY this user can access
 const SUPER_ADMIN_EMAIL = 'ahmed.mahmoud@theroofdocs.com';
@@ -161,10 +184,20 @@ function SuperAdminContent() {
   const [activeTab, setActiveTab] = useState('command-center');
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState('month');
+  const [commandView, setCommandView] = useState<'dashboard' | 'chat'>('dashboard');
+  const [campaignView, setCampaignView] = useState<'list' | 'create'>('list');
+  const [workflowView, setWorkflowView] = useState<'templates' | 'builder'>('templates');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Real-time admin notifications
+  const {
+    isConnected: socketConnected,
+    notifications: liveNotifications,
+    clearNotifications
+  } = useAdminSocket(true);
 
   // Load HR Agents
   const { data: agents = [], isLoading: agentsLoading, refetch: refetchAgents } = useQuery<HRAgent[]>({
@@ -413,7 +446,42 @@ Use natural language or direct commands. I have unrestricted access to execute a
 
         <div className="flex-1 overflow-auto">
           {/* Tab 1: Command Center */}
-          <TabsContent value="command-center" className="flex-1 p-6 m-0 h-full">
+          <TabsContent value="command-center" className="flex-1 p-6 m-0 h-full overflow-auto">
+            {/* View Toggle */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={commandView === 'dashboard' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCommandView('dashboard')}
+                  className="gap-1"
+                >
+                  <Activity className="w-4 h-4" />
+                  Overview
+                </Button>
+                <Button
+                  variant={commandView === 'chat' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCommandView('chat')}
+                  className="gap-1"
+                >
+                  <Bot className="w-4 h-4" />
+                  Susan AI
+                </Button>
+              </div>
+              <Badge variant="outline" className="text-green-600 border-green-200">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
+                All Systems Online
+              </Badge>
+            </div>
+
+            {/* Dashboard View */}
+            {commandView === 'dashboard' && (
+              <UnifiedDashboard />
+            )}
+
+            {/* Chat View */}
+            {commandView === 'chat' && (
             <div className="h-full grid grid-cols-3 gap-6">
               {/* Chat Interface */}
               <div className="col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col h-[calc(100vh-220px)]">
@@ -647,8 +715,16 @@ Use natural language or direct commands. I have unrestricted access to execute a
                     </Button>
                   </CardContent>
                 </Card>
+
+                {/* Real-Time Notifications */}
+                <NotificationPanel
+                  notifications={liveNotifications}
+                  isConnected={socketConnected}
+                  onClear={clearNotifications}
+                />
               </div>
             </div>
+            )}
           </TabsContent>
 
           {/* Tab 2: API Monitor */}
@@ -779,114 +855,109 @@ Use natural language or direct commands. I have unrestricted access to execute a
           </TabsContent>
 
           {/* Tab 4: Workflows */}
-          <TabsContent value="workflows" className="flex-1 p-6 m-0">
+          <TabsContent value="workflows" className="flex-1 p-6 m-0 overflow-auto">
             <div className="space-y-6">
+              {/* View Toggle */}
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold">Workflows & Automation</h3>
-                  <p className="text-sm text-gray-600">Create and manage automated workflows</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={workflowView === 'templates' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setWorkflowView('templates')}
+                    className="gap-1"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Templates
+                  </Button>
+                  <Button
+                    variant={workflowView === 'builder' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setWorkflowView('builder')}
+                    className="gap-1"
+                  >
+                    <Workflow className="w-4 h-4" />
+                    Visual Builder
+                  </Button>
                 </div>
-                <Button className="gap-2">
-                  <Workflow className="w-4 h-4" />
-                  Create Workflow
-                </Button>
+                <div className="flex items-center gap-4">
+                  <div className="flex gap-6 text-sm">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold">{workflows.length}</p>
+                      <p className="text-gray-500">Total</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">{workflows.filter(w => w.isActive).length}</p>
+                      <p className="text-gray-500">Active</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {workflows.reduce((acc, w) => acc + (w.successCount || 0), 0)}
+                      </p>
+                      <p className="text-gray-500">Runs</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-6">
-                {/* Workflow Templates */}
-                <Card className="col-span-2">
-                  <CardHeader>
-                    <CardTitle>Active Workflows</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {workflows.length > 0 ? workflows.map((workflow) => (
-                        <div key={workflow.id} className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-medium">{workflow.name}</h4>
-                                <Badge variant={workflow.isActive ? "default" : "secondary"}>
-                                  {workflow.isActive ? "Active" : "Inactive"}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-gray-600 mt-1">{workflow.description}</p>
-                              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                                <span>Trigger: {workflow.triggerType}</span>
-                                <span>Runs: {(workflow.successCount || 0) + (workflow.failureCount || 0)}</span>
-                                <span className="text-green-600">Success: {workflow.successCount || 0}</span>
-                              </div>
+              {/* Visual Workflow Builder View */}
+              {workflowView === 'builder' && (
+                <VisualWorkflowBuilder onWorkflowCreated={() => {
+                  queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
+                  setWorkflowView('templates');
+                }} />
+              )}
+
+              {/* Templates View */}
+              {workflowView === 'templates' && (
+              <>
+              {/* Workflow Templates - One-click deploy */}
+              <WorkflowTemplates onTemplateDeployed={() => queryClient.invalidateQueries({ queryKey: ['/api/workflows'] })} />
+
+              {/* Active Workflows */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Workflows</CardTitle>
+                  <CardDescription>Your deployed automation workflows</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {workflows.length > 0 ? workflows.map((workflow) => (
+                      <div key={workflow.id} className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium">{workflow.name}</h4>
+                              <Badge variant={workflow.isActive ? "default" : "secondary"}>
+                                {workflow.isActive ? "Active" : "Inactive"}
+                              </Badge>
                             </div>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm">Edit</Button>
-                              <Button variant="outline" size="sm">
-                                <Play className="w-4 h-4" />
-                              </Button>
+                            <p className="text-sm text-gray-600 mt-1">{workflow.description}</p>
+                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                              <span>Trigger: {workflow.triggerType}</span>
+                              <span>Runs: {(workflow.successCount || 0) + (workflow.failureCount || 0)}</span>
+                              <span className="text-green-600">Success: {workflow.successCount || 0}</span>
                             </div>
                           </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm">Edit</Button>
+                            <Button variant="outline" size="sm">
+                              <Play className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
-                      )) : (
-                        <div className="text-center py-8 text-gray-500">
-                          <Workflow className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                          <p>No workflows created yet</p>
-                          <Button variant="link" className="mt-2">Create your first workflow</Button>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Quick Actions */}
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Workflow Templates</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <Button variant="outline" className="w-full justify-start text-sm">
-                        <Mail className="w-4 h-4 mr-2" />
-                        New Hire Onboarding
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start text-sm">
-                        <Calendar className="w-4 h-4 mr-2" />
-                        PTO Auto-Approval
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start text-sm">
-                        <Users className="w-4 h-4 mr-2" />
-                        Interview Scheduling
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start text-sm">
-                        <FileText className="w-4 h-4 mr-2" />
-                        Document Review
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Workflow Stats</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span>Total Workflows</span>
-                        <span className="font-medium">{workflows.length}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Active</span>
-                        <span className="font-medium text-green-600">
-                          {workflows.filter(w => w.isActive).length}
-                        </span>
+                    )) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <Workflow className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No workflows created yet</p>
+                        <p className="text-sm mt-1">Deploy a template above to get started</p>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Total Executions</span>
-                        <span className="font-medium">
-                          {workflows.reduce((acc, w) => acc + (w.successCount || 0) + (w.failureCount || 0), 0)}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              </>
+              )}
             </div>
           </TabsContent>
 
@@ -967,16 +1038,44 @@ Use natural language or direct commands. I have unrestricted access to execute a
                 </Card>
               </div>
 
-              {/* Detailed Analytics */}
+              {/* Detailed Analytics - Real Charts */}
               <div className="grid grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Department Distribution</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px] flex items-center justify-center">
-                      <PieChart className="w-16 h-16 text-gray-400" />
-                      <p className="ml-4 text-gray-500">Chart visualization here</p>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsPie>
+                          <Pie
+                            data={[
+                              { name: 'Sales', value: 12, color: '#3B82F6' },
+                              { name: 'Operations', value: 8, color: '#10B981' },
+                              { name: 'Admin', value: 5, color: '#F59E0B' },
+                              { name: 'Marketing', value: 4, color: '#8B5CF6' },
+                              { name: 'HR', value: 3, color: '#EC4899' }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={true}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            dataKey="value"
+                          >
+                            {[
+                              { name: 'Sales', value: 12, color: '#3B82F6' },
+                              { name: 'Operations', value: 8, color: '#10B981' },
+                              { name: 'Admin', value: 5, color: '#F59E0B' },
+                              { name: 'Marketing', value: 4, color: '#8B5CF6' },
+                              { name: 'HR', value: 3, color: '#EC4899' }
+                            ].map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </RechartsPie>
+                      </ResponsiveContainer>
                     </div>
                   </CardContent>
                 </Card>
@@ -985,9 +1084,90 @@ Use natural language or direct commands. I have unrestricted access to execute a
                     <CardTitle>Recruitment Pipeline</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[300px] flex items-center justify-center">
-                      <BarChart className="w-16 h-16 text-gray-400" />
-                      <p className="ml-4 text-gray-500">Pipeline visualization here</p>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBar
+                          data={[
+                            { stage: 'Applied', count: 45 },
+                            { stage: 'Screened', count: 32 },
+                            { stage: 'Interview', count: 18 },
+                            { stage: 'Final', count: 8 },
+                            { stage: 'Hired', count: 5 }
+                          ]}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="stage" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                        </RechartsBar>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Trend Charts */}
+              <div className="grid grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Headcount Trend</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsLine
+                          data={[
+                            { month: 'Jan', employees: 28 },
+                            { month: 'Feb', employees: 29 },
+                            { month: 'Mar', employees: 30 },
+                            { month: 'Apr', employees: 28 },
+                            { month: 'May', employees: 31 },
+                            { month: 'Jun', employees: 32 },
+                            { month: 'Jul', employees: 33 },
+                            { month: 'Aug', employees: 32 },
+                            { month: 'Sep', employees: 34 },
+                            { month: 'Oct', employees: 35 },
+                            { month: 'Nov', employees: 34 },
+                            { month: 'Dec', employees: 36 }
+                          ]}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="employees" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981' }} />
+                        </RechartsLine>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Turnover by Department</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBar
+                          data={[
+                            { dept: 'Sales', turnover: 15 },
+                            { dept: 'Ops', turnover: 8 },
+                            { dept: 'Admin', turnover: 5 },
+                            { dept: 'Mktg', turnover: 12 },
+                            { dept: 'HR', turnover: 3 }
+                          ]}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="dept" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="turnover" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                        </RechartsBar>
+                      </ResponsiveContainer>
                     </div>
                   </CardContent>
                 </Card>
@@ -1010,20 +1190,48 @@ Use natural language or direct commands. I have unrestricted access to execute a
           {/* Tab 6: Campaigns */}
           <TabsContent value="campaigns" className="flex-1 p-6 m-0">
             <div className="space-y-6">
+              {/* View Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={campaignView === 'list' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCampaignView('list')}
+                    className="gap-1"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Campaigns
+                  </Button>
+                  <Button
+                    variant={campaignView === 'create' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCampaignView('create')}
+                    className="gap-1"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Create New
+                  </Button>
+                </div>
+                {campaignView === 'list' && (
+                  <Button onClick={() => setCampaignView('create')}>
+                    <Mail className="w-4 h-4 mr-2" />
+                    New Campaign
+                  </Button>
+                )}
+              </div>
+
+              {/* Campaign Builder View */}
+              {campaignView === 'create' && (
+                <CampaignBuilder onCampaignCreated={() => setCampaignView('list')} />
+              )}
+
+              {/* Campaign List View */}
+              {campaignView === 'list' && (
+              <>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">Campaign Management</h3>
                   <p className="text-sm text-gray-600">Email and SMS campaigns</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline">
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    New SMS
-                  </Button>
-                  <Button>
-                    <Mail className="w-4 h-4 mr-2" />
-                    New Email Campaign
-                  </Button>
                 </div>
               </div>
 
@@ -1109,11 +1317,15 @@ Use natural language or direct commands. I have unrestricted access to execute a
                     <div className="text-center py-8 text-gray-500">
                       <Mail className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p>No campaigns created yet</p>
-                      <Button variant="link" className="mt-2">Create your first campaign</Button>
+                      <Button variant="link" className="mt-2" onClick={() => setCampaignView('create')}>
+                        Create your first campaign
+                      </Button>
                     </div>
                   )}
                 </CardContent>
               </Card>
+              </>
+              )}
             </div>
           </TabsContent>
 

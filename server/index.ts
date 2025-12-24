@@ -225,23 +225,46 @@ app.use((req, res, next) => {
   // Socket.io connection handling
   io.on('connection', (socket) => {
     logger.info(`New WebSocket connection: ${socket.id}`);
-    
+
     // Join attendance session rooms
     socket.on('join-session', (sessionId) => {
       socket.join(`attendance:${sessionId}`);
       logger.info(`Socket ${socket.id} joined attendance session: ${sessionId}`);
     });
-    
+
     // Leave attendance session rooms
     socket.on('leave-session', (sessionId) => {
       socket.leave(`attendance:${sessionId}`);
       logger.info(`Socket ${socket.id} left attendance session: ${sessionId}`);
     });
-    
+
+    // Admin socket events
+    socket.on('admin:subscribe', () => {
+      socket.join('admin:notifications');
+      logger.info(`Socket ${socket.id} subscribed to admin notifications`);
+
+      // Send welcome notification
+      socket.emit('admin:activity', {
+        action: 'connected',
+        user: 'System',
+        resource: 'Admin Panel'
+      });
+    });
+
+    socket.on('admin:unsubscribe', () => {
+      socket.leave('admin:notifications');
+      logger.info(`Socket ${socket.id} unsubscribed from admin notifications`);
+    });
+
     socket.on('disconnect', () => {
       logger.info(`WebSocket disconnected: ${socket.id}`);
     });
   });
+
+  // Helper function to emit admin notifications (available globally)
+  app.locals.emitAdminNotification = (event: string, data: any) => {
+    io.to('admin:notifications').emit(event, data);
+  };
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
