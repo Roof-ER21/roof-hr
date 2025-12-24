@@ -182,14 +182,24 @@ export function FixCenter() {
     onError: () => toast({ title: '❌ Failed', description: 'Could not fix all issues', variant: 'destructive' })
   });
 
-  // Default health status if not loaded
-  const health: HealthStatus = healthStatus || {
+  // Default health status - always provide fallback for each property
+  const defaultHealth: HealthStatus = {
     database: { status: 'healthy', message: 'Connected' },
     email: { status: 'healthy', message: 'Ready' },
     google: { status: 'healthy', message: 'Synced' },
     agents: { status: 'healthy', message: '5 active', activeCount: 5 },
     cache: { status: 'healthy', message: 'Operational' },
     api: { status: 'healthy', message: 'Fast', avgResponseTime: 120 }
+  };
+
+  // Merge with defaults to ensure all properties exist
+  const health: HealthStatus = {
+    database: healthStatus?.database || defaultHealth.database,
+    email: healthStatus?.email || defaultHealth.email,
+    google: healthStatus?.google || defaultHealth.google,
+    agents: healthStatus?.agents || defaultHealth.agents,
+    cache: healthStatus?.cache || defaultHealth.cache,
+    api: healthStatus?.api || defaultHealth.api
   };
 
   const overallStatus = Object.values(health).some(s => s.status === 'error') ? 'error' :

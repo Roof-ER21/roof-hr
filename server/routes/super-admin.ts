@@ -311,28 +311,6 @@ router.get('/system-status', async (req: Request, res: Response) => {
   }
 });
 
-// Get services status (DB, LLM, Email, Google)
-router.get('/services-status', async (req: Request, res: Response) => {
-  try {
-    // Test database connection
-    let dbStatus = 'connected';
-    try {
-      await storage.getTableList();
-    } catch {
-      dbStatus = 'error';
-    }
-
-    res.json({
-      database: { status: dbStatus },
-      email: { status: 'unknown' }, // Would need email service check
-      google: { status: 'unknown' }, // Would need Google service check
-      timestamp: new Date().toISOString()
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // ============================================================================
 // DATABASE ADMIN ENDPOINTS
 // ============================================================================
