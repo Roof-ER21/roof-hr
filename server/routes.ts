@@ -648,6 +648,59 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
   }
 });
 
+// Reset Sales Reps and 1099 employees to 0 PTO (Admin only)
+router.post('/api/admin/reset-sales-1099-pto', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    const results = { salesReset: 0, contractors1099Reset: 0, policiesDeleted: 0 };
+
+    // Get all users who are sales reps or 1099 contractors
+    const allUsers = await storage.getAllUsers();
+    const salesAnd1099Users = allUsers.filter(user =>
+      user.employmentType === '1099' ||
+      user.role === 'SALES_REP' ||
+      user.department === 'Sales'
+    );
+
+    console.log(`[PTO Reset] Found ${salesAnd1099Users.length} sales/1099 users to reset`);
+
+    for (const user of salesAnd1099Users) {
+      // Check if this user has a PTO policy
+      const policy = await storage.getPtoPolicyByEmployeeId(user.id);
+
+      if (policy) {
+        // Update to 0 PTO
+        await db.update(ptoPolicies).set({
+          vacationDays: 0,
+          sickDays: 0,
+          personalDays: 0,
+          baseDays: 0,
+          totalDays: 0,
+          remainingDays: 0,
+          notes: `Reset to 0 PTO - ${user.employmentType === '1099' ? '1099 contractor' : 'Sales rep'} - ${new Date().toISOString().split('T')[0]}`,
+          updatedAt: new Date()
+        }).where(eq(ptoPolicies.id, policy.id));
+
+        if (user.employmentType === '1099') {
+          results.contractors1099Reset++;
+        } else {
+          results.salesReset++;
+        }
+        console.log(`[PTO Reset] Reset ${user.firstName} ${user.lastName} (${user.employmentType}) to 0 PTO`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Sales reps and 1099 contractors reset to 0 PTO`,
+      details: results,
+      usersProcessed: salesAnd1099Users.map(u => `${u.firstName} ${u.lastName} (${u.employmentType})`)
+    });
+  } catch (error: any) {
+    console.error('Error resetting sales/1099 PTO:', error);
+    res.status(500).json({ error: 'Failed to reset sales/1099 PTO', details: error.message });
+  }
+});
+
 // User routes
 router.get('/api/users', requireAuth, async (req, res) => {
   try {
