@@ -189,6 +189,7 @@ function SuperAdminContent() {
   const [workflowView, setWorkflowView] = useState<'templates' | 'builder'>('templates');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null); // Web Speech API recognition instance
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -322,12 +323,195 @@ function SuperAdminContent() {
     chatMutation.mutate(input);
   };
 
-  // Voice control placeholder
+  // Initialize Web Speech API for voice control
+  useEffect(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognitionAPI) {
+      const recognition = new SpeechRecognitionAPI();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        // Update input field with interim results
+        setInput(transcript);
+
+        if (event.results[0].isFinal) {
+          // Auto-send the voice command
+          const userMessage: Message = {
+            id: Date.now().toString(),
+            role: 'user',
+            content: transcript,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, userMessage]);
+          setInput('');
+          setIsTyping(true);
+          chatMutation.mutate(transcript);
+
+          toast({
+            title: "Voice Command Sent",
+            description: `"${transcript.substring(0, 50)}${transcript.length > 50 ? '...' : ''}"`,
+          });
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        toast({
+          title: 'Voice Error',
+          description: event.error === 'not-allowed'
+            ? 'Microphone access denied. Please allow microphone access.'
+            : `Speech recognition error: ${event.error}`,
+          variant: 'destructive'
+        });
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore errors when stopping
+        }
+      }
+    };
+  }, []);
+
+  // Voice control toggle
   const toggleListening = () => {
-    setIsListening(!isListening);
+    if (!recognitionRef.current) {
+      toast({
+        title: 'Not Supported',
+        description: 'Voice control is not available in this browser. Try Chrome or Edge.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      toast({
+        title: "Voice Control Stopped",
+        description: "Microphone deactivated"
+      });
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+        toast({
+          title: "Voice Control Active",
+          description: "Listening for commands... Speak now!"
+        });
+      } catch (e) {
+        toast({
+          title: 'Voice Error',
+          description: 'Could not start voice recognition. Please try again.',
+          variant: 'destructive'
+        });
+      }
+    }
+  };
+
+  // Export analytics data as CSV
+  const exportAnalytics = () => {
+    const departmentData = [
+      { name: 'Sales', value: 12 },
+      { name: 'Operations', value: 8 },
+      { name: 'Admin', value: 5 },
+      { name: 'Marketing', value: 4 },
+      { name: 'HR', value: 3 }
+    ];
+
+    const recruitmentData = [
+      { stage: 'Applied', count: 45 },
+      { stage: 'Screened', count: 32 },
+      { stage: 'Interview', count: 18 },
+      { stage: 'Final', count: 8 },
+      { stage: 'Hired', count: 5 }
+    ];
+
+    const headcountData = [
+      { month: 'Jan', employees: 28 },
+      { month: 'Feb', employees: 29 },
+      { month: 'Mar', employees: 30 },
+      { month: 'Apr', employees: 28 },
+      { month: 'May', employees: 31 },
+      { month: 'Jun', employees: 32 },
+      { month: 'Jul', employees: 33 },
+      { month: 'Aug', employees: 32 },
+      { month: 'Sep', employees: 34 },
+      { month: 'Oct', employees: 35 },
+      { month: 'Nov', employees: 34 },
+      { month: 'Dec', employees: 36 }
+    ];
+
+    const turnoverData = [
+      { dept: 'Sales', turnover: 15 },
+      { dept: 'Operations', turnover: 8 },
+      { dept: 'Admin', turnover: 5 },
+      { dept: 'Marketing', turnover: 12 },
+      { dept: 'HR', turnover: 3 }
+    ];
+
+    const csvContent = [
+      // Header
+      ['HR Analytics Report'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Timeframe: ${analyticsTimeframe}`],
+      [''],
+      // Key Metrics
+      ['KEY METRICS'],
+      ['Metric', 'Value'],
+      ['Active Employees', analytics?.activeEmployees || 0],
+      ['Pending PTO', analytics?.pendingPTO || 0],
+      ['Open Positions', analytics?.openPositions || 0],
+      ['Turnover Rate', `${analytics?.turnoverRate || 0}%`],
+      [''],
+      // Department Distribution
+      ['DEPARTMENT DISTRIBUTION'],
+      ['Department', 'Employee Count'],
+      ...departmentData.map(d => [d.name, d.value]),
+      [''],
+      // Recruitment Pipeline
+      ['RECRUITMENT PIPELINE'],
+      ['Stage', 'Count'],
+      ...recruitmentData.map(d => [d.stage, d.count]),
+      [''],
+      // Headcount Trend
+      ['HEADCOUNT TREND (12 Months)'],
+      ['Month', 'Employees'],
+      ...headcountData.map(d => [d.month, d.employees]),
+      [''],
+      // Turnover by Department
+      ['TURNOVER BY DEPARTMENT (%)'],
+      ['Department', 'Turnover Rate'],
+      ...turnoverData.map(d => [d.dept, `${d.turnover}%`])
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `hr-analytics-${analyticsTimeframe}-${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
     toast({
-      title: isListening ? "Voice Control Stopped" : "Voice Control Active",
-      description: isListening ? "Microphone deactivated" : "Listening for commands..."
+      title: 'Report Exported',
+      description: 'Analytics report has been downloaded as CSV'
     });
   };
 
@@ -584,8 +768,12 @@ Use natural language or direct commands. I have unrestricted access to execute a
                       <Button
                         size="icon"
                         onClick={toggleListening}
-                        variant={isListening ? "default" : "outline"}
+                        variant={isListening ? "destructive" : "outline"}
                         disabled={isTyping}
+                        className={cn(
+                          isListening && "animate-pulse ring-2 ring-red-500 ring-offset-2"
+                        )}
+                        title={isListening ? "Click to stop listening" : "Click to start voice command"}
                       >
                         {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                       </Button>
@@ -1179,7 +1367,7 @@ Use natural language or direct commands. I have unrestricted access to execute a
                   <Filter className="w-4 h-4 mr-2" />
                   Filter Data
                 </Button>
-                <Button>
+                <Button onClick={exportAnalytics}>
                   <Download className="w-4 h-4 mr-2" />
                   Export Report
                 </Button>

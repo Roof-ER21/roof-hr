@@ -14,6 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Database,
   Play,
@@ -24,7 +27,9 @@ import {
   Search,
   Table2,
   History,
-  AlertTriangle
+  AlertTriangle,
+  Shield,
+  ShieldOff
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -66,6 +71,7 @@ export function DatabaseAdmin() {
   const [sqlQuery, setSqlQuery] = useState('SELECT * FROM users LIMIT 10;');
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [readOnlyMode, setReadOnlyMode] = useState(true); // Default: read-only for safety
 
   // Fetch table list
   const { data: tables, isLoading: tablesLoading, refetch: refetchTables } = useQuery<TableInfo[]>({
@@ -100,6 +106,37 @@ export function DatabaseAdmin() {
       return res.json();
     }
   });
+
+  // Helper to check if query is a write operation
+  const isWriteQuery = (query: string): boolean => {
+    const writeKeywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE'];
+    const upperQuery = query.toUpperCase().trim();
+    return writeKeywords.some(keyword => upperQuery.startsWith(keyword) || upperQuery.includes(` ${keyword} `));
+  };
+
+  // Execute SQL with read-only protection
+  const executeQuery = () => {
+    const trimmedQuery = sqlQuery.trim();
+
+    if (isWriteQuery(trimmedQuery)) {
+      if (readOnlyMode) {
+        toast({
+          title: 'Read-Only Mode Active',
+          description: 'Write operations are disabled for safety. Turn off read-only mode to execute.',
+          variant: 'destructive'
+        });
+        return;
+      } else {
+        // Confirm write operation
+        const confirmed = window.confirm(
+          `⚠️ WARNING: This query will modify data!\n\n${trimmedQuery.substring(0, 200)}${trimmedQuery.length > 200 ? '...' : ''}\n\nAre you sure you want to execute this?`
+        );
+        if (!confirmed) return;
+      }
+    }
+
+    executeSqlMutation.mutate(trimmedQuery);
+  };
 
   // Execute SQL mutation
   const executeSqlMutation = useMutation({
@@ -383,31 +420,70 @@ export function DatabaseAdmin() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Read-Only Mode Toggle */}
+              <div className={`flex items-center justify-between p-3 rounded-lg border ${readOnlyMode ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'}`}>
+                <div className="flex items-center gap-3">
+                  {readOnlyMode ? (
+                    <Shield className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <ShieldOff className="w-5 h-5 text-red-600" />
+                  )}
+                  <div>
+                    <Label htmlFor="read-only-mode" className="text-sm font-medium cursor-pointer">
+                      {readOnlyMode ? 'Read-Only Mode (Safe)' : 'Write Mode (Dangerous)'}
+                    </Label>
+                    <p className="text-xs text-gray-500">
+                      {readOnlyMode
+                        ? 'SELECT queries only. Write operations are blocked.'
+                        : '⚠️ All SQL operations allowed including DELETE, DROP, TRUNCATE'}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="read-only-mode"
+                  checked={readOnlyMode}
+                  onCheckedChange={setReadOnlyMode}
+                />
+              </div>
+
               <div className="flex items-start gap-4">
                 <div className="flex-1">
                   <Textarea
                     value={sqlQuery}
                     onChange={(e) => setSqlQuery(e.target.value)}
                     placeholder="SELECT * FROM users LIMIT 10;"
-                    className="font-mono text-sm h-32"
+                    className={`font-mono text-sm h-32 ${
+                      isWriteQuery(sqlQuery) && readOnlyMode
+                        ? 'border-red-300 focus:border-red-500'
+                        : ''
+                    }`}
                   />
+                  {isWriteQuery(sqlQuery) && readOnlyMode && (
+                    <p className="text-xs text-red-500 mt-1">
+                      ⚠️ This is a write query. Disable read-only mode to execute.
+                    </p>
+                  )}
                 </div>
                 <Button
-                  onClick={() => executeSqlMutation.mutate(sqlQuery)}
+                  onClick={executeQuery}
                   disabled={executeSqlMutation.isPending || !sqlQuery.trim()}
+                  variant={isWriteQuery(sqlQuery) && !readOnlyMode ? 'destructive' : 'default'}
                 >
                   <Play className="w-4 h-4 mr-2" />
-                  Execute
+                  {isWriteQuery(sqlQuery) && !readOnlyMode ? 'Execute (Write)' : 'Execute'}
                 </Button>
               </div>
 
-              {/* Warning */}
-              <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded">
-                <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                <span className="text-sm">
-                  Write operations (INSERT, UPDATE, DELETE) are logged and audited. Use with caution.
-                </span>
-              </div>
+              {/* Warning for non-read-only */}
+              {!readOnlyMode && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Write Mode Active</AlertTitle>
+                  <AlertDescription>
+                    All SQL operations are allowed. Be extremely careful - operations cannot be undone.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {/* Query Error */}
               {queryError && (
