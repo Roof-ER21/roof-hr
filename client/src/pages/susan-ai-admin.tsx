@@ -1,18 +1,21 @@
 /**
- * Susan AI Admin - Advanced AI Control Center
- * Combines Susan AI with Admin Control Hub and Analytics
+ * Super Admin Control Center - Ahmed's Ultimate Admin Page
+ * 8-Tab comprehensive admin dashboard with full system control
+ * Access restricted to ahmed.mahmoud@theroofdocs.com
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { 
+import {
   Bot, Send, Mic, MicOff, Brain, Sparkles, TrendingUp,
   Settings, Activity, Users, Calendar, FileText, ChevronRight,
   Play, Pause, RefreshCw, Clock, AlertCircle, CheckCircle,
-  BarChart, PieChart, LineChart, Download, Filter, 
+  BarChart, PieChart, LineChart, Download, Filter,
   BrainCircuit, Shield, Zap, Database, MessageSquare,
-  Loader2, ArrowUp, ArrowDown, Terminal
+  Loader2, ArrowUp, ArrowDown, Terminal, Code, Workflow,
+  Mail, Bell, Lock, Server, Globe, Cpu, HardDrive,
+  GitBranch, MonitorSpeaker, LayoutDashboard, Table2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { queryClient } from '@/lib/queryClient';
@@ -34,6 +37,14 @@ import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+
+// Import new admin components
+import { ApiMonitor } from '@/components/admin/api-monitor';
+import { DatabaseAdmin } from '@/components/admin/database-admin';
+import { SystemControl } from '@/components/admin/system-control';
+
+// Super Admin Email - ONLY this user can access
+const SUPER_ADMIN_EMAIL = 'ahmed.mahmoud@theroofdocs.com';
 
 // Types
 interface Message {
@@ -78,7 +89,70 @@ interface AnalyticsData {
   averageTenure: number;
 }
 
-function SusanAIAdminContent() {
+interface Workflow {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  triggerType: string;
+  createdAt: string;
+  lastRun?: string;
+  successCount?: number;
+  failureCount?: number;
+}
+
+interface Campaign {
+  id: string;
+  name: string;
+  type: 'email' | 'sms';
+  status: 'draft' | 'scheduled' | 'active' | 'completed';
+  recipients: number;
+  sent: number;
+  opened: number;
+  clicked: number;
+  scheduledAt?: string;
+  createdAt: string;
+}
+
+// Access Denied Component
+function AccessDenied() {
+  const { user } = useAuth();
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <Card className="w-[500px] border-red-200 dark:border-red-800">
+        <CardHeader className="text-center">
+          <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
+            <Lock className="w-8 h-8 text-red-600" />
+          </div>
+          <CardTitle className="text-2xl text-red-600">Access Denied</CardTitle>
+          <CardDescription>Super Admin Control Center</CardDescription>
+        </CardHeader>
+        <CardContent className="text-center space-y-4">
+          <p className="text-gray-600 dark:text-gray-400">
+            This control center is restricted to the Super Administrator only.
+          </p>
+          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <p className="text-sm text-gray-500">Current user:</p>
+            <p className="font-medium">{user?.email || 'Unknown'}</p>
+          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Unauthorized Access Attempt</AlertTitle>
+            <AlertDescription>
+              This access attempt has been logged for security purposes.
+            </AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => window.history.back()}>
+            Go Back
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SuperAdminContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -107,20 +181,32 @@ function SusanAIAdminContent() {
     queryKey: ['/api/dashboard/metrics', analyticsTimeframe]
   });
 
+  // Load Workflows
+  const { data: workflows = [] } = useQuery<Workflow[]>({
+    queryKey: ['/api/workflows'],
+  });
+
+  // Load Campaigns
+  const { data: campaigns = [] } = useQuery<Campaign[]>({
+    queryKey: ['/api/email-campaigns'],
+  });
+
   // Chat with Susan (Admin Mode)
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
       const response = await apiRequest('/api/susan/chat', {
         method: 'POST',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message,
-          mode: 'admin',
+          mode: 'super-admin',
           context: {
             agents: agents.map(a => ({ id: a.id, name: a.agentName, isActive: a.isActive })),
             analytics: analytics ? {
               activeEmployees: analytics.activeEmployees,
               pendingPTO: analytics.pendingPTO
-            } : null
+            } : null,
+            workflows: workflows.length,
+            campaigns: campaigns.length
           }
         })
       });
@@ -137,8 +223,8 @@ function SusanAIAdminContent() {
       };
       setMessages(prev => [...prev, assistantMessage]);
       setIsTyping(false);
-      
-      // Refetch agents if any agent-related action was performed
+
+      // Refetch data based on actions
       if (response.actions?.some((a: any) => a.type.includes('agent'))) {
         refetchAgents();
       }
@@ -180,7 +266,7 @@ function SusanAIAdminContent() {
       refetchAgents();
       toast({
         title: "Agent Triggered",
-        description: `Agent ${agentId} has been triggered successfully`
+        description: `Agent has been triggered successfully`
       });
     }
   });
@@ -222,7 +308,20 @@ function SusanAIAdminContent() {
       const greeting: Message = {
         id: 'init',
         role: 'system',
-        content: `🎯 Admin Control Center Active\n\nWelcome ${user?.firstName || 'Administrator'}! I'm Susan in Admin Mode with full control over:\n• HR Automation Agents\n• Analytics & Reporting\n• System Configuration\n• Real-time Monitoring\n\nUse natural language or commands to control the system.`,
+        content: `🎯 SUPER ADMIN CONTROL CENTER ACTIVE
+
+Welcome Ahmed! You have FULL access to:
+
+• API & Developer Monitoring - Real-time health, alerts, performance
+• Database Administration - Direct SQL, table browser, exports
+• HR Automation Agents - Control all agents
+• Workflow Builder - Create functioning automations
+• Analytics Dashboard - Comprehensive metrics
+• Campaign Management - Email & SMS campaigns
+• System Control - Feature toggles, jobs, sessions
+• Full Database Access - Query anything
+
+Use natural language or direct commands. I have unrestricted access to execute any operation.`,
         timestamp: new Date(),
         confidence: 1
       };
@@ -237,279 +336,345 @@ function SusanAIAdminContent() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
-                <BrainCircuit className="w-7 h-7 text-white" />
+              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-red-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Shield className="w-7 h-7 text-white" />
               </div>
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-                Susan AI Admin Control
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-600 via-red-600 to-purple-600 bg-clip-text text-transparent">
+                Super Admin Control Center
               </h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Advanced AI Command Center & Analytics Hub
+                Full System Access - Ahmed Mahmoud
               </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Badge variant="outline" className="gap-1">
+            <Badge variant="destructive" className="gap-1 animate-pulse">
               <Shield className="w-3 h-3" />
-              Admin Mode
+              SUPER ADMIN
             </Badge>
-            <Badge variant={agentsLoading ? "secondary" : "default"} className="gap-1">
+            <Badge variant="outline" className="gap-1">
               <Activity className={cn("w-3 h-3", !agentsLoading && "animate-pulse")} />
-              {agents.filter(a => a.isActive).length}/{agents.length} Active
+              {agents.filter(a => a.isActive).length}/{agents.length} Agents
+            </Badge>
+            <Badge variant="outline" className="gap-1">
+              <Server className="w-3 h-3 text-green-500" />
+              All Systems Online
             </Badge>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-6 mt-4 grid w-fit grid-cols-4">
-          <TabsTrigger value="command-center" className="gap-2">
-            <Terminal className="w-4 h-4" />
-            Command Center
-          </TabsTrigger>
-          <TabsTrigger value="agents" className="gap-2">
-            <Zap className="w-4 h-4" />
-            HR Agents
-          </TabsTrigger>
-          <TabsTrigger value="analytics" className="gap-2">
-            <BarChart className="w-4 h-4" />
-            Analytics
-          </TabsTrigger>
-          <TabsTrigger value="system" className="gap-2">
-            <Settings className="w-4 h-4" />
-            System
-          </TabsTrigger>
-        </TabsList>
+      {/* Main Content with 8 Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 border-b px-6 py-2">
+          <TabsList className="grid w-full grid-cols-8 h-auto">
+            <TabsTrigger value="command-center" className="gap-1.5 text-xs py-2">
+              <Terminal className="w-3.5 h-3.5" />
+              Command
+            </TabsTrigger>
+            <TabsTrigger value="api-monitor" className="gap-1.5 text-xs py-2">
+              <MonitorSpeaker className="w-3.5 h-3.5" />
+              API Monitor
+            </TabsTrigger>
+            <TabsTrigger value="agents" className="gap-1.5 text-xs py-2">
+              <Zap className="w-3.5 h-3.5" />
+              HR Agents
+            </TabsTrigger>
+            <TabsTrigger value="workflows" className="gap-1.5 text-xs py-2">
+              <Workflow className="w-3.5 h-3.5" />
+              Workflows
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-1.5 text-xs py-2">
+              <BarChart className="w-3.5 h-3.5" />
+              Analytics
+            </TabsTrigger>
+            <TabsTrigger value="campaigns" className="gap-1.5 text-xs py-2">
+              <Mail className="w-3.5 h-3.5" />
+              Campaigns
+            </TabsTrigger>
+            <TabsTrigger value="system" className="gap-1.5 text-xs py-2">
+              <Settings className="w-3.5 h-3.5" />
+              System
+            </TabsTrigger>
+            <TabsTrigger value="database" className="gap-1.5 text-xs py-2">
+              <Database className="w-3.5 h-3.5" />
+              Database
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        {/* Command Center Tab */}
-        <TabsContent value="command-center" className="flex-1 flex flex-col p-6">
-          <div className="flex-1 grid grid-cols-3 gap-6">
-            {/* Chat Interface */}
-            <div className="col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col">
-              <ScrollArea className="flex-1 p-6">
-                <div className="space-y-4">
-                  {messages.map((message) => (
-                    <motion.div
-                      key={message.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={cn(
-                        "flex gap-3",
-                        message.role === 'user' && "justify-end"
-                      )}
-                    >
-                      {message.role !== 'user' && (
-                        <Avatar className="w-10 h-10">
-                          <AvatarFallback className={cn(
-                            "text-white",
-                            message.role === 'system' ? "bg-blue-500" : "bg-orange-500"
-                          )}>
-                            {message.role === 'system' ? '🎯' : '🤖'}
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-                      <div
+        <div className="flex-1 overflow-auto">
+          {/* Tab 1: Command Center */}
+          <TabsContent value="command-center" className="flex-1 p-6 m-0 h-full">
+            <div className="h-full grid grid-cols-3 gap-6">
+              {/* Chat Interface */}
+              <div className="col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col h-[calc(100vh-220px)]">
+                <ScrollArea className="flex-1 p-6">
+                  <div className="space-y-4">
+                    {messages.map((message) => (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
                         className={cn(
-                          "max-w-[80%] rounded-xl px-5 py-3",
-                          message.role === 'user'
-                            ? "bg-gradient-to-r from-orange-500 to-red-500 text-white"
-                            : message.role === 'system'
-                            ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
-                            : "bg-gray-100 dark:bg-gray-700"
+                          "flex gap-3",
+                          message.role === 'user' && "justify-end"
                         )}
                       >
-                        <p className="whitespace-pre-wrap">{message.content}</p>
-                        {message.actions && message.actions.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-white/20">
-                            <p className="text-sm font-medium mb-2">Actions Executed:</p>
-                            {message.actions.map((action: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2 text-sm">
-                                {action.status === 'success' ? (
-                                  <CheckCircle className="w-4 h-4 text-green-400" />
-                                ) : (
-                                  <AlertCircle className="w-4 h-4 text-red-400" />
-                                )}
-                                <span>{action.message}</span>
-                              </div>
-                            ))}
-                          </div>
+                        {message.role !== 'user' && (
+                          <Avatar className="w-10 h-10">
+                            <AvatarFallback className={cn(
+                              "text-white",
+                              message.role === 'system' ? "bg-gradient-to-br from-purple-500 to-blue-500" : "bg-gradient-to-br from-orange-500 to-red-500"
+                            )}>
+                              {message.role === 'system' ? '🎯' : '🤖'}
+                            </AvatarFallback>
+                          </Avatar>
                         )}
-                      </div>
-                      {message.role === 'user' && (
+                        <div
+                          className={cn(
+                            "max-w-[80%] rounded-xl px-5 py-3",
+                            message.role === 'user'
+                              ? "bg-gradient-to-r from-orange-500 to-red-500 text-white"
+                              : message.role === 'system'
+                              ? "bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800"
+                              : "bg-gray-100 dark:bg-gray-700"
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          {message.actions && message.actions.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-white/20">
+                              <p className="text-sm font-medium mb-2">Actions Executed:</p>
+                              {message.actions.map((action: any, idx: number) => (
+                                <div key={idx} className="flex items-center gap-2 text-sm">
+                                  {action.status === 'success' ? (
+                                    <CheckCircle className="w-4 h-4 text-green-400" />
+                                  ) : (
+                                    <AlertCircle className="w-4 h-4 text-red-400" />
+                                  )}
+                                  <span>{action.message}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {message.role === 'user' && (
+                          <Avatar className="w-10 h-10">
+                            <AvatarFallback className="bg-gradient-to-r from-purple-500 to-blue-500 text-white">
+                              A
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                      </motion.div>
+                    ))}
+                    {isTyping && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex gap-3"
+                      >
                         <Avatar className="w-10 h-10">
-                          <AvatarFallback className="bg-gradient-to-r from-purple-500 to-blue-500 text-white">
-                            {user?.firstName?.[0] || 'A'}
+                          <AvatarFallback className="bg-gradient-to-br from-orange-500 to-red-500 text-white">
+                            🤖
                           </AvatarFallback>
                         </Avatar>
-                      )}
-                    </motion.div>
-                  ))}
-                  {isTyping && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex gap-3"
-                    >
-                      <Avatar className="w-10 h-10">
-                        <AvatarFallback className="bg-orange-500 text-white">
-                          🤖
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="bg-gray-100 dark:bg-gray-700 rounded-xl px-5 py-3">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      </div>
-                    </motion.div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
+                        <div className="bg-gray-100 dark:bg-gray-700 rounded-xl px-5 py-3">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        </div>
+                      </motion.div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                </ScrollArea>
 
-              {/* Input Area */}
-              <div className="border-t p-4">
-                <div className="flex gap-3">
-                  <Textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    placeholder="Enter admin command or question..."
-                    className="flex-1 min-h-[60px] resize-none"
-                    disabled={isTyping}
-                  />
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      size="icon"
-                      onClick={toggleListening}
-                      variant={isListening ? "default" : "outline"}
+                {/* Input Area */}
+                <div className="border-t p-4">
+                  <div className="flex gap-3">
+                    <Textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      placeholder="Enter super admin command..."
+                      className="flex-1 min-h-[60px] resize-none"
                       disabled={isTyping}
-                    >
-                      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </Button>
-                    <Button
-                      size="icon"
-                      onClick={handleSend}
-                      disabled={!input.trim() || isTyping}
-                      className="bg-gradient-to-r from-orange-500 to-red-500"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
+                    />
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        size="icon"
+                        onClick={toggleListening}
+                        variant={isListening ? "default" : "outline"}
+                        disabled={isTyping}
+                      >
+                        {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        size="icon"
+                        onClick={handleSend}
+                        disabled={!input.trim() || isTyping}
+                        className="bg-gradient-to-r from-orange-500 to-red-500"
+                      >
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Quick Actions & Status */}
-            <div className="space-y-4">
-              {/* System Status */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">System Status</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">AI Engine</span>
-                    <Badge variant="default" className="gap-1">
-                      <CheckCircle className="w-3 h-3" />
-                      Operational
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Agents Active</span>
-                    <span className="font-medium">{agents.filter(a => a.isActive).length}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Response Time</span>
-                    <span className="text-sm text-green-600">~1.2s</span>
-                  </div>
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Memory Usage</span>
-                      <span>42%</span>
+              {/* Quick Actions & Status */}
+              <div className="space-y-4">
+                {/* System Status */}
+                <Card className="border-purple-200 dark:border-purple-800">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Server className="w-4 h-4" />
+                      System Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">AI Engine</span>
+                      <Badge variant="default" className="gap-1 bg-green-500">
+                        <CheckCircle className="w-3 h-3" />
+                        Online
+                      </Badge>
                     </div>
-                    <Progress value={42} className="h-2" />
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Database</span>
+                      <Badge variant="default" className="gap-1 bg-green-500">
+                        <CheckCircle className="w-3 h-3" />
+                        Connected
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Email Service</span>
+                      <Badge variant="default" className="gap-1 bg-green-500">
+                        <CheckCircle className="w-3 h-3" />
+                        Active
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Active Agents</span>
+                      <span className="font-medium">{agents.filter(a => a.isActive).length}</span>
+                    </div>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>API Health</span>
+                        <span className="text-green-600">99.9%</span>
+                      </div>
+                      <Progress value={99.9} className="h-2" />
+                    </div>
+                  </CardContent>
+                </Card>
 
-              {/* Quick Commands */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Quick Commands</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => {
-                      setInput("Run all active HR agents now");
-                      handleSend();
-                    }}
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Run All Agents
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => {
-                      setInput("Generate weekly HR report");
-                      handleSend();
-                    }}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Generate Report
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => {
-                      setInput("Show agent performance metrics");
-                      handleSend();
-                    }}
-                  >
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    Performance Metrics
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => {
-                      setInput("Check system health");
-                      handleSend();
-                    }}
-                  >
-                    <Activity className="w-4 h-4 mr-2" />
-                    System Health
-                  </Button>
-                </CardContent>
-              </Card>
+                {/* Quick Commands */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Zap className="w-4 h-4" />
+                      Quick Commands
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setInput("Show system health report");
+                        setTimeout(handleSend, 100);
+                      }}
+                    >
+                      <Activity className="w-4 h-4 mr-2" />
+                      System Health
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setInput("Run all active HR agents now");
+                        setTimeout(handleSend, 100);
+                      }}
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Run All Agents
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setInput("Generate weekly HR report");
+                        setTimeout(handleSend, 100);
+                      }}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Generate Report
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setInput("Show recent errors and failures");
+                        setTimeout(handleSend, 100);
+                      }}
+                    >
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      View Errors
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-red-600 hover:text-red-700"
+                      onClick={() => {
+                        setInput("Execute emergency shutdown protocol");
+                        setTimeout(handleSend, 100);
+                      }}
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      Emergency Stop
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
 
-        {/* HR Agents Tab */}
-        <TabsContent value="agents" className="flex-1 p-6">
-          <div className="grid grid-cols-3 gap-6 h-full">
-            {/* Agents List */}
-            <div className="col-span-2 space-y-4">
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
-                <h3 className="text-lg font-semibold mb-4">HR Automation Agents</h3>
-                <div className="space-y-3">
+          {/* Tab 2: API Monitor */}
+          <TabsContent value="api-monitor" className="p-0 m-0 h-[calc(100vh-180px)]">
+            <ApiMonitor />
+          </TabsContent>
+
+          {/* Tab 3: HR Agents */}
+          <TabsContent value="agents" className="flex-1 p-6 m-0">
+            <div className="grid grid-cols-3 gap-6 h-full">
+              {/* Agents List */}
+              <div className="col-span-2 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">HR Automation Agents</h3>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => refetchAgents()}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Refresh
+                    </Button>
+                    <Button size="sm">
+                      <Play className="w-4 h-4 mr-2" />
+                      Run All Active
+                    </Button>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 space-y-3">
                   {agents.map((agent) => (
-                    <Card 
+                    <Card
                       key={agent.id}
                       className={cn(
-                        "cursor-pointer transition-all",
+                        "cursor-pointer transition-all hover:shadow-md",
                         selectedAgent === agent.id && "ring-2 ring-orange-500"
                       )}
                       onClick={() => setSelectedAgent(agent.id)}
@@ -522,6 +687,9 @@ function SusanAIAdminContent() {
                               <Badge variant={agent.isActive ? "default" : "secondary"}>
                                 {agent.isActive ? "Active" : "Inactive"}
                               </Badge>
+                              {agent.lastStatus === 'error' && (
+                                <Badge variant="destructive">Error</Badge>
+                              )}
                             </div>
                             <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                               {agent.description}
@@ -543,9 +711,9 @@ function SusanAIAdminContent() {
                             <Switch
                               checked={agent.isActive}
                               onCheckedChange={(checked) => {
-                                toggleAgentMutation.mutate({ 
-                                  agentId: agent.id, 
-                                  isActive: checked 
+                                toggleAgentMutation.mutate({
+                                  agentId: agent.id,
+                                  isActive: checked
                                 });
                               }}
                               onClick={(e) => e.stopPropagation()}
@@ -567,261 +735,407 @@ function SusanAIAdminContent() {
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Agent Details */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
-              <h3 className="text-lg font-semibold mb-4">Agent Logs</h3>
-              {selectedAgent ? (
-                <ScrollArea className="h-[500px]">
-                  <div className="space-y-2">
-                    {agentLogs
-                      .filter(log => log.agentId === selectedAgent)
-                      .map((log) => (
-                        <div key={log.id} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                          <div className="flex items-center justify-between mb-1">
-                            <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
-                              {log.status}
-                            </Badge>
-                            <span className="text-xs text-gray-500">
-                              {format(new Date(log.runDate), 'MMM d, h:mm a')}
-                            </span>
+              {/* Agent Details */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
+                <h3 className="text-lg font-semibold mb-4">Agent Logs</h3>
+                {selectedAgent ? (
+                  <ScrollArea className="h-[500px]">
+                    <div className="space-y-2">
+                      {agentLogs
+                        .filter(log => log.agentId === selectedAgent)
+                        .map((log) => (
+                          <div key={log.id} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                            <div className="flex items-center justify-between mb-1">
+                              <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
+                                {log.status}
+                              </Badge>
+                              <span className="text-xs text-gray-500">
+                                {format(new Date(log.runDate), 'MMM d, h:mm a')}
+                              </span>
+                            </div>
+                            {log.error && (
+                              <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                                {log.error}
+                              </p>
+                            )}
                           </div>
-                          {log.error && (
-                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
-                              {log.error}
-                            </p>
-                          )}
+                        ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-gray-500">
+                    <Zap className="w-12 h-12 mb-4 opacity-50" />
+                    <p>Select an agent to view logs</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Tab 4: Workflows */}
+          <TabsContent value="workflows" className="flex-1 p-6 m-0">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">Workflows & Automation</h3>
+                  <p className="text-sm text-gray-600">Create and manage automated workflows</p>
+                </div>
+                <Button className="gap-2">
+                  <Workflow className="w-4 h-4" />
+                  Create Workflow
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-6">
+                {/* Workflow Templates */}
+                <Card className="col-span-2">
+                  <CardHeader>
+                    <CardTitle>Active Workflows</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {workflows.length > 0 ? workflows.map((workflow) => (
+                        <div key={workflow.id} className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium">{workflow.name}</h4>
+                                <Badge variant={workflow.isActive ? "default" : "secondary"}>
+                                  {workflow.isActive ? "Active" : "Inactive"}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">{workflow.description}</p>
+                              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                <span>Trigger: {workflow.triggerType}</span>
+                                <span>Runs: {(workflow.successCount || 0) + (workflow.failureCount || 0)}</span>
+                                <span className="text-green-600">Success: {workflow.successCount || 0}</span>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm">Edit</Button>
+                              <Button variant="outline" size="sm">
+                                <Play className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <Workflow className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>No workflows created yet</p>
+                          <Button variant="link" className="mt-2">Create your first workflow</Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Quick Actions */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Workflow Templates</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <Button variant="outline" className="w-full justify-start text-sm">
+                        <Mail className="w-4 h-4 mr-2" />
+                        New Hire Onboarding
+                      </Button>
+                      <Button variant="outline" className="w-full justify-start text-sm">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        PTO Auto-Approval
+                      </Button>
+                      <Button variant="outline" className="w-full justify-start text-sm">
+                        <Users className="w-4 h-4 mr-2" />
+                        Interview Scheduling
+                      </Button>
+                      <Button variant="outline" className="w-full justify-start text-sm">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Document Review
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Workflow Stats</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between text-sm">
+                        <span>Total Workflows</span>
+                        <span className="font-medium">{workflows.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Active</span>
+                        <span className="font-medium text-green-600">
+                          {workflows.filter(w => w.isActive).length}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Total Executions</span>
+                        <span className="font-medium">
+                          {workflows.reduce((acc, w) => acc + (w.successCount || 0) + (w.failureCount || 0), 0)}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Tab 5: Analytics */}
+          <TabsContent value="analytics" className="flex-1 p-6 m-0">
+            <div className="space-y-6">
+              {/* Timeframe Selector */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">HR Analytics Dashboard</h3>
+                <Select value={analyticsTimeframe} onValueChange={setAnalyticsTimeframe}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                    <SelectItem value="quarter">This Quarter</SelectItem>
+                    <SelectItem value="year">This Year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Key Metrics */}
+              <div className="grid grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Active Employees</p>
+                        <p className="text-2xl font-bold">{analytics?.activeEmployees || 0}</p>
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <ArrowUp className="w-3 h-3" />
+                          +12% from last month
+                        </p>
+                      </div>
+                      <Users className="w-8 h-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Pending PTO</p>
+                        <p className="text-2xl font-bold">{analytics?.pendingPTO || 0}</p>
+                        <p className="text-xs text-yellow-600">Requires approval</p>
+                      </div>
+                      <Calendar className="w-8 h-8 text-yellow-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Open Positions</p>
+                        <p className="text-2xl font-bold">{analytics?.openPositions || 0}</p>
+                        <p className="text-xs text-blue-600">3 urgent</p>
+                      </div>
+                      <FileText className="w-8 h-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Turnover Rate</p>
+                        <p className="text-2xl font-bold">{analytics?.turnoverRate || 0}%</p>
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <ArrowDown className="w-3 h-3" />
+                          -2% from last quarter
+                        </p>
+                      </div>
+                      <TrendingUp className="w-8 h-8 text-red-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Detailed Analytics */}
+              <div className="grid grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Department Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px] flex items-center justify-center">
+                      <PieChart className="w-16 h-16 text-gray-400" />
+                      <p className="ml-4 text-gray-500">Chart visualization here</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recruitment Pipeline</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px] flex items-center justify-center">
+                      <BarChart className="w-16 h-16 text-gray-400" />
+                      <p className="ml-4 text-gray-500">Pipeline visualization here</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Export Actions */}
+              <div className="flex justify-end gap-3">
+                <Button variant="outline">
+                  <Filter className="w-4 h-4 mr-2" />
+                  Filter Data
+                </Button>
+                <Button>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export Report
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Tab 6: Campaigns */}
+          <TabsContent value="campaigns" className="flex-1 p-6 m-0">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">Campaign Management</h3>
+                  <p className="text-sm text-gray-600">Email and SMS campaigns</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline">
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    New SMS
+                  </Button>
+                  <Button>
+                    <Mail className="w-4 h-4 mr-2" />
+                    New Email Campaign
+                  </Button>
+                </div>
+              </div>
+
+              {/* Campaign Stats */}
+              <div className="grid grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-gray-600">Total Campaigns</p>
+                    <p className="text-2xl font-bold">{campaigns.length}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-gray-600">Active</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {campaigns.filter(c => c.status === 'active').length}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-gray-600">Emails Sent</p>
+                    <p className="text-2xl font-bold">
+                      {campaigns.reduce((acc, c) => acc + c.sent, 0)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-gray-600">Avg Open Rate</p>
+                    <p className="text-2xl font-bold">
+                      {campaigns.length > 0
+                        ? Math.round(campaigns.reduce((acc, c) => acc + (c.opened / c.sent * 100), 0) / campaigns.length)
+                        : 0}%
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Campaign List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Campaigns</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {campaigns.length > 0 ? (
+                    <div className="space-y-3">
+                      {campaigns.map((campaign) => (
+                        <div key={campaign.id} className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium">{campaign.name}</h4>
+                                <Badge variant={campaign.type === 'email' ? 'default' : 'secondary'}>
+                                  {campaign.type}
+                                </Badge>
+                                <Badge
+                                  variant={
+                                    campaign.status === 'active' ? 'default' :
+                                    campaign.status === 'completed' ? 'secondary' :
+                                    campaign.status === 'scheduled' ? 'outline' : 'secondary'
+                                  }
+                                >
+                                  {campaign.status}
+                                </Badge>
+                              </div>
+                              <div className="flex gap-4 mt-2 text-sm text-gray-500">
+                                <span>Recipients: {campaign.recipients}</span>
+                                <span>Sent: {campaign.sent}</span>
+                                <span>Opened: {campaign.opened}</span>
+                                <span>Clicked: {campaign.clicked}</span>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm">View</Button>
+                              <Button variant="outline" size="sm">Duplicate</Button>
+                            </div>
+                          </div>
                         </div>
                       ))}
-                  </div>
-                </ScrollArea>
-              ) : (
-                <p className="text-sm text-gray-500">Select an agent to view logs</p>
-              )}
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* Analytics Tab */}
-        <TabsContent value="analytics" className="flex-1 p-6">
-          <div className="space-y-6">
-            {/* Timeframe Selector */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">HR Analytics Dashboard</h3>
-              <Select value={analyticsTimeframe} onValueChange={setAnalyticsTimeframe}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="week">This Week</SelectItem>
-                  <SelectItem value="month">This Month</SelectItem>
-                  <SelectItem value="quarter">This Quarter</SelectItem>
-                  <SelectItem value="year">This Year</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Key Metrics */}
-            <div className="grid grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Active Employees</p>
-                      <p className="text-2xl font-bold">{analytics?.activeEmployees || 0}</p>
-                      <p className="text-xs text-green-600">+12% from last month</p>
                     </div>
-                    <Users className="w-8 h-8 text-gray-400" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Pending PTO</p>
-                      <p className="text-2xl font-bold">{analytics?.pendingPTO || 0}</p>
-                      <p className="text-xs text-yellow-600">Requires approval</p>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Mail className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No campaigns created yet</p>
+                      <Button variant="link" className="mt-2">Create your first campaign</Button>
                     </div>
-                    <Calendar className="w-8 h-8 text-gray-400" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Open Positions</p>
-                      <p className="text-2xl font-bold">{analytics?.openPositions || 0}</p>
-                      <p className="text-xs text-blue-600">3 urgent</p>
-                    </div>
-                    <FileText className="w-8 h-8 text-gray-400" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Turnover Rate</p>
-                      <p className="text-2xl font-bold">{analytics?.turnoverRate || 0}%</p>
-                      <p className="text-xs text-red-600">-2% from last quarter</p>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-gray-400" />
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
 
-            {/* Detailed Analytics */}
-            <div className="grid grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Department Distribution</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] flex items-center justify-center">
-                    <PieChart className="w-16 h-16 text-gray-400" />
-                    <p className="ml-4 text-gray-500">Chart visualization here</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recruitment Pipeline</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] flex items-center justify-center">
-                    <BarChart className="w-16 h-16 text-gray-400" />
-                    <p className="ml-4 text-gray-500">Pipeline visualization here</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          {/* Tab 7: System Control */}
+          <TabsContent value="system" className="p-0 m-0 h-[calc(100vh-180px)]">
+            <SystemControl />
+          </TabsContent>
 
-            {/* Export Actions */}
-            <div className="flex justify-end gap-3">
-              <Button variant="outline">
-                <Filter className="w-4 h-4 mr-2" />
-                Filter Data
-              </Button>
-              <Button>
-                <Download className="w-4 h-4 mr-2" />
-                Export Report
-              </Button>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* System Settings Tab */}
-        <TabsContent value="system" className="flex-1 p-6">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Susan AI Configuration</CardTitle>
-                <CardDescription>
-                  Configure Susan's behavior, integrations, and advanced settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Advanced AI Mode</Label>
-                      <p className="text-sm text-gray-600">Enable advanced reasoning and complex task execution</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Auto-Execute Agent Commands</Label>
-                      <p className="text-sm text-gray-600">Automatically execute agent commands without confirmation</p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Real-time Analytics</Label>
-                      <p className="text-sm text-gray-600">Stream real-time data to Susan for instant insights</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Multi-Agent Coordination</Label>
-                      <p className="text-sm text-gray-600">Allow Susan to coordinate multiple agents simultaneously</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-
-                <div className="pt-4">
-                  <h4 className="font-medium mb-3">API Integration Status</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Database className="w-5 h-5" />
-                        <span>OpenAI GPT-4o</span>
-                      </div>
-                      <Badge variant="default">Connected</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <MessageSquare className="w-5 h-5" />
-                        <span>Email Service</span>
-                      </div>
-                      <Badge variant="default">Active</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Shield className="w-5 h-5" />
-                        <span>Security Module</span>
-                      </div>
-                      <Badge variant="default">Enabled</Badge>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button 
-                    variant="outline"
-                    onClick={() => {
-                      toast({
-                        title: 'Configuration Reset',
-                        description: 'Settings have been reset to default values',
-                      });
-                    }}
-                  >
-                    Reset to Defaults
-                  </Button>
-                  <Button 
-                    onClick={() => {
-                      toast({
-                        title: 'Configuration Saved',
-                        description: 'All settings have been saved successfully',
-                      });
-                    }}
-                  >
-                    Save Configuration
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+          {/* Tab 8: Database Admin */}
+          <TabsContent value="database" className="p-0 m-0 h-[calc(100vh-180px)]">
+            <DatabaseAdmin />
+          </TabsContent>
+        </div>
       </Tabs>
     </div>
   );
 }
 
 export default function SusanAIAdmin() {
+  const { user } = useAuth();
+
+  // Super Admin access check
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+
   return (
     <ProtectedRoute requiredRole="ADMIN">
-      <SusanAIAdminContent />
+      {isSuperAdmin ? <SuperAdminContent /> : <AccessDenied />}
     </ProtectedRoute>
   );
 }

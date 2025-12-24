@@ -74,7 +74,13 @@ import {
   // HR Assignments and Performance Metrics
   hrAssignments, hrPerformanceMetrics,
   hrAssignmentSchema, insertHrAssignmentSchema,
-  hrPerformanceMetricSchema, insertHrPerformanceMetricSchema
+  hrPerformanceMetricSchema, insertHrPerformanceMetricSchema,
+  // Super Admin Control Center
+  ApiMetric, InsertApiMetric, apiMetrics,
+  FeatureToggle, InsertFeatureToggle, featureToggles,
+  SystemAuditLog, InsertSystemAuditLog, systemAuditLogs,
+  ApiAlert, InsertApiAlert, apiAlerts,
+  SqlQueryHistoryEntry, InsertSqlQueryHistory, sqlQueryHistory
 } from '@shared/schema';
 import { db } from './db';
 import { eq, and, lt, inArray, or, sql, gte, lte } from 'drizzle-orm';
@@ -184,6 +190,7 @@ export interface IStorage {
 
   // HR Agent Management
   createHrAgentConfig(data: InsertHrAgentConfig): Promise<HrAgentConfig>;
+  getHrAgentConfigById(id: string): Promise<HrAgentConfig | null>;
   getHrAgentConfigByName(name: string): Promise<HrAgentConfig | null>;
   getAllHrAgentConfigs(): Promise<HrAgentConfig[]>;
   updateHrAgentConfig(id: string, data: Partial<InsertHrAgentConfig>): Promise<HrAgentConfig>;
@@ -1042,6 +1049,11 @@ class DrizzleStorage implements IStorage {
     const id = uuidv4();
     const [config] = await db.insert(hrAgentConfigs).values({ ...data, id } as any).returning();
     return config;
+  }
+
+  async getHrAgentConfigById(id: string): Promise<HrAgentConfig | null> {
+    const [config] = await db.select().from(hrAgentConfigs).where(eq(hrAgentConfigs.id, id));
+    return config || null;
   }
 
   async getHrAgentConfigByName(name: string): Promise<HrAgentConfig | null> {
@@ -2644,6 +2656,389 @@ class DrizzleStorage implements IStorage {
   async deleteRoleEquipmentDefault(id: string): Promise<void> {
     await db.delete(roleEquipmentDefaults)
       .where(eq(roleEquipmentDefaults.id, id));
+  }
+
+  // ============================================
+  // SUPER ADMIN CONTROL CENTER METHODS
+  // ============================================
+
+  // API Metrics Methods
+  async createApiMetric(data: InsertApiMetric): Promise<ApiMetric> {
+    const id = uuidv4();
+    const [metric] = await db.insert(apiMetrics).values({ ...data, id } as any).returning();
+    return metric;
+  }
+
+  async getApiMetrics(options?: {
+    startDate?: Date;
+    endDate?: Date;
+    endpoint?: string;
+    statusCode?: number;
+    limit?: number;
+  }): Promise<ApiMetric[]> {
+    let query = db.select().from(apiMetrics);
+
+    const conditions = [];
+    if (options?.startDate) {
+      conditions.push(gte(apiMetrics.timestamp, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(apiMetrics.timestamp, options.endDate));
+    }
+    if (options?.endpoint) {
+      conditions.push(eq(apiMetrics.endpoint, options.endpoint));
+    }
+    if (options?.statusCode) {
+      conditions.push(eq(apiMetrics.statusCode, options.statusCode));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    const results = await query.orderBy(sql`${apiMetrics.timestamp} DESC`).limit(options?.limit || 1000);
+    return results;
+  }
+
+  async getApiMetricsSummary(timeWindowMinutes: number = 60): Promise<{
+    totalRequests: number;
+    errorCount: number;
+    avgResponseTime: number;
+    successRate: number;
+  }> {
+    const startTime = new Date(Date.now() - timeWindowMinutes * 60 * 1000);
+    const metrics = await this.getApiMetrics({ startDate: startTime });
+
+    const totalRequests = metrics.length;
+    const errorCount = metrics.filter(m => m.statusCode >= 400).length;
+    const avgResponseTime = totalRequests > 0
+      ? metrics.reduce((sum, m) => sum + m.responseTime, 0) / totalRequests
+      : 0;
+    const successRate = totalRequests > 0 ? ((totalRequests - errorCount) / totalRequests) * 100 : 100;
+
+    return { totalRequests, errorCount, avgResponseTime, successRate };
+  }
+
+  async getEndpointStats(timeWindowMinutes: number = 60): Promise<Array<{
+    endpoint: string;
+    method: string;
+    requestCount: number;
+    errorCount: number;
+    avgResponseTime: number;
+  }>> {
+    const startTime = new Date(Date.now() - timeWindowMinutes * 60 * 1000);
+    const metrics = await this.getApiMetrics({ startDate: startTime });
+
+    const endpointMap = new Map<string, {
+      endpoint: string;
+      method: string;
+      requests: number;
+      errors: number;
+      totalTime: number;
+    }>();
+
+    for (const m of metrics) {
+      const key = `${m.method}:${m.endpoint}`;
+      const existing = endpointMap.get(key) || {
+        endpoint: m.endpoint,
+        method: m.method,
+        requests: 0,
+        errors: 0,
+        totalTime: 0
+      };
+      existing.requests++;
+      if (m.statusCode >= 400) existing.errors++;
+      existing.totalTime += m.responseTime;
+      endpointMap.set(key, existing);
+    }
+
+    return Array.from(endpointMap.values()).map(e => ({
+      endpoint: e.endpoint,
+      method: e.method,
+      requestCount: e.requests,
+      errorCount: e.errors,
+      avgResponseTime: e.requests > 0 ? e.totalTime / e.requests : 0
+    }));
+  }
+
+  async getApiErrors(limit: number = 100): Promise<ApiMetric[]> {
+    return db.select().from(apiMetrics)
+      .where(gte(apiMetrics.statusCode, 400))
+      .orderBy(sql`${apiMetrics.timestamp} DESC`)
+      .limit(limit);
+  }
+
+  async cleanupOldApiMetrics(olderThanDays: number = 30): Promise<number> {
+    const cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    const result = await db.delete(apiMetrics)
+      .where(lt(apiMetrics.timestamp, cutoffDate));
+    return (result as any).rowCount || 0;
+  }
+
+  // Feature Toggles Methods
+  async createFeatureToggle(data: InsertFeatureToggle): Promise<FeatureToggle> {
+    const id = uuidv4();
+    const [toggle] = await db.insert(featureToggles).values({ ...data, id } as any).returning();
+    return toggle;
+  }
+
+  async getFeatureToggleById(id: string): Promise<FeatureToggle | null> {
+    const [toggle] = await db.select().from(featureToggles).where(eq(featureToggles.id, id));
+    return toggle || null;
+  }
+
+  async getFeatureToggleByKey(key: string): Promise<FeatureToggle | null> {
+    const [toggle] = await db.select().from(featureToggles).where(eq(featureToggles.featureKey, key));
+    return toggle || null;
+  }
+
+  async getAllFeatureToggles(): Promise<FeatureToggle[]> {
+    return db.select().from(featureToggles).orderBy(featureToggles.category, featureToggles.featureName);
+  }
+
+  async updateFeatureToggle(id: string, data: Partial<FeatureToggle>): Promise<FeatureToggle> {
+    const [toggle] = await db.update(featureToggles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(featureToggles.id, id))
+      .returning();
+    return toggle;
+  }
+
+  async toggleFeature(key: string, enabled: boolean, updatedBy: string): Promise<FeatureToggle | null> {
+    const toggle = await this.getFeatureToggleByKey(key);
+    if (!toggle) return null;
+    return this.updateFeatureToggle(toggle.id, { isEnabled: enabled, updatedBy });
+  }
+
+  async isFeatureEnabled(key: string): Promise<boolean> {
+    const toggle = await this.getFeatureToggleByKey(key);
+    return toggle?.isEnabled ?? true; // Default to enabled if not found
+  }
+
+  async deleteFeatureToggle(id: string): Promise<void> {
+    await db.delete(featureToggles).where(eq(featureToggles.id, id));
+  }
+
+  // System Audit Logs Methods
+  async createAuditLog(data: InsertSystemAuditLog): Promise<SystemAuditLog> {
+    const id = uuidv4();
+    const [log] = await db.insert(systemAuditLogs).values({ ...data, id } as any).returning();
+    return log;
+  }
+
+  async getAuditLogs(options?: {
+    userId?: string;
+    action?: string;
+    resourceType?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<SystemAuditLog[]> {
+    let query = db.select().from(systemAuditLogs);
+
+    const conditions = [];
+    if (options?.userId) {
+      conditions.push(eq(systemAuditLogs.userId, options.userId));
+    }
+    if (options?.action) {
+      conditions.push(eq(systemAuditLogs.action, options.action as any));
+    }
+    if (options?.resourceType) {
+      conditions.push(eq(systemAuditLogs.resourceType, options.resourceType));
+    }
+    if (options?.startDate) {
+      conditions.push(gte(systemAuditLogs.createdAt, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(systemAuditLogs.createdAt, options.endDate));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    return query.orderBy(sql`${systemAuditLogs.createdAt} DESC`).limit(options?.limit || 500);
+  }
+
+  // API Alerts Methods
+  async createApiAlert(data: InsertApiAlert): Promise<ApiAlert> {
+    const id = uuidv4();
+    const [alert] = await db.insert(apiAlerts).values({ ...data, id } as any).returning();
+    return alert;
+  }
+
+  async getApiAlertById(id: string): Promise<ApiAlert | null> {
+    const [alert] = await db.select().from(apiAlerts).where(eq(apiAlerts.id, id));
+    return alert || null;
+  }
+
+  async getAllApiAlerts(): Promise<ApiAlert[]> {
+    return db.select().from(apiAlerts).orderBy(apiAlerts.alertName);
+  }
+
+  async getActiveApiAlerts(): Promise<ApiAlert[]> {
+    return db.select().from(apiAlerts).where(eq(apiAlerts.isActive, true));
+  }
+
+  async updateApiAlert(id: string, data: Partial<ApiAlert>): Promise<ApiAlert> {
+    const [alert] = await db.update(apiAlerts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(apiAlerts.id, id))
+      .returning();
+    return alert;
+  }
+
+  async triggerAlert(id: string): Promise<ApiAlert> {
+    const [alert] = await db.update(apiAlerts)
+      .set({
+        lastTriggered: new Date(),
+        triggerCount: sql`${apiAlerts.triggerCount} + 1`
+      })
+      .where(eq(apiAlerts.id, id))
+      .returning();
+    return alert;
+  }
+
+  async deleteApiAlert(id: string): Promise<void> {
+    await db.delete(apiAlerts).where(eq(apiAlerts.id, id));
+  }
+
+  // SQL Query History Methods
+  async createSqlQueryHistory(data: InsertSqlQueryHistory): Promise<SqlQueryHistoryEntry> {
+    const id = uuidv4();
+    const [entry] = await db.insert(sqlQueryHistory).values({ ...data, id } as any).returning();
+    return entry;
+  }
+
+  async getSqlQueryHistory(options?: {
+    executedBy?: string;
+    queryType?: string;
+    success?: boolean;
+    limit?: number;
+  }): Promise<SqlQueryHistoryEntry[]> {
+    let query = db.select().from(sqlQueryHistory);
+
+    const conditions = [];
+    if (options?.executedBy) {
+      conditions.push(eq(sqlQueryHistory.executedBy, options.executedBy));
+    }
+    if (options?.queryType) {
+      conditions.push(eq(sqlQueryHistory.queryType, options.queryType as any));
+    }
+    if (options?.success !== undefined) {
+      conditions.push(eq(sqlQueryHistory.success, options.success));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    return query.orderBy(sql`${sqlQueryHistory.createdAt} DESC`).limit(options?.limit || 100);
+  }
+
+  async cleanupOldSqlHistory(olderThanDays: number = 90): Promise<number> {
+    const cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    const result = await db.delete(sqlQueryHistory)
+      .where(lt(sqlQueryHistory.createdAt, cutoffDate));
+    return (result as any).rowCount || 0;
+  }
+
+  // Database Admin Methods (for table browsing)
+  async getTableList(): Promise<Array<{ tableName: string; rowCount: number }>> {
+    const result = await db.execute(sql`
+      SELECT
+        schemaname,
+        relname as table_name,
+        n_live_tup as row_count
+      FROM pg_stat_user_tables
+      WHERE schemaname = 'public'
+      ORDER BY relname
+    `);
+    return (result.rows as any[]).map(r => ({
+      tableName: r.table_name,
+      rowCount: parseInt(r.row_count) || 0
+    }));
+  }
+
+  async getTableData(tableName: string, options?: {
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    orderDir?: 'asc' | 'desc';
+  }): Promise<{ rows: any[]; total: number }> {
+    // Validate table name to prevent SQL injection
+    const validTables = (await this.getTableList()).map(t => t.tableName);
+    if (!validTables.includes(tableName)) {
+      throw new Error(`Invalid table name: ${tableName}`);
+    }
+
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    const orderBy = options?.orderBy || 'id';
+    const orderDir = options?.orderDir || 'desc';
+
+    // Get total count
+    const countResult = await db.execute(sql.raw(`SELECT COUNT(*) as count FROM "${tableName}"`));
+    const total = parseInt((countResult.rows[0] as any)?.count) || 0;
+
+    // Get rows with pagination
+    const dataResult = await db.execute(
+      sql.raw(`SELECT * FROM "${tableName}" ORDER BY "${orderBy}" ${orderDir.toUpperCase()} LIMIT ${limit} OFFSET ${offset}`)
+    );
+
+    return { rows: dataResult.rows as any[], total };
+  }
+
+  async executeRawQuery(query: string, executedBy: string, executedByEmail: string, ipAddress?: string): Promise<{
+    rows: any[];
+    rowCount: number;
+    executionTime: number;
+  }> {
+    const startTime = Date.now();
+    let success = true;
+    let errorMessage: string | undefined;
+    let rows: any[] = [];
+    let rowCount = 0;
+
+    // Determine query type
+    const queryUpper = query.trim().toUpperCase();
+    let queryType: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'OTHER' = 'OTHER';
+    if (queryUpper.startsWith('SELECT')) queryType = 'SELECT';
+    else if (queryUpper.startsWith('INSERT')) queryType = 'INSERT';
+    else if (queryUpper.startsWith('UPDATE')) queryType = 'UPDATE';
+    else if (queryUpper.startsWith('DELETE')) queryType = 'DELETE';
+
+    // Extract table name
+    const tableMatch = query.match(/(?:FROM|INTO|UPDATE|DELETE FROM)\s+["']?(\w+)["']?/i);
+    const tableName = tableMatch?.[1] || undefined;
+
+    try {
+      const result = await db.execute(sql.raw(query));
+      rows = result.rows as any[];
+      rowCount = (result as any).rowCount || rows.length;
+    } catch (error: any) {
+      success = false;
+      errorMessage = error.message;
+      throw error;
+    } finally {
+      const executionTime = Date.now() - startTime;
+
+      // Log the query
+      await this.createSqlQueryHistory({
+        query,
+        queryType,
+        executedBy,
+        executedByEmail,
+        executionTime,
+        rowsAffected: rowCount,
+        success,
+        errorMessage,
+        tableName,
+        ipAddress
+      });
+    }
+
+    return { rows, rowCount, executionTime: Date.now() - startTime };
   }
 }
 

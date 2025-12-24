@@ -51,6 +51,8 @@ import equipmentReceiptRoutes from './routes/equipment-receipts';
 import employeePortalRoutes from './routes/employee-portal';
 import equipmentAgreementRoutes from './routes/equipment-agreements';
 import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
+import superAdminRoutes from './routes/super-admin';
+import { apiMetricsMiddleware } from './middleware/api-metrics';
 import { googleDriveService } from './services/google-drive-service';
 import { googleCalendarService } from './services/google-calendar-service';
 import { serviceAccountAuth } from './services/service-account-auth';
@@ -3115,6 +3117,9 @@ export function registerRoutes(app: express.Application) {
     next();
   });
 
+  // API Metrics middleware - capture performance data for Super Admin
+  app.use(apiMetricsMiddleware);
+
   // Mount all API routes under /api prefix
   app.use(router);
   
@@ -3211,7 +3216,10 @@ export function registerRoutes(app: express.Application) {
 
   // Mount LLM status routes
   app.use(llmStatusRoutes);
-  
+
+  // Mount Super Admin routes (Ahmed only)
+  app.use('/api/super-admin', superAdminRoutes);
+
   // Mount test harmony routes (development only)
   if (process.env.NODE_ENV !== 'production') {
     app.use(testHarmonyRoutes);

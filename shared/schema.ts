@@ -2364,6 +2364,122 @@ export const insertSusanChatSessionSchema = createInsertSchema(susanChatSessions
   updatedAt: true,
 });
 
+// ============================================================================
+// SUPER ADMIN CONTROL CENTER TABLES
+// ============================================================================
+
+// API Metrics - Track all API calls for monitoring
+export const apiMetrics = pgTable('api_metrics', {
+  id: text('id').primaryKey(),
+  endpoint: text('endpoint').notNull(),
+  method: text('method').$type<'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'>().notNull(),
+  statusCode: integer('status_code').notNull(),
+  responseTime: integer('response_time').notNull(), // milliseconds
+  userId: text('user_id'),
+  userEmail: text('user_email'),
+  ipAddress: text('ip_address'),
+  errorMessage: text('error_message'),
+  requestPath: text('request_path'),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+});
+
+export const apiMetricsSchema = createInsertSchema(apiMetrics);
+export const insertApiMetricsSchema = createInsertSchema(apiMetrics).omit({
+  id: true,
+  timestamp: true,
+});
+
+// Feature Toggles - Enable/disable features app-wide
+export const featureToggles = pgTable('feature_toggles', {
+  id: text('id').primaryKey(),
+  featureName: text('feature_name').notNull().unique(),
+  featureKey: text('feature_key').notNull().unique(), // machine-readable key
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  description: text('description'),
+  category: text('category').$type<'UI' | 'API' | 'AGENT' | 'WORKFLOW' | 'EMAIL' | 'INTEGRATION'>(),
+  updatedBy: text('updated_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const featureTogglesSchema = createInsertSchema(featureToggles);
+export const insertFeatureTogglesSchema = createInsertSchema(featureToggles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// System Audit Logs - Track all admin actions
+export const systemAuditLogs = pgTable('system_audit_logs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  userEmail: text('user_email').notNull(),
+  action: text('action').$type<'CREATE' | 'UPDATE' | 'DELETE' | 'EXECUTE' | 'LOGIN' | 'LOGOUT' | 'SQL_QUERY' | 'TOGGLE' | 'EXPORT'>().notNull(),
+  resourceType: text('resource_type').notNull(), // e.g., 'user', 'workflow', 'feature_toggle'
+  resourceId: text('resource_id'),
+  resourceName: text('resource_name'),
+  previousValue: text('previous_value'), // JSON
+  newValue: text('new_value'), // JSON
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const systemAuditLogsSchema = createInsertSchema(systemAuditLogs);
+export const insertSystemAuditLogsSchema = createInsertSchema(systemAuditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+// API Alerts - Configure alerts for API issues
+export const apiAlerts = pgTable('api_alerts', {
+  id: text('id').primaryKey(),
+  alertName: text('alert_name').notNull(),
+  alertType: text('alert_type').$type<'ERROR_RATE' | 'RESPONSE_TIME' | 'AVAILABILITY' | 'STATUS_CODE'>().notNull(),
+  endpoint: text('endpoint'), // null = all endpoints
+  threshold: real('threshold').notNull(), // percentage or milliseconds
+  operator: text('operator').$type<'GREATER_THAN' | 'LESS_THAN' | 'EQUALS'>().notNull().default('GREATER_THAN'),
+  timeWindow: integer('time_window').notNull().default(5), // minutes
+  isActive: boolean('is_active').notNull().default(true),
+  notifyEmail: text('notify_email'),
+  lastTriggered: timestamp('last_triggered'),
+  triggerCount: integer('trigger_count').notNull().default(0),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const apiAlertsSchema = createInsertSchema(apiAlerts);
+export const insertApiAlertsSchema = createInsertSchema(apiAlerts).omit({
+  id: true,
+  lastTriggered: true,
+  triggerCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// SQL Query History - Log all SQL queries for audit
+export const sqlQueryHistory = pgTable('sql_query_history', {
+  id: text('id').primaryKey(),
+  query: text('query').notNull(),
+  queryType: text('query_type').$type<'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'OTHER'>().notNull(),
+  executedBy: text('executed_by').notNull(),
+  executedByEmail: text('executed_by_email').notNull(),
+  executionTime: integer('execution_time'), // milliseconds
+  rowsAffected: integer('rows_affected'),
+  success: boolean('success').notNull(),
+  errorMessage: text('error_message'),
+  tableName: text('table_name'), // primary table affected
+  ipAddress: text('ip_address'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const sqlQueryHistorySchema = createInsertSchema(sqlQueryHistory);
+export const insertSqlQueryHistorySchema = createInsertSchema(sqlQueryHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Export Workflow types
 export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowStep = typeof workflowSteps.$inferSelect;
@@ -2394,3 +2510,15 @@ export type AttendanceCheckIn = typeof attendanceCheckIns.$inferSelect;
 export type InsertAttendanceCheckIn = typeof attendanceCheckIns.$inferInsert;
 export type SusanChatSession = typeof susanChatSessions.$inferSelect;
 export type InsertSusanChatSession = z.infer<typeof insertSusanChatSessionSchema>;
+
+// Super Admin Control Center types
+export type ApiMetric = typeof apiMetrics.$inferSelect;
+export type InsertApiMetric = z.infer<typeof insertApiMetricsSchema>;
+export type FeatureToggle = typeof featureToggles.$inferSelect;
+export type InsertFeatureToggle = z.infer<typeof insertFeatureTogglesSchema>;
+export type SystemAuditLog = typeof systemAuditLogs.$inferSelect;
+export type InsertSystemAuditLog = z.infer<typeof insertSystemAuditLogsSchema>;
+export type ApiAlert = typeof apiAlerts.$inferSelect;
+export type InsertApiAlert = z.infer<typeof insertApiAlertsSchema>;
+export type SqlQueryHistoryEntry = typeof sqlQueryHistory.$inferSelect;
+export type InsertSqlQueryHistory = z.infer<typeof insertSqlQueryHistorySchema>;
