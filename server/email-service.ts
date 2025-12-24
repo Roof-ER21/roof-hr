@@ -206,7 +206,7 @@ class EmailService {
           try {
             await storage.updateEmailLog(emailLogId, {
               status: 'SENT',
-              sentAt: new Date().toISOString(),
+              sentAt: new Date(),
             });
           } catch (logError) {
             console.error('Failed to update email log:', logError);
@@ -305,7 +305,7 @@ class EmailService {
           try {
             await storage.updateEmailLog(emailLogId, {
               status: 'SENT',
-              sentAt: new Date().toISOString(),
+              sentAt: new Date(),
             });
           } catch (logError) {
             console.error('[Email] Failed to update email log:', logError);
