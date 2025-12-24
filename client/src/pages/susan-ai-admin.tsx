@@ -15,7 +15,7 @@ import {
   BrainCircuit, Shield, Zap, Database, MessageSquare,
   Loader2, ArrowUp, ArrowDown, Terminal, Code, Workflow,
   Mail, Bell, Lock, Server, Globe, Cpu, HardDrive,
-  GitBranch, MonitorSpeaker, LayoutDashboard, Table2
+  GitBranch, MonitorSpeaker, LayoutDashboard, Table2, Wrench
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ import { format } from 'date-fns';
 import { ApiMonitor } from '@/components/admin/api-monitor';
 import { DatabaseAdmin } from '@/components/admin/database-admin';
 import { SystemControl } from '@/components/admin/system-control';
+import { FixCenter } from '@/components/admin/fix-center';
 
 // Super Admin Email - ONLY this user can access
 const SUPER_ADMIN_EMAIL = 'ahmed.mahmoud@theroofdocs.com';
@@ -367,21 +368,21 @@ Use natural language or direct commands. I have unrestricted access to execute a
         </div>
       </div>
 
-      {/* Main Content with 8 Tabs */}
+      {/* Main Content with 9 Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <div className="bg-white dark:bg-gray-800 border-b px-6 py-2">
-          <TabsList className="grid w-full grid-cols-8 h-auto">
+          <TabsList className="grid w-full grid-cols-9 h-auto">
             <TabsTrigger value="command-center" className="gap-1.5 text-xs py-2">
               <Terminal className="w-3.5 h-3.5" />
               Command
             </TabsTrigger>
             <TabsTrigger value="api-monitor" className="gap-1.5 text-xs py-2">
               <MonitorSpeaker className="w-3.5 h-3.5" />
-              API Monitor
+              API
             </TabsTrigger>
             <TabsTrigger value="agents" className="gap-1.5 text-xs py-2">
               <Zap className="w-3.5 h-3.5" />
-              HR Agents
+              Agents
             </TabsTrigger>
             <TabsTrigger value="workflows" className="gap-1.5 text-xs py-2">
               <Workflow className="w-3.5 h-3.5" />
@@ -402,6 +403,10 @@ Use natural language or direct commands. I have unrestricted access to execute a
             <TabsTrigger value="database" className="gap-1.5 text-xs py-2">
               <Database className="w-3.5 h-3.5" />
               Database
+            </TabsTrigger>
+            <TabsTrigger value="fix-center" className="gap-1.5 text-xs py-2 text-green-600">
+              <Wrench className="w-3.5 h-3.5" />
+              Fix
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1120,6 +1125,11 @@ Use natural language or direct commands. I have unrestricted access to execute a
           {/* Tab 8: Database Admin */}
           <TabsContent value="database" className="p-0 m-0 h-[calc(100vh-180px)]">
             <DatabaseAdmin />
+          </TabsContent>
+
+          {/* Tab 9: One-Click Fix Center */}
+          <TabsContent value="fix-center" className="p-0 m-0 h-[calc(100vh-180px)] overflow-auto">
+            <FixCenter />
           </TabsContent>
         </div>
       </Tabs>
