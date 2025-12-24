@@ -1391,7 +1391,8 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
               </ul>
               <p>You will receive another email once your request has been reviewed.</p>
               <p>Best regards,<br>The HR Team</p>
-            `
+            `,
+            fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
           });
           console.log(`[PTO Email] Employee confirmation email ${employeeEmailSent ? 'SENT' : 'FAILED (dev mode?)'} to: ${user.email}`);
         } catch (empEmailErr) {
@@ -1417,7 +1418,8 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
                   <li><strong>Reason:</strong> ${req.body.reason || 'Not specified'}</li>
                 </ul>
                 <p>Please review and approve/deny this request in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
-              `
+              `,
+              fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
             });
             if (sent) {
               managerEmailsSent++;
