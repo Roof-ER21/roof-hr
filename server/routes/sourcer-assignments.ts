@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { emailService } from '../email-service';
 import { v4 as uuidv4 } from 'uuid';
 import { getNextAvailableColor, DEFAULT_SCREENER_COLOR } from '../../shared/constants/screener-colors';
+import { isLeadSourcer, isSourcer } from '../../shared/constants/roles';
 
 const router = express.Router();
 
@@ -37,10 +38,41 @@ function requireManager(req: any, res: any, next: any) {
 }
 
 /**
+ * Middleware for candidate assignment and bulk actions
+ * Allows managers AND lead sourcers (Ryan Ferguson)
+ */
+function requireManagerOrLeadSourcer(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  // Ahmed always has access
+  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
+    return next();
+  }
+
+  // Lead sourcers (Ryan) can perform these actions
+  if (isLeadSourcer(req.user)) {
+    return next();
+  }
+
+  const managerRoles = [
+    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
+    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'
+  ];
+
+  if (!managerRoles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Manager or lead sourcer access required' });
+  }
+
+  next();
+}
+
+/**
  * POST /api/candidates/:id/assign-sourcer
  * Assign a sourcer to a specific candidate
  */
-router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManager, async (req: any, res) => {
+router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManagerOrLeadSourcer, async (req: any, res) => {
   try {
     const user = req.user!;
     const candidateId = req.params.id;
@@ -326,7 +358,7 @@ router.delete('/api/assignments/:id', requireAuth, requireManager, async (req, r
  * POST /api/candidates/bulk-assign
  * Bulk assign candidates to sourcers using round-robin algorithm
  */
-router.post('/api/candidates/bulk-assign', requireAuth, requireManager, async (req: any, res) => {
+router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSourcer, async (req: any, res) => {
   try {
     const user = req.user!;
     const { candidateIds, sourcerIds, sendNotifications = true } = req.body;
@@ -448,14 +480,19 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManager, async (r
  * GET /api/sourcers/available
  * Get all available sourcers (users with SOURCER role or recruiting-capable roles)
  */
-router.get('/api/sourcers/available', requireAuth, requireManager, async (req, res) => {
+router.get('/api/sourcers/available', requireAuth, requireManagerOrLeadSourcer, async (req, res) => {
   try {
     const allUsers = await storage.getAllUsers();
 
     // Filter to users who can be sourcers
+    // Include: designated sourcers (Tim, Sima, Ryan) + role-based sourcers
     const sourcers = allUsers.filter(user =>
-      user.isActive &&
-      ['SOURCER', 'HR_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'ADMIN'].includes(user.role)
+      user.isActive && (
+        // Users designated as sourcers by email
+        isSourcer(user) ||
+        // Users with recruiting-capable roles
+        ['SOURCER', 'HR_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'ADMIN'].includes(user.role)
+      )
     );
 
     // Get workload for each sourcer

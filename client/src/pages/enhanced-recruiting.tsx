@@ -18,6 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   Users, UserPlus, UserCheck, Calendar, Phone, Mail, FileText,
   Clock, ChevronRight, CheckCircle, XCircle, AlertCircle,
@@ -845,6 +846,16 @@ function ResumeUploaderContent() {
 export default function EnhancedRecruiting() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const {
+    isLimitedSourcer,
+    isLeadSourcer,
+    isSourcer,
+    canBulkManageCandidates,
+    canAssignCandidates,
+    canAccessEmailCampaigns,
+    canAccessWorkflowManagement,
+    canSeeAllRecruitmentStats,
+  } = usePermissions();
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [filterSourcer, setFilterSourcer] = useState<string>('ALL');
@@ -1499,33 +1510,42 @@ export default function EnhancedRecruiting() {
                   <Calendar className="mr-1 h-3 w-3" />
                   Interviews
                 </Button>
-                <Button 
-                  variant={viewMode === 'campaigns' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('campaigns')}
-                >
-                  <Mail className="mr-1 h-3 w-3" />
-                  Email Campaigns
-                </Button>
-                <Button
-                  variant={viewMode === 'workflows' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('workflows')}
-                >
-                  <Zap className="mr-1 h-3 w-3" />
-                  Workflows
-                </Button>
-                <Button
-                  variant="default"
-                  size="default"
-                  onClick={() => setViewMode('resume-uploads')}
-                  className={viewMode === 'resume-uploads'
-                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg'
-                    : 'bg-green-500 hover:bg-green-600 text-white shadow-md'}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Resumes
-                </Button>
+                {/* Email campaigns - managers only, not for sourcers */}
+                {canAccessEmailCampaigns() && (
+                  <Button
+                    variant={viewMode === 'campaigns' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('campaigns')}
+                  >
+                    <Mail className="mr-1 h-3 w-3" />
+                    Email Campaigns
+                  </Button>
+                )}
+                {/* Workflows - managers only, not for sourcers */}
+                {canAccessWorkflowManagement() && (
+                  <Button
+                    variant={viewMode === 'workflows' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('workflows')}
+                  >
+                    <Zap className="mr-1 h-3 w-3" />
+                    Workflows
+                  </Button>
+                )}
+                {/* Resume uploads - managers and lead sourcers only */}
+                {canBulkManageCandidates() && (
+                  <Button
+                    variant="default"
+                    size="default"
+                    onClick={() => setViewMode('resume-uploads')}
+                    className={viewMode === 'resume-uploads'
+                      ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg'
+                      : 'bg-green-500 hover:bg-green-600 text-white shadow-md'}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Resumes
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -1562,25 +1582,28 @@ export default function EnhancedRecruiting() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterSourcer} onValueChange={setFilterSourcer}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Filter by sourcer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Sourcers</SelectItem>
-                  {sourcers.map((sourcer) => (
-                    <SelectItem key={sourcer.id} value={sourcer.id}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
-                        />
-                        <span>{sourcer.firstName} {sourcer.lastName}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Sourcer filter - only show if user can see all candidates */}
+              {!isLimitedSourcer() && (
+                <Select value={filterSourcer} onValueChange={setFilterSourcer}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Filter by sourcer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Sourcers</SelectItem>
+                    {sourcers.map((sourcer) => (
+                      <SelectItem key={sourcer.id} value={sourcer.id}>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                          />
+                          <span>{sourcer.firstName} {sourcer.lastName}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Content based on view mode */}

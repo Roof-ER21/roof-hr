@@ -6,6 +6,12 @@ import {
   isSystemAdmin,
   isAdmin as isAdminRole,
   isManager as isManagerRole,
+  LIMITED_SOURCER_EMAILS,
+  LEAD_SOURCER_EMAILS,
+  ALL_SOURCER_EMAILS,
+  isLimitedSourcer as isLimitedSourcerFn,
+  isLeadSourcer as isLeadSourcerFn,
+  isSourcer as isSourcerFn,
 } from '@shared/constants/roles';
 
 export interface Permission {
@@ -124,6 +130,105 @@ export const usePermissions = () => {
     return role === 'EMPLOYEE' || role === 'SALES_REP' || role === 'FIELD_TECH' || role === 'CONTRACTOR';
   };
 
+  // ============================================================================
+  // SOURCER ROLE CHECKS
+  // ============================================================================
+
+  /**
+   * Check if user is a limited sourcer (Tim Danelle, Sima Popal)
+   * Limited sourcers can only see candidates assigned to them
+   */
+  const isLimitedSourcer = (): boolean => {
+    if (!user) return false;
+    return isLimitedSourcerFn(user);
+  };
+
+  /**
+   * Check if user is a lead sourcer (Ryan Ferguson)
+   * Lead sourcers can see all candidates, bulk import/assign, assign to others
+   */
+  const isLeadSourcer = (): boolean => {
+    if (!user) return false;
+    return isLeadSourcerFn(user);
+  };
+
+  /**
+   * Check if user is any type of sourcer
+   */
+  const isSourcer = (): boolean => {
+    if (!user) return false;
+    return isSourcerFn(user);
+  };
+
+  // ============================================================================
+  // SOURCER PERMISSION HELPERS
+  // ============================================================================
+
+  /**
+   * Can user see all candidates (managers + lead sourcers)
+   */
+  const canSeeAllCandidates = (): boolean => {
+    if (!user) return false;
+    if (isManager()) return true;
+    if (isLeadSourcer()) return true;
+    return false;
+  };
+
+  /**
+   * Can user perform bulk actions (bulk assign, bulk import)
+   * Managers + lead sourcers can do this
+   */
+  const canBulkManageCandidates = (): boolean => {
+    if (!user) return false;
+    if (isManager()) return true;
+    if (isLeadSourcer()) return true;
+    return false;
+  };
+
+  /**
+   * Can user assign candidates to others
+   * Managers + lead sourcers can do this
+   */
+  const canAssignCandidates = (): boolean => {
+    if (!user) return false;
+    if (isManager()) return true;
+    if (isLeadSourcer()) return true;
+    return false;
+  };
+
+  /**
+   * Can user access email campaigns
+   * Only managers (not sourcers)
+   */
+  const canAccessEmailCampaigns = (): boolean => {
+    if (!user) return false;
+    if (isSourcer()) return false; // Sourcers don't get email campaigns
+    return isManager();
+  };
+
+  /**
+   * Can user access workflow management
+   * Only managers (not sourcers)
+   */
+  const canAccessWorkflowManagement = (): boolean => {
+    if (!user) return false;
+    if (isSourcer()) return false; // Sourcers don't get workflow management
+    return isManager();
+  };
+
+  /**
+   * Can user see all recruitment stats
+   * Managers + lead sourcers can see all stats
+   * Limited sourcers only see their own stats
+   */
+  const canSeeAllRecruitmentStats = (): boolean => {
+    if (!user) return false;
+    if (isLimitedSourcer()) return false;
+    if (isManager()) return true;
+    if (isLeadSourcer()) return true;
+    return false;
+  };
+
   return {
     hasPermission,
     canViewResource,
@@ -134,7 +239,20 @@ export const usePermissions = () => {
     isAdmin,
     isManager,
     isEmployee,
+    // Sourcer role checks
+    isLimitedSourcer,
+    isLeadSourcer,
+    isSourcer,
+    // Sourcer permission helpers
+    canSeeAllCandidates,
+    canBulkManageCandidates,
+    canAssignCandidates,
+    canAccessEmailCampaigns,
+    canAccessWorkflowManagement,
+    canSeeAllRecruitmentStats,
+    // User info
     userRole: user?.role,
     userEmail: user?.email,
+    userId: user?.id,
   };
 };

@@ -239,6 +239,72 @@ export function canEditPtoPolicies(user: { role?: string; email?: string } | nul
 }
 
 // ============================================================================
+// RECRUITMENT SOURCER ROLES
+// ============================================================================
+// Limited Sourcers - can only see candidates assigned to them
+export const LIMITED_SOURCER_EMAILS = [
+  'jobs@theroofdocs.com',        // Tim Danelle
+  'sima.popal@theroofdocs.com',  // Sima Popal
+];
+
+// Lead Sourcer - can see all candidates, bulk import/assign, assign to others
+export const LEAD_SOURCER_EMAILS = [
+  'careers@theroofdocs.com',     // Ryan Ferguson
+];
+
+// All sourcers combined
+export const ALL_SOURCER_EMAILS = [
+  ...LIMITED_SOURCER_EMAILS,
+  ...LEAD_SOURCER_EMAILS,
+];
+
+/**
+ * Check if user is a limited sourcer (can only see assigned candidates)
+ */
+export function isLimitedSourcer(user: { email?: string } | null): boolean {
+  if (!user?.email) return false;
+  return LIMITED_SOURCER_EMAILS.includes(user.email.toLowerCase());
+}
+
+/**
+ * Check if user is a lead sourcer (can see all, bulk import/assign, assign to others)
+ */
+export function isLeadSourcer(user: { email?: string } | null): boolean {
+  if (!user?.email) return false;
+  return LEAD_SOURCER_EMAILS.includes(user.email.toLowerCase());
+}
+
+/**
+ * Check if user is any type of sourcer
+ */
+export function isSourcer(user: { email?: string } | null): boolean {
+  if (!user?.email) return false;
+  return ALL_SOURCER_EMAILS.includes(user.email.toLowerCase());
+}
+
+/**
+ * Check if user can perform bulk actions (import/assign)
+ * Lead sourcers and managers can do this
+ */
+export function canBulkManageCandidates(user: { email?: string; role?: string } | null): boolean {
+  if (!user) return false;
+  if (isLeadSourcer(user)) return true;
+  if (isManager(user.role)) return true;
+  return false;
+}
+
+/**
+ * Check if user can assign candidates to others
+ * Lead sourcers and managers can do this
+ */
+export function canAssignCandidates(user: { email?: string; role?: string } | null): boolean {
+  if (!user) return false;
+  if (isLeadSourcer(user)) return true;
+  if (isManager(user.role)) return true;
+  return false;
+}
+
+// ============================================================================
 // EMPLOYMENT TYPE CHECKS
 // ============================================================================
 // Employment types that don't receive PTO by default

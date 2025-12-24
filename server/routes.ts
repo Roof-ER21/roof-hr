@@ -1644,8 +1644,17 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
     const managerRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER',
                           'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
 
-    // Sourcers only see their assigned candidates (not unassigned ones)
-    if (!managerRoles.includes(user.role)) {
+    // Import sourcer role checks
+    const { isLimitedSourcer, isLeadSourcer } = await import('../shared/constants/roles');
+
+    // Determine who can see all candidates:
+    // - Managers see all
+    // - Lead sourcers (Ryan) see all
+    // - Limited sourcers (Tim/Sima) only see their assigned candidates
+    const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user);
+
+    if (!canSeeAllCandidates) {
+      // Limited sourcers and others only see their assigned candidates
       candidates = candidates.filter((c: any) => c.assignedTo === user.id);
     }
 
