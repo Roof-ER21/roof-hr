@@ -116,15 +116,15 @@ export default function OrgChart() {
     if (execType === 'oliver') {
       cardStyle = 'border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/20';
       avatarStyle = 'ring-2 ring-amber-500';
-      badgeContent = <Badge className="bg-amber-500 text-white text-xs">CEO</Badge>;
+      badgeContent = <Badge className="bg-amber-500 text-white text-xs">Owner</Badge>;
     } else if (execType === 'reese') {
       cardStyle = 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20';
       avatarStyle = 'ring-2 ring-blue-500';
-      badgeContent = <Badge className="bg-blue-500 text-white text-xs">Sales</Badge>;
+      badgeContent = <Badge className="bg-blue-500 text-white text-xs">Director of Sales</Badge>;
     } else if (execType === 'ford') {
       cardStyle = 'border-2 border-green-500 bg-green-50 dark:bg-green-900/20';
       avatarStyle = 'ring-2 ring-green-500';
-      badgeContent = <Badge className="bg-green-500 text-white text-xs">Operations</Badge>;
+      badgeContent = <Badge className="bg-green-500 text-white text-xs">General Manager</Badge>;
     } else if (isSalesRep(user)) {
       cardStyle = 'border-l-4 border-l-blue-400 bg-white dark:bg-gray-800';
     } else {
@@ -266,7 +266,7 @@ export default function OrgChart() {
           {/* Legend */}
           <div className="mt-4 p-3 bg-muted/50 rounded-md">
             <p className="text-xs text-muted-foreground">
-              <strong>Structure:</strong> Oliver Brown (CEO), Reese Samala (Sales), and Ford Barsi (Operations) lead the company together.
+              <strong>Structure:</strong> Oliver Brown (Owner), Reese Samala (Director of Sales), and Ford Barsi (General Manager) lead the company together.
             </p>
           </div>
         </CardContent>
