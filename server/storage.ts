@@ -1606,7 +1606,107 @@ class DrizzleStorage implements IStorage {
       .returning();
     return log;
   }
-  
+
+  // Onboarding Workflow Methods
+  async createOnboardingWorkflow(data: InsertOnboardingWorkflow): Promise<OnboardingWorkflow> {
+    const id = uuidv4();
+    const [workflow] = await db.insert(onboardingWorkflows).values({ ...data, id }).returning();
+    return workflow;
+  }
+
+  async getOnboardingWorkflowById(id: string): Promise<OnboardingWorkflow | null> {
+    const [workflow] = await db.select().from(onboardingWorkflows).where(eq(onboardingWorkflows.id, id));
+    return workflow || null;
+  }
+
+  async getAllOnboardingWorkflows(): Promise<OnboardingWorkflow[]> {
+    return await db.select().from(onboardingWorkflows);
+  }
+
+  async updateOnboardingWorkflow(id: string, data: Partial<OnboardingWorkflow>): Promise<OnboardingWorkflow | null> {
+    const [workflow] = await db.update(onboardingWorkflows)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(onboardingWorkflows.id, id))
+      .returning();
+    return workflow || null;
+  }
+
+  // Onboarding Step Methods
+  async createOnboardingStep(data: InsertOnboardingStep): Promise<OnboardingStep> {
+    const id = uuidv4();
+    const [step] = await db.insert(onboardingSteps).values({ ...data, id }).returning();
+    return step;
+  }
+
+  async getOnboardingStepById(id: string): Promise<OnboardingStep | null> {
+    const [step] = await db.select().from(onboardingSteps).where(eq(onboardingSteps.id, id));
+    return step || null;
+  }
+
+  async getOnboardingStepsByWorkflowId(workflowId: string): Promise<OnboardingStep[]> {
+    return await db.select().from(onboardingSteps).where(eq(onboardingSteps.workflowId, workflowId));
+  }
+
+  async updateOnboardingStep(id: string, data: Partial<OnboardingStep>): Promise<OnboardingStep | null> {
+    const [step] = await db.update(onboardingSteps)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(onboardingSteps.id, id))
+      .returning();
+    return step || null;
+  }
+
+  // Analytics Report Methods
+  async createAnalyticsReport(data: InsertAnalyticsReport): Promise<AnalyticsReport> {
+    const id = uuidv4();
+    const [report] = await db.insert(analyticsReports).values({ ...data, id }).returning();
+    return report;
+  }
+
+  async getAnalyticsReportById(id: string): Promise<AnalyticsReport | null> {
+    const [report] = await db.select().from(analyticsReports).where(eq(analyticsReports.id, id));
+    return report || null;
+  }
+
+  async getAllAnalyticsReports(): Promise<AnalyticsReport[]> {
+    return await db.select().from(analyticsReports);
+  }
+
+  async updateAnalyticsReport(id: string, data: Partial<AnalyticsReport>): Promise<AnalyticsReport | null> {
+    const [report] = await db.update(analyticsReports)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(analyticsReports.id, id))
+      .returning();
+    return report || null;
+  }
+
+  // Report History Methods
+  async createReportHistory(data: InsertReportHistory): Promise<ReportHistory> {
+    const id = uuidv4();
+    const [history] = await db.insert(reportHistory).values({ ...data, id }).returning();
+    return history;
+  }
+
+  async getReportHistoryById(id: string): Promise<ReportHistory | null> {
+    const [history] = await db.select().from(reportHistory).where(eq(reportHistory.id, id));
+    return history || null;
+  }
+
+  async getReportHistoryByReportId(reportId: string): Promise<ReportHistory[]> {
+    return await db.select().from(reportHistory).where(eq(reportHistory.reportId, reportId));
+  }
+
+  async getAllReportHistory(): Promise<ReportHistory[]> {
+    return await db.select().from(reportHistory);
+  }
+
+  async updateReportHistory(id: string, data: Partial<ReportHistory>): Promise<ReportHistory | null> {
+    const [history] = await db.update(reportHistory)
+      .set(data)
+      .where(eq(reportHistory.id, id))
+      .returning();
+    return history || null;
+  }
+
   // Workflow Methods
   async createWorkflow(data: any): Promise<any> {
     const id = uuidv4();

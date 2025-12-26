@@ -2632,3 +2632,162 @@ export type AiEvaluation = typeof aiEvaluations.$inferSelect;
 export type InsertAiEvaluation = z.infer<typeof insertAiEvaluationsSchema>;
 export type AgentInteraction = typeof agentInteractions.$inferSelect;
 export type InsertAgentInteraction = z.infer<typeof insertAgentInteractionsSchema>;
+
+// ============== BATCH 2 FEATURE TABLES ==============
+
+// Meeting Rooms - physical room booking with capacity and amenities
+export const meetingRooms = pgTable('meeting_rooms', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  location: text('location'),
+  capacity: integer('capacity').notNull().default(10),
+  amenities: text('amenities'), // JSON: ["projector", "whiteboard", "video", "phone"]
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const meetingRoomsSchema = createInsertSchema(meetingRooms);
+export const insertMeetingRoomsSchema = createInsertSchema(meetingRooms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Meetings - meeting scheduling
+export const meetings = pgTable('meetings', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  type: text('type').notNull(), // TEAM, DEPARTMENT, ONE_ON_ONE, ALL_HANDS, TRAINING, INTERVIEW
+  roomId: text('room_id'),
+  organizerId: text('organizer_id').notNull(),
+  startTime: timestamp('start_time').notNull(),
+  endTime: timestamp('end_time').notNull(),
+  isRecurring: boolean('is_recurring').notNull().default(false),
+  recurringPattern: text('recurring_pattern'), // JSON for recurring rules
+  virtualLink: text('virtual_link'),
+  agenda: text('agenda'),
+  status: text('status').notNull().default('scheduled'), // scheduled, in_progress, completed, cancelled
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const meetingsSchema = createInsertSchema(meetings);
+export const insertMeetingsSchema = createInsertSchema(meetings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Meeting Attendees - RSVP tracking
+export const meetingAttendees = pgTable('meeting_attendees', {
+  id: text('id').primaryKey(),
+  meetingId: text('meeting_id').notNull(),
+  userId: text('user_id').notNull(),
+  rsvpStatus: text('rsvp_status').notNull().default('pending'), // pending, accepted, declined, tentative
+  respondedAt: timestamp('responded_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const meetingAttendeesSchema = createInsertSchema(meetingAttendees);
+export const insertMeetingAttendeesSchema = createInsertSchema(meetingAttendees).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Onboarding Templates - department-specific onboarding task templates
+export const onboardingTemplates = pgTable('onboarding_templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  department: text('department'),
+  description: text('description'),
+  tasks: text('tasks').notNull(), // JSON array of task definitions [{title, description, dueInDays, assigneeType}]
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const onboardingTemplatesSchema = createInsertSchema(onboardingTemplates);
+export const insertOnboardingTemplatesSchema = createInsertSchema(onboardingTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Onboarding Instances - individual employee onboarding progress
+export const onboardingInstances = pgTable('onboarding_instances', {
+  id: text('id').primaryKey(),
+  templateId: text('template_id').notNull(),
+  employeeId: text('employee_id').notNull(),
+  assignedBy: text('assigned_by').notNull(),
+  status: text('status').notNull().default('in_progress'), // in_progress, completed, cancelled
+  progress: text('progress'), // JSON: {completedTaskIds: [], notes: {}}
+  startDate: timestamp('start_date').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const onboardingInstancesSchema = createInsertSchema(onboardingInstances);
+export const insertOnboardingInstancesSchema = createInsertSchema(onboardingInstances).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Scheduled Reports - automatic report generation
+export const scheduledReports = pgTable('scheduled_reports', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  reportType: text('report_type').notNull(), // RECRUITING, PTO, ATTENDANCE, PERFORMANCE, CUSTOM
+  schedule: text('schedule').notNull(), // cron expression: "0 9 * * MON" (9am every Monday)
+  recipients: text('recipients').notNull(), // JSON array of email addresses
+  filters: text('filters'), // JSON report filters/parameters
+  format: text('format').notNull().default('PDF'), // PDF, CSV, EXCEL
+  isActive: boolean('is_active').notNull().default(true),
+  lastRunAt: timestamp('last_run_at'),
+  nextRunAt: timestamp('next_run_at'),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const scheduledReportsSchema = createInsertSchema(scheduledReports);
+export const insertScheduledReportsSchema = createInsertSchema(scheduledReports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Report Executions - track report generation history
+export const reportExecutions = pgTable('report_executions', {
+  id: text('id').primaryKey(),
+  scheduledReportId: text('scheduled_report_id').notNull(),
+  status: text('status').notNull().default('pending'), // pending, running, completed, failed
+  fileUrl: text('file_url'),
+  error: text('error'),
+  executedAt: timestamp('executed_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+});
+
+export const reportExecutionsSchema = createInsertSchema(reportExecutions);
+export const insertReportExecutionsSchema = createInsertSchema(reportExecutions).omit({
+  id: true,
+  executedAt: true,
+});
+
+// Batch 2 Types
+export type MeetingRoom = typeof meetingRooms.$inferSelect;
+export type InsertMeetingRoom = typeof meetingRooms.$inferInsert;
+export type Meeting = typeof meetings.$inferSelect;
+export type InsertMeeting = typeof meetings.$inferInsert;
+export type MeetingAttendee = typeof meetingAttendees.$inferSelect;
+export type InsertMeetingAttendee = typeof meetingAttendees.$inferInsert;
+export type OnboardingTemplate = typeof onboardingTemplates.$inferSelect;
+export type InsertOnboardingTemplate = typeof onboardingTemplates.$inferInsert;
+export type OnboardingInstance = typeof onboardingInstances.$inferSelect;
+export type InsertOnboardingInstance = typeof onboardingInstances.$inferInsert;
+export type ScheduledReport = typeof scheduledReports.$inferSelect;
+export type InsertScheduledReport = typeof scheduledReports.$inferInsert;
+export type ReportExecution = typeof reportExecutions.$inferSelect;
+export type InsertReportExecution = typeof reportExecutions.$inferInsert;

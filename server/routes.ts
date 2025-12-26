@@ -57,6 +57,10 @@ import candidateImportLogsRoutes from './routes/candidate-import-logs';
 import aiEvaluationsRoutes from './routes/ai-evaluations';
 import recruitmentBotConversationsRoutes from './routes/recruitment-bot-conversations';
 import agentInteractionsRoutes from './routes/agent-interactions';
+import onboardingTemplatesRoutes from './routes/onboarding-templates';
+import scheduledReportsRoutes from './routes/scheduled-reports';
+import meetingRoomsRoutes from './routes/meeting-rooms';
+import meetingsRoutes from './routes/meetings';
 import { apiMetricsMiddleware } from './middleware/api-metrics';
 import { googleDriveService } from './services/google-drive-service';
 import { googleCalendarService } from './services/google-calendar-service';
@@ -3239,6 +3243,18 @@ export function registerRoutes(app: express.Application) {
 
   // Mount Agent Interactions routes
   app.use(agentInteractionsRoutes);
+
+  // Mount Onboarding Templates routes
+  app.use(onboardingTemplatesRoutes);
+
+  // Mount Scheduled Reports routes
+  app.use(scheduledReportsRoutes);
+
+  // Mount Meeting Rooms routes
+  app.use('/api/meeting-rooms', meetingRoomsRoutes);
+
+  // Mount Meetings routes
+  app.use('/api/meetings', meetingsRoutes);
 
   // Mount test harmony routes (development only)
   if (process.env.NODE_ENV !== 'production') {

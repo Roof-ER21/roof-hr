@@ -38,6 +38,9 @@ import EquipmentReturnForm from '@/pages/equipment-return-form';
 import EmployeeDashboard from '@/pages/employee-dashboard';
 import TeamDirectory from '@/pages/team-directory';
 import TeamDashboard from '@/pages/team-dashboard';
+import MeetingRooms from '@/pages/MeetingRooms';
+import OnboardingTemplates from '@/pages/OnboardingTemplates';
+import ScheduledReports from '@/pages/ScheduledReports';
 import { SusanFloatingOrb } from '@/components/susan-ai/floating-orb';
 import { OnboardingTour } from '@/components/OnboardingTour';
 import { useEffect } from 'react';
@@ -118,6 +121,9 @@ function AuthenticatedRoutes() {
         <Route path="/my-portal" element={<EmployeeDashboard />} />
         <Route path="/team-directory" element={<TeamDirectory />} />
         <Route path="/team-dashboard" element={<TeamDashboard />} />
+        <Route path="/meeting-rooms" element={<MeetingRooms />} />
+        <Route path="/onboarding-templates" element={<OnboardingTemplates />} />
+        <Route path="/scheduled-reports" element={<ScheduledReports />} />
         <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
       </Routes>
       <SusanFloatingOrb />

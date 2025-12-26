@@ -33,7 +33,11 @@ import {
   Cloud,
   Clock,
   Upload,
-  UserCircle
+  UserCircle,
+  DoorOpen,
+  ClipboardList,
+  FileBarChart,
+  GitBranch
 } from 'lucide-react';
 
 const navigation = [
@@ -79,8 +83,20 @@ const navigation = [
     roles: MANAGER_ROLES,
     children: [
       { name: 'Employee Directory', href: '/employees', icon: Users, roles: MANAGER_ROLES },
+      { name: 'Org Chart', href: '/team-directory', icon: GitBranch, roles: MANAGER_ROLES },
+      { name: 'Onboarding', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES },
       { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: MANAGER_ROLES },
       { name: 'Territories', href: '/territories', icon: MapPin, roles: MANAGER_ROLES }
+    ]
+  },
+  {
+    name: 'Facilities',
+    href: '/meeting-rooms',
+    icon: DoorOpen,
+    roles: MANAGER_ROLES,
+    children: [
+      { name: 'Meeting Rooms', href: '/meeting-rooms', icon: DoorOpen, roles: MANAGER_ROLES },
+      { name: 'Room Calendar', href: '/meeting-rooms', icon: Calendar, roles: ALL_ROLES }
     ]
   },
   {
@@ -96,6 +112,7 @@ const navigation = [
   { name: 'Reviews', href: '/reviews', icon: Video, roles: MANAGER_ROLES },
   { name: 'Attendance', href: '/attendance', icon: Clock, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
   { name: 'Google Integration', href: '/google-integration', icon: Cloud, roles: ADMIN_ROLES },
+  { name: 'Scheduled Reports', href: '/scheduled-reports', icon: FileBarChart, roles: ADMIN_ROLES },
   { name: 'Settings', href: '/settings', icon: Settings, roles: MANAGER_ROLES },
 ];
 
@@ -107,7 +124,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting', 'Facilities']);
 
   const toggleExpanded = (name: string) => {
     setExpandedItems(prev => 
