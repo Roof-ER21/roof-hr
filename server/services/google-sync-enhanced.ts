@@ -510,12 +510,30 @@ class GoogleSyncEnhanced extends EventEmitter {
   async syncToolsInventory() {
     const op = this.syncOperations.get('tools-sync')!;
     if (op.status === 'syncing') return;
-    
+
     op.status = 'syncing';
-    
+
     try {
       // Get tools from database
       const dbTools = await storage.getAllTools();
+
+      // Safety check: limit tools to prevent Google Sheets cell limit errors
+      const MAX_TOOLS_FOR_SYNC = 500;
+      if (dbTools.length > MAX_TOOLS_FOR_SYNC) {
+        console.warn(`[Enhanced Google Sync] Warning: ${dbTools.length} tools in database exceeds limit of ${MAX_TOOLS_FOR_SYNC}. Only syncing active tools.`);
+        // Filter to only active tools to reduce data size
+        const activeTools = dbTools.filter(t => t.isActive);
+        if (activeTools.length > MAX_TOOLS_FOR_SYNC) {
+          console.error(`[Enhanced Google Sync] Too many active tools (${activeTools.length}). Skipping tools sync to prevent Google Sheets errors.`);
+          op.status = 'error';
+          op.error = `Too many tools: ${activeTools.length} exceeds limit`;
+          return;
+        }
+        dbTools.length = 0;
+        dbTools.push(...activeTools);
+      }
+
+      console.log(`[Enhanced Google Sync] Syncing ${dbTools.length} tools to Google Sheets...`);
       
       // Try to get tools from Google Sheets, or create the sheet if it doesn't exist
       let sheetTools = [];
@@ -543,39 +561,13 @@ class GoogleSyncEnhanced extends EventEmitter {
         }
       }
       
-      // Compare and sync
+      // Compare and sync - NOTE: Disabled bidirectional sync from sheets→database
+      // to prevent duplicate entries. Tools should be managed in the app, then synced to sheets.
       const dbToolsMap = new Map(dbTools.map(t => [t.id, t]));
-      const sheetToolsMap = new Map(sheetTools.map((row: any[]) => [row[0], row]));
 
-      // Update database with changes from sheets
-      for (const [id, row] of Array.from(sheetToolsMap)) {
-        const rowData = row as any[];
-        const toolId = id as string;
-
-        if (!dbToolsMap.has(toolId)) {
-          // New tool in sheets, add to database
-          await storage.createTool({
-            name: rowData[1] || '',
-            category: rowData[2] || '',
-            serialNumber: rowData[3] || '',
-            model: rowData[4] || '',
-            quantity: parseInt(String(rowData[5])) || 0,
-            availableQuantity: parseInt(String(rowData[6])) || 0,
-            condition: rowData[7] || '',
-            location: rowData[10] || '',
-            createdBy: 'SYSTEM' // System-generated during Google Sheets sync
-          });
-        } else {
-          // Check for updates
-          const dbTool = dbToolsMap.get(toolId);
-          if (dbTool && (dbTool.quantity !== parseInt(String(rowData[5])) ||
-              dbTool.availableQuantity !== parseInt(String(rowData[6])))) {
-            await storage.updateTool(toolId, {
-              quantity: parseInt(String(rowData[5])),
-              availableQuantity: parseInt(String(rowData[6]))
-            });
-          }
-        }
+      // Log sheet tools count for debugging
+      if (sheetTools.length > 0) {
+        console.log(`[Enhanced Google Sync] Found ${sheetTools.length} rows in Google Sheet (read-only, not importing)`);
       }
       
       // Update sheets with changes from database
