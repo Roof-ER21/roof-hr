@@ -1687,9 +1687,13 @@ class DrizzleStorage implements IStorage {
   }
 
   // Onboarding Instance Methods
-  async createOnboardingInstance(data: InsertOnboardingInstance): Promise<OnboardingInstance> {
-    const id = `instance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const [instance] = await db.insert(onboardingInstances).values({ ...data, id }).returning();
+  async createOnboardingInstance(data: InsertOnboardingInstance & { id?: string }): Promise<OnboardingInstance> {
+    const id = data.id || `instance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const [instance] = await db.insert(onboardingInstances).values({
+      ...data,
+      id,
+      // Let the database handle defaults for timestamps
+    }).returning();
     return instance;
   }
 

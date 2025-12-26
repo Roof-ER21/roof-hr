@@ -248,7 +248,7 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
     // Generate unique ID for the instance
     const instanceId = `instance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create the onboarding instance
+    // Create the onboarding instance - let DB defaults handle timestamps
     const instance = await storage.createOnboardingInstance({
       id: instanceId,
       templateId,
@@ -256,7 +256,6 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
       assignedBy: req.user?.id || 'system',
       status: 'in_progress',
       progress: JSON.stringify([]), // Empty array of completed task IDs
-      startDate: new Date(),
     });
 
     // Create onboarding steps from template tasks
