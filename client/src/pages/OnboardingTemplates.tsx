@@ -332,7 +332,7 @@ export default function OnboardingTemplates() {
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Onboarding Templates</h1>
+          <h1 className="text-3xl font-bold">Onboarding Checklist</h1>
           <p className="text-muted-foreground mt-2">Manage department-specific onboarding workflows</p>
         </div>
         <div className="flex gap-2">

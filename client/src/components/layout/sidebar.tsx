@@ -21,7 +21,6 @@ import {
   User,
   Shield,
   BarChart,
-  Bot,
   Package,
   ChevronDown,
   ChevronRight,
@@ -30,13 +29,10 @@ import {
   Link as LinkIcon,
   ScrollText,
   Sparkles,
-  Cloud,
   Clock,
-  Upload,
   UserCircle,
   DoorOpen,
   ClipboardList,
-  FileBarChart,
   GitBranch
 } from 'lucide-react';
 
@@ -84,7 +80,7 @@ const navigation = [
     children: [
       { name: 'Employee Directory', href: '/employees', icon: Users, roles: MANAGER_ROLES },
       { name: 'Org Chart', href: '/team-directory', icon: GitBranch, roles: MANAGER_ROLES },
-      { name: 'Onboarding', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES },
+      { name: 'Onboarding Checklist', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES },
       { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: MANAGER_ROLES },
       { name: 'Territories', href: '/territories', icon: MapPin, roles: MANAGER_ROLES }
     ]
@@ -93,10 +89,11 @@ const navigation = [
     name: 'Facilities',
     href: '/meeting-rooms',
     icon: DoorOpen,
-    roles: MANAGER_ROLES,
+    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
     children: [
+      { name: 'Attendance', href: '/attendance', icon: Clock, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
       { name: 'Meeting Rooms', href: '/meeting-rooms', icon: DoorOpen, roles: MANAGER_ROLES },
-      { name: 'Room Calendar', href: '/meeting-rooms', icon: Calendar, roles: ALL_ROLES }
+      { name: 'Room Calendar', href: '/meeting-rooms?tab=calendar', icon: Calendar, roles: ALL_ROLES }
     ]
   },
   {
@@ -110,9 +107,6 @@ const navigation = [
     ]
   },
   { name: 'Reviews', href: '/reviews', icon: Video, roles: MANAGER_ROLES },
-  { name: 'Attendance', href: '/attendance', icon: Clock, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
-  { name: 'Google Integration', href: '/google-integration', icon: Cloud, roles: ADMIN_ROLES },
-  { name: 'Scheduled Reports', href: '/scheduled-reports', icon: FileBarChart, roles: ADMIN_ROLES },
   { name: 'Settings', href: '/settings', icon: Settings, roles: MANAGER_ROLES },
 ];
 

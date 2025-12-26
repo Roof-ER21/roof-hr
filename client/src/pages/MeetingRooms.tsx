@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Edit2, Trash2, Users, MapPin, Tv, Mic, Video, Phone, PenTool } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, MapPin, Tv, Mic, Video, Phone, PenTool, Calendar, DoorOpen } from 'lucide-react';
+import CalendarScheduler from '@/components/CalendarScheduler';
 
 interface MeetingRoom {
   id: string;
@@ -50,6 +53,8 @@ const AMENITY_OPTIONS = [
 
 export default function MeetingRooms() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'rooms');
   const [selectedRoom, setSelectedRoom] = useState<MeetingRoom | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -60,6 +65,24 @@ export default function MeetingRooms() {
     amenities: [],
     isActive: true
   });
+
+  // Sync tab with URL params
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'calendar' || tabParam === 'rooms') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'rooms') {
+      searchParams.delete('tab');
+    } else {
+      searchParams.set('tab', tab);
+    }
+    setSearchParams(searchParams);
+  };
 
   // Fetch meeting rooms
   const { data: rooms = [], isLoading: roomsLoading } = useQuery({
@@ -239,7 +262,7 @@ export default function MeetingRooms() {
     return option?.label || amenity;
   };
 
-  if (roomsLoading) {
+  if (roomsLoading && activeTab === 'rooms') {
     return <div className="flex items-center justify-center h-64">Loading meeting rooms...</div>;
   }
 
@@ -247,19 +270,35 @@ export default function MeetingRooms() {
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Meeting Rooms</h1>
-          <p className="text-muted-foreground mt-2">Manage meeting rooms and their availability</p>
+          <h1 className="text-3xl font-bold">Facilities</h1>
+          <p className="text-muted-foreground mt-2">Manage meeting rooms and room calendar</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-          setIsCreateDialogOpen(open);
-          if (!open) resetForm();
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Meeting Room
-            </Button>
-          </DialogTrigger>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="rooms" className="flex items-center gap-2">
+            <DoorOpen className="h-4 w-4" />
+            Meeting Rooms
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Room Calendar
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="rooms" className="space-y-6">
+          <div className="flex justify-end">
+            <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+              setIsCreateDialogOpen(open);
+              if (!open) resetForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Meeting Room
+                </Button>
+              </DialogTrigger>
           <DialogContent className="sm:max-w-[525px]">
             <DialogHeader>
               <DialogTitle>Create New Meeting Room</DialogTitle>
@@ -345,10 +384,10 @@ export default function MeetingRooms() {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+            </Dialog>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {rooms && rooms.length > 0 ? (
           rooms.map((room: MeetingRoom) => {
             const availability = availabilityMap[room.id];
@@ -430,7 +469,13 @@ export default function MeetingRooms() {
             No meeting rooms found. Create your first room to get started.
           </div>
         )}
-      </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="calendar">
+          <CalendarScheduler />
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {

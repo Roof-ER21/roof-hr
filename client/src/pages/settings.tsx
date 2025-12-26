@@ -18,12 +18,16 @@ import {
   Mail,
   MapPin,
   Save,
-  User
+  User,
+  Cloud,
+  FileBarChart
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import GoogleIntegration from './GoogleIntegration';
+import ScheduledReports from './ScheduledReports';
 
 const companySettingsSchema = z.object({
   companyName: z.string().min(1),
@@ -216,18 +220,26 @@ function Settings() {
       </div>
 
       <Tabs defaultValue="personal" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex flex-wrap">
           <TabsTrigger value="personal">
             <User className="w-4 h-4 mr-2" />
-            Personal Settings
+            Personal
           </TabsTrigger>
           <TabsTrigger value="company">
             <Building className="w-4 h-4 mr-2" />
-            Company Info
+            Company
           </TabsTrigger>
           <TabsTrigger value="business">
             <Clock className="w-4 h-4 mr-2" />
-            Business Hours
+            Hours
+          </TabsTrigger>
+          <TabsTrigger value="google">
+            <Cloud className="w-4 h-4 mr-2" />
+            Google
+          </TabsTrigger>
+          <TabsTrigger value="reports">
+            <FileBarChart className="w-4 h-4 mr-2" />
+            Reports
           </TabsTrigger>
         </TabsList>
 
@@ -436,6 +448,14 @@ function Settings() {
             </div>
           </div>
         </form>
+
+        <TabsContent value="google" className="space-y-6">
+          <GoogleIntegration embedded />
+        </TabsContent>
+
+        <TabsContent value="reports" className="space-y-6">
+          <ScheduledReports embedded />
+        </TabsContent>
       </Tabs>
     </div>
   );

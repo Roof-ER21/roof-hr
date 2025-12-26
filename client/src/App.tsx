@@ -115,7 +115,7 @@ function AuthenticatedRoutes() {
         <Route path="/contracts" element={<Contracts />} />
         <Route path="/susan-ai" element={<SusanAI />} />
         <Route path="/susan-ai-admin" element={<SusanAIAdmin />} />
-        <Route path="/google-integration" element={<GoogleIntegration />} />
+        <Route path="/google-integration" element={<Navigate to="/settings?tab=google" replace />} />
         <Route path="/attendance" element={<AttendanceDashboard />} />
         <Route path="/attendance/admin" element={<AttendanceAdminDashboard />} />
         <Route path="/my-portal" element={<EmployeeDashboard />} />
@@ -123,7 +123,7 @@ function AuthenticatedRoutes() {
         <Route path="/team-dashboard" element={<TeamDashboard />} />
         <Route path="/meeting-rooms" element={<MeetingRooms />} />
         <Route path="/onboarding-templates" element={<OnboardingTemplates />} />
-        <Route path="/scheduled-reports" element={<ScheduledReports />} />
+        <Route path="/scheduled-reports" element={<Navigate to="/settings?tab=reports" replace />} />
         <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
       </Routes>
       <SusanFloatingOrb />

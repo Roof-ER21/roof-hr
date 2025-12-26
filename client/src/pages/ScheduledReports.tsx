@@ -123,7 +123,11 @@ function formatSchedule(cron: string): string {
   }
 }
 
-export default function ScheduledReports() {
+interface ScheduledReportsProps {
+  embedded?: boolean;
+}
+
+export default function ScheduledReports({ embedded = false }: ScheduledReportsProps) {
   const { toast } = useToast();
   const [selectedReport, setSelectedReport] = useState<ScheduledReport | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -396,10 +400,10 @@ export default function ScheduledReports() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className={embedded ? "" : "container mx-auto py-8"}>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Scheduled Reports</h1>
+          <h1 className={embedded ? "text-xl font-bold" : "text-3xl font-bold"}>Scheduled Reports</h1>
           <p className="text-muted-foreground mt-2">Automate report generation and delivery</p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>

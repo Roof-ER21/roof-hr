@@ -13,7 +13,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, XCircle, Send, Calendar, FileSpreadsheet, HardDrive, FileText, Loader2 } from 'lucide-react';
 
-function GoogleIntegrationContent() {
+interface GoogleIntegrationContentProps {
+  embedded?: boolean;
+}
+
+function GoogleIntegrationContent({ embedded = false }: GoogleIntegrationContentProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [connectionStatus, setConnectionStatus] = useState<Record<string, boolean>>({});
@@ -146,11 +150,11 @@ function GoogleIntegrationContent() {
     }
   });
 
-  return (
-    <div className="container mx-auto py-6 space-y-6">
+  const content = (
+    <>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Google Services Integration</CardTitle>
+          <CardTitle className={embedded ? "text-xl" : "text-2xl"}>Google Services Integration</CardTitle>
           <CardDescription>
             Test and manage all integrated Google services for the HR system
           </CardDescription>
@@ -417,11 +421,20 @@ function GoogleIntegrationContent() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </>
   );
+
+  if (embedded) {
+    return <div className="space-y-6">{content}</div>;
+  }
+
+  return <div className="container mx-auto py-6 space-y-6">{content}</div>;
 }
 
-export default function GoogleIntegration() {
+export default function GoogleIntegration({ embedded = false }: { embedded?: boolean }) {
+  if (embedded) {
+    return <GoogleIntegrationContent embedded />;
+  }
   return (
     <ProtectedRoute requiredRole="ADMIN">
       <GoogleIntegrationContent />
