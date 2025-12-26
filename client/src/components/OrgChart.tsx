@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,14 +47,28 @@ type TreeNode = User & {
 
 export default function OrgChart() {
   const { toast } = useToast();
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['oliver', 'reese', 'ford']));
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [initialized, setInitialized] = useState(false);
 
   // Fetch all users
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ['/api/users'],
   });
+
+  // Initialize expanded nodes when users load
+  useEffect(() => {
+    if (users.length && !initialized) {
+      const oliver = users.find(u => u.email?.toLowerCase() === OLIVER_EMAIL);
+      const reese = users.find(u => u.email?.toLowerCase() === REESE_EMAIL);
+      const ford = users.find(u => u.email?.toLowerCase() === FORD_EMAIL);
+
+      const execIds = [oliver?.id, reese?.id, ford?.id].filter(Boolean) as string[];
+      setExpandedNodes(new Set(execIds));
+      setInitialized(true);
+    }
+  }, [users, initialized]);
 
   // Update user mutation (for drag-drop reassignment)
   const updateUserMutation = useMutation({
@@ -143,17 +157,22 @@ export default function OrgChart() {
   };
 
   // Expand all nodes
+  // Get executive IDs for expand/collapse
+  const getExecIds = () => {
+    const oliver = users.find(u => u.email?.toLowerCase() === OLIVER_EMAIL);
+    const reese = users.find(u => u.email?.toLowerCase() === REESE_EMAIL);
+    const ford = users.find(u => u.email?.toLowerCase() === FORD_EMAIL);
+    return [oliver?.id, reese?.id, ford?.id].filter(Boolean) as string[];
+  };
+
   const expandAll = () => {
     const allIds = new Set(users.map((u) => u.id));
-    allIds.add('oliver');
-    allIds.add('reese');
-    allIds.add('ford');
     setExpandedNodes(allIds);
   };
 
-  // Collapse all nodes
+  // Collapse all nodes - show only executives expanded
   const collapseAll = () => {
-    setExpandedNodes(new Set(['oliver', 'reese', 'ford']));
+    setExpandedNodes(new Set(getExecIds()));
   };
 
   // Zoom controls
