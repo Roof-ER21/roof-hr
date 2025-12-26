@@ -79,7 +79,7 @@ const navigation = [
     roles: MANAGER_ROLES,
     children: [
       { name: 'Employee Directory', href: '/employees', icon: Users, roles: MANAGER_ROLES },
-      { name: 'Org Chart', href: '/team-directory', icon: GitBranch, roles: MANAGER_ROLES },
+      { name: 'Org Chart', href: '/org-chart', icon: GitBranch, roles: MANAGER_ROLES },
       { name: 'Onboarding Checklist', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES },
       { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: MANAGER_ROLES },
       { name: 'Territories', href: '/territories', icon: MapPin, roles: MANAGER_ROLES }
