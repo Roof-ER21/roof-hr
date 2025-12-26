@@ -386,8 +386,19 @@ export default function OnboardingTemplates() {
     }
   };
 
-  const formatDueDate = (startDate: string, daysToAdd: number) => {
+  const formatDueDate = (startDate: string | null | undefined, daysToAdd: number) => {
+    // Validate start date
+    if (!startDate) {
+      return 'Date not set';
+    }
+
     const start = new Date(startDate);
+
+    // Check if date is valid
+    if (isNaN(start.getTime())) {
+      return 'Invalid date';
+    }
+
     const dueDate = addDays(start, daysToAdd);
     const today = new Date();
     const daysUntilDue = differenceInDays(dueDate, today);
@@ -1021,7 +1032,11 @@ export default function OnboardingTemplates() {
                     </div>
                     <div>
                       <Label className="text-sm text-muted-foreground">Start Date</Label>
-                      <div className="text-sm font-medium">{format(new Date(selectedInstance.startDate), 'MMM d, yyyy')}</div>
+                      <div className="text-sm font-medium">
+                        {selectedInstance.startDate && !isNaN(new Date(selectedInstance.startDate).getTime())
+                          ? format(new Date(selectedInstance.startDate), 'MMM d, yyyy')
+                          : 'Date not set'}
+                      </div>
                     </div>
                   </div>
 
@@ -1045,7 +1060,7 @@ export default function OnboardingTemplates() {
                                 </div>
                                 <div className="text-sm text-muted-foreground mt-1">{task.description}</div>
                                 <div className="text-xs text-muted-foreground mt-2">
-                                  {formatDueDate(selectedInstance.startDate.toString(), task.dueInDays)}
+                                  {formatDueDate(selectedInstance.startDate as string, task.dueInDays)}
                                 </div>
                               </div>
                             </div>
