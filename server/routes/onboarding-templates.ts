@@ -276,7 +276,7 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
         type: 'TASK',
         status: 'PENDING',
         isRequired: true,
-        dueDate: dueDate.toISOString(),
+        dueDate: dueDate, // Pass Date object directly, not string
       });
     }
 
@@ -291,7 +291,7 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
       totalSteps: tasks.length,
       assignedTo: req.user?.id,
       notes: `Assigned from template: ${template.name}`,
-      startedAt: new Date().toISOString(),
+      startedAt: new Date(), // Pass Date object directly, not string
     });
 
     res.json({
@@ -396,8 +396,8 @@ router.put('/api/onboarding-instances/:id', requireAuth, async (req, res) => {
     if (stepId) {
       const step = await storage.updateOnboardingStep(stepId, {
         status: stepStatus || 'COMPLETED',
-        completedAt: stepStatus === 'COMPLETED' ? new Date().toISOString() : undefined,
-        updatedAt: new Date().toISOString(),
+        completedAt: stepStatus === 'COMPLETED' ? new Date() : undefined,
+        updatedAt: new Date(),
       });
 
       if (!step) {
@@ -409,7 +409,7 @@ router.put('/api/onboarding-instances/:id', requireAuth, async (req, res) => {
     if (Object.keys(workflowData).length > 0) {
       const workflow = await storage.updateOnboardingWorkflow(req.params.id, {
         ...workflowData,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       });
 
       if (!workflow) {
@@ -447,9 +447,9 @@ router.post('/api/onboarding-instances/:id/complete', requireAuth, async (req, r
   try {
     const workflow = await storage.updateOnboardingWorkflow(req.params.id, {
       status: 'COMPLETED',
-      completedAt: new Date().toISOString(),
+      completedAt: new Date(),
       currentStep: 999, // Indicate completion
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     });
 
     if (!workflow) {
@@ -462,8 +462,8 @@ router.post('/api/onboarding-instances/:id/complete', requireAuth, async (req, r
       if (step.status !== 'COMPLETED') {
         await storage.updateOnboardingStep(step.id, {
           status: 'COMPLETED',
-          completedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          completedAt: new Date(),
+          updatedAt: new Date(),
         });
       }
     }
