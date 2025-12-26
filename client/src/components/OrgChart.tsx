@@ -28,7 +28,8 @@ const FORD_EMAIL = 'ford.barsi@theroofdocs.com';
 
 type User = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   role: string;
   position?: string;
@@ -36,6 +37,9 @@ type User = {
   managerId?: string | null;
   avatarUrl?: string;
 };
+
+// Helper to get full name
+const getFullName = (user: User) => `${user.firstName} ${user.lastName}`;
 
 type TreeNode = User & {
   directReports: TreeNode[];
@@ -158,13 +162,10 @@ export default function OrgChart() {
   const resetZoom = () => setZoomLevel(1);
 
   // Get initials for avatar fallback
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  const getInitials = (user: TreeNode) => {
+    const first = user.firstName?.[0] || '';
+    const last = user.lastName?.[0] || '';
+    return (first + last).toUpperCase();
   };
 
   // Check if node is an executive
@@ -231,15 +232,15 @@ export default function OrgChart() {
             <div className="flex items-start gap-3">
               {/* Avatar */}
               <Avatar className={`h-12 w-12 ${isExec ? 'ring-2 ring-offset-2 ring-primary' : ''}`}>
-                <AvatarImage src={node.avatarUrl} alt={node.name} />
+                <AvatarImage src={node.avatarUrl} alt={getFullName(node)} />
                 <AvatarFallback className={isExec ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'}>
-                  {getInitials(node.name)}
+                  {getInitials(node)}
                 </AvatarFallback>
               </Avatar>
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-sm truncate">{node.name}</h3>
+                <h3 className="font-semibold text-sm truncate">{getFullName(node)}</h3>
                 {node.position && (
                   <p className="text-xs text-muted-foreground truncate">
                     {node.position}
