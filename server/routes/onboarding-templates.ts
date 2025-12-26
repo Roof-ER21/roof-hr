@@ -36,15 +36,29 @@ function requireManager(req: any, res: any, next: any) {
 // Validation schemas
 
 // Template schema (for creating reusable templates)
+// Tasks can come as either an array or a JSON string (frontend sends string)
 const createTemplateSchema = z.object({
   name: z.string().min(1),
   department: z.string().optional(),
   description: z.string().optional(),
-  tasks: z.array(z.object({
-    title: z.string(),
-    description: z.string().optional(),
-    dueInDays: z.number().int().default(1),
-  })).optional(),
+  tasks: z.preprocess(
+    (val) => {
+      // If it's a string, parse it as JSON
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return [];
+        }
+      }
+      return val;
+    },
+    z.array(z.object({
+      title: z.string(),
+      description: z.string().optional(),
+      dueInDays: z.number().int().default(1),
+    })).optional()
+  ),
   isActive: z.boolean().default(true),
 });
 
@@ -145,7 +159,7 @@ router.post('/api/onboarding-templates', requireManager, async (req, res) => {
       description: data.description || null,
       tasks: JSON.stringify(data.tasks || []),
       isActive: data.isActive ?? true,
-      createdBy: req.user?.id || null,
+      createdBy: req.user?.id || 'system',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
