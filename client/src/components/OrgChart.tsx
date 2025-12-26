@@ -59,13 +59,17 @@ const isExecutive = (email?: string) => {
   return e === OLIVER_EMAIL || e === REESE_EMAIL || e === FORD_EMAIL;
 };
 
-export default function OrgChart() {
+interface OrgChartProps {
+  readOnly?: boolean;
+}
+
+export default function OrgChart({ readOnly = false }: OrgChartProps) {
   const { user: currentUser } = useAuth();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0.85);
 
-  // Check if current user can edit
-  const canEdit = EDIT_EMAILS.includes(currentUser?.email?.toLowerCase() || '');
+  // Check if current user can edit (disabled if readOnly is true)
+  const canEdit = !readOnly && EDIT_EMAILS.includes(currentUser?.email?.toLowerCase() || '');
 
   // Fetch all users
   const { data: users = [], isLoading } = useQuery<User[]>({

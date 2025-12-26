@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Check, X, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { Bell, Check, X, AlertCircle, CheckCircle, Info, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -78,6 +78,8 @@ export function NotificationDropdown() {
         return <AlertCircle className="w-4 h-4 text-yellow-500" />;
       case 'error':
         return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case 'NEW_CANDIDATE':
+        return <UserPlus className="w-4 h-4 text-blue-500" />;
       default:
         return <Info className="w-4 h-4 text-blue-500" />;
     }

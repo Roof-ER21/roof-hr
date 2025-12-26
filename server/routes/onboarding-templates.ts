@@ -479,4 +479,85 @@ router.post('/api/onboarding-instances/:id/complete', requireAuth, async (req, r
   }
 });
 
+// PUT /api/onboarding-instances/:id/progress - Update progress (FIX 404 ERROR)
+router.put('/api/onboarding-instances/:id/progress', requireAuth, async (req, res) => {
+  try {
+    const { completedTasks } = req.body;
+    const instanceId = req.params.id;
+
+    // Get workflow by ID
+    const workflow = await storage.getOnboardingWorkflowById(instanceId);
+    if (!workflow) {
+      return res.status(404).json({ error: 'Onboarding instance not found' });
+    }
+
+    // Get all steps for this workflow
+    const steps = await storage.getOnboardingStepsByWorkflowId(instanceId);
+
+    // Mark steps as completed based on completedTasks count
+    for (let i = 0; i < steps.length; i++) {
+      const status = i < completedTasks ? 'COMPLETED' : 'PENDING';
+      if (steps[i].status !== status) {
+        await storage.updateOnboardingStep(steps[i].id, {
+          status,
+          completedAt: status === 'COMPLETED' ? new Date() : undefined,
+          updatedAt: new Date(),
+        });
+      }
+    }
+
+    // Update workflow progress
+    const updatedWorkflow = await storage.updateOnboardingWorkflow(instanceId, {
+      currentStep: Math.min(completedTasks + 1, steps.length),
+      status: completedTasks >= steps.length ? 'COMPLETED' : 'IN_PROGRESS',
+      completedAt: completedTasks >= steps.length ? new Date() : undefined,
+      updatedAt: new Date(),
+    });
+
+    // Calculate and return progress
+    const completedSteps = Math.min(completedTasks, steps.length);
+    const totalSteps = steps.length;
+
+    res.json({
+      ...updatedWorkflow,
+      progress: {
+        completedSteps,
+        totalSteps,
+        percentage: totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating onboarding progress:', error);
+    res.status(500).json({ error: 'Failed to update progress' });
+  }
+});
+
+// PUT /api/onboarding-templates/:id/tasks/reorder - Reorder template tasks for drag-drop
+router.put('/api/onboarding-templates/:id/tasks/reorder', requireManager, async (req, res) => {
+  try {
+    const { tasks } = req.body;
+
+    if (!Array.isArray(tasks)) {
+      return res.status(400).json({ error: 'Tasks must be an array' });
+    }
+
+    const template = await storage.updateOnboardingTemplate(req.params.id, {
+      tasks: JSON.stringify(tasks),
+      updatedAt: new Date(),
+    });
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({
+      ...template,
+      tasks: tasks,
+    });
+  } catch (error) {
+    console.error('Error reordering tasks:', error);
+    res.status(500).json({ error: 'Failed to reorder tasks' });
+  }
+});
+
 export default router;

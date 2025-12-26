@@ -1711,19 +1711,51 @@ router.post('/api/candidates', requireAuth, requireManager, async (req, res) => 
       customTags: req.body.customTags || [],
       questionnaireCompleted: req.body.questionnaireCompleted || false
     };
-    
+
     const data = insertCandidateSchema.parse(mappedData);
     const candidate = await storage.createCandidate({
       ...data,
       status: 'APPLIED',
       stage: 'Application Review'
     });
+
+    // Get HR users and create notifications
+    try {
+      const hrRoles = ['HR_ADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'TRUE_ADMIN'];
+      const hrUsers = await storage.getUsersByRoles(hrRoles);
+
+      for (const hrUser of hrUsers) {
+        await storage.createNotification({
+          id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          userId: hrUser.id,
+          type: 'NEW_CANDIDATE',
+          title: 'New Candidate Added',
+          message: `${candidate.firstName} ${candidate.lastName} applied for ${candidate.position}`,
+          data: JSON.stringify({ candidateId: candidate.id }),
+          isRead: false,
+          createdAt: new Date(),
+        });
+      }
+
+      // Emit WebSocket for real-time popup (if available)
+      if (req.app.locals.emitAdminNotification) {
+        req.app.locals.emitAdminNotification('new_candidate', {
+          candidateId: candidate.id,
+          name: `${candidate.firstName} ${candidate.lastName}`,
+          position: candidate.position,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to create notifications:', notifError);
+      // Don't fail the candidate creation if notification fails
+    }
+
     res.json(candidate);
   } catch (error: any) {
     console.error('Candidate creation error:', error);
     if (error.issues) {
       console.error('Validation issues:', error.issues);
-      res.status(400).json({ 
+      res.status(400).json({
         error: 'Invalid request data',
         details: error.issues
       });

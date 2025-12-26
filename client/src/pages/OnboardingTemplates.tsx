@@ -13,8 +13,13 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Edit2, Trash2, ClipboardList, Users, CheckCircle, Circle, GripVertical, X } from 'lucide-react';
 import type { OnboardingTemplate, OnboardingInstance, User } from '@/../../shared/schema';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { format, addDays, differenceInDays } from 'date-fns';
 
 interface Task {
+  id?: string;
   title: string;
   description: string;
   dueInDays: number;
@@ -39,6 +44,8 @@ export default function OnboardingTemplates() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isInstancesDialogOpen, setIsInstancesDialogOpen] = useState(false);
+  const [isViewInstanceDialogOpen, setIsViewInstanceDialogOpen] = useState(false);
+  const [selectedInstance, setSelectedInstance] = useState<OnboardingInstance | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
 
   // Form state
@@ -225,6 +232,37 @@ export default function OnboardingTemplates() {
     }
   });
 
+  // Reorder tasks mutation
+  const reorderTasksMutation = useMutation({
+    mutationFn: (data: { templateId: string; tasks: Task[] }) =>
+      apiRequest(`/api/onboarding-templates/${data.templateId}/tasks/reorder`, {
+        method: 'PUT',
+        body: JSON.stringify({ tasks: data.tasks }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/onboarding-templates'] });
+      toast({
+        title: 'Success',
+        description: 'Task order updated successfully',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reorder tasks',
+        variant: 'destructive',
+      });
+    }
+  });
+
+  // Setup drag-and-drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   const resetForm = () => {
     setName('');
     setDescription('');
@@ -322,6 +360,61 @@ export default function OnboardingTemplates() {
         employeeId: selectedEmployeeId
       });
     }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = tasks.findIndex((task, index) => (task.id || `task-${index}`) === active.id);
+      const newIndex = tasks.findIndex((task, index) => (task.id || `task-${index}`) === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reorderedTasks = arrayMove(tasks, oldIndex, newIndex);
+        setTasks(reorderedTasks);
+
+        // Persist to backend if editing an existing template
+        if (selectedTemplate && (isEditDialogOpen || isCreateDialogOpen)) {
+          if (isEditDialogOpen && selectedTemplate.id) {
+            reorderTasksMutation.mutate({
+              templateId: selectedTemplate.id,
+              tasks: reorderedTasks
+            });
+          }
+        }
+      }
+    }
+  };
+
+  const formatDueDate = (startDate: string, daysToAdd: number) => {
+    const start = new Date(startDate);
+    const dueDate = addDays(start, daysToAdd);
+    const today = new Date();
+    const daysUntilDue = differenceInDays(dueDate, today);
+
+    if (daysUntilDue < 0) {
+      return `Overdue (${format(dueDate, 'MMM d')})`;
+    } else if (daysUntilDue === 0) {
+      return 'Due today';
+    } else if (daysUntilDue <= 7) {
+      return `Due in ${daysUntilDue} day${daysUntilDue === 1 ? '' : 's'}`;
+    } else {
+      return `Due ${format(dueDate, 'MMM d, yyyy')}`;
+    }
+  };
+
+  const handleViewInstance = (instance: OnboardingInstance) => {
+    setSelectedInstance(instance);
+    const template = templates.find((t: OnboardingTemplate) => t.id === instance.templateId);
+    if (template) {
+      try {
+        const parsedTasks = JSON.parse(template.tasks);
+        setTasks(Array.isArray(parsedTasks) ? parsedTasks : []);
+      } catch {
+        setTasks([]);
+      }
+    }
+    setIsViewInstanceDialogOpen(true);
   };
 
   if (templatesLoading) {
@@ -484,23 +577,40 @@ export default function OnboardingTemplates() {
             <div className="border-t pt-4">
               <Label className="text-base font-semibold">Tasks</Label>
               <div className="space-y-3 mt-3">
-                {tasks.map((task, index) => (
-                  <div key={index} className="flex items-start gap-2 p-3 border rounded-lg">
-                    <GripVertical className="h-5 w-5 text-muted-foreground mt-1" />
-                    <div className="flex-1">
-                      <div className="font-medium">{task.title}</div>
-                      <div className="text-sm text-muted-foreground">{task.description}</div>
-                      <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRemoveTask(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={tasks.map((task, index) => task.id || `task-${index}`)} strategy={verticalListSortingStrategy}>
+                    {tasks.map((task, index) => {
+                      const taskId = task.id || `task-${index}`;
+                      const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: taskId });
+
+                      const style = {
+                        transform: CSS.Transform.toString(transform),
+                        transition,
+                        opacity: isDragging ? 0.5 : 1,
+                      };
+
+                      return (
+                        <div key={taskId} ref={setNodeRef} style={style} className="flex items-start gap-2 p-3 border rounded-lg cursor-move bg-background hover:bg-muted/50 transition-colors">
+                          <div {...attributes} {...listeners}>
+                            <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab active:cursor-grabbing" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium">{task.title}</div>
+                            <div className="text-sm text-muted-foreground">{task.description}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveTask(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
 
                 <div className="border rounded-lg p-3 space-y-2">
                   <Input
@@ -588,23 +698,40 @@ export default function OnboardingTemplates() {
             <div className="border-t pt-4">
               <Label className="text-base font-semibold">Tasks</Label>
               <div className="space-y-3 mt-3">
-                {tasks.map((task, index) => (
-                  <div key={index} className="flex items-start gap-2 p-3 border rounded-lg">
-                    <GripVertical className="h-5 w-5 text-muted-foreground mt-1" />
-                    <div className="flex-1">
-                      <div className="font-medium">{task.title}</div>
-                      <div className="text-sm text-muted-foreground">{task.description}</div>
-                      <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRemoveTask(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={tasks.map((task, index) => task.id || `task-${index}`)} strategy={verticalListSortingStrategy}>
+                    {tasks.map((task, index) => {
+                      const taskId = task.id || `task-${index}`;
+                      const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: taskId });
+
+                      const style = {
+                        transform: CSS.Transform.toString(transform),
+                        transition,
+                        opacity: isDragging ? 0.5 : 1,
+                      };
+
+                      return (
+                        <div key={taskId} ref={setNodeRef} style={style} className="flex items-start gap-2 p-3 border rounded-lg cursor-move bg-background hover:bg-muted/50 transition-colors">
+                          <div {...attributes} {...listeners}>
+                            <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab active:cursor-grabbing" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium">{task.title}</div>
+                            <div className="text-sm text-muted-foreground">{task.description}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveTask(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
 
                 <div className="border rounded-lg p-3 space-y-2">
                   <Input
@@ -743,6 +870,8 @@ export default function OnboardingTemplates() {
                 const employee = users.find((u: User) => u.id === instance.employeeId);
                 const template = templates.find((t: OnboardingTemplate) => t.id === instance.templateId);
                 let totalTasks = 0;
+                let completedTasksCount = 0;
+
                 try {
                   if (template) {
                     const parsedTasks = JSON.parse(template.tasks);
@@ -752,7 +881,17 @@ export default function OnboardingTemplates() {
                   totalTasks = 0;
                 }
 
-                const progress = totalTasks > 0 ? (instance.completedTasks / totalTasks) * 100 : 0;
+                // Parse progress JSON to get completed tasks count
+                try {
+                  if (instance.progress) {
+                    const progressData = JSON.parse(instance.progress);
+                    completedTasksCount = progressData.completedTaskIds?.length || 0;
+                  }
+                } catch {
+                  completedTasksCount = 0;
+                }
+
+                const progress = totalTasks > 0 ? (completedTasksCount / totalTasks) * 100 : 0;
 
                 return (
                   <Card key={instance.id}>
@@ -775,45 +914,54 @@ export default function OnboardingTemplates() {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span>Progress</span>
-                            <span>{instance.completedTasks} / {totalTasks} tasks</span>
+                            <span>{completedTasksCount} / {totalTasks} tasks</span>
                           </div>
                           <Progress value={progress} />
                         </div>
 
-                        {instance.status !== 'completed' && (
-                          <div className="flex gap-2 pt-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              max={totalTasks}
-                              placeholder="Completed tasks"
-                              className="w-32"
-                              defaultValue={instance.completedTasks}
-                              onBlur={(e) => {
-                                const newValue = parseInt(e.target.value) || 0;
-                                if (newValue !== instance.completedTasks && newValue >= 0 && newValue <= totalTasks) {
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewInstance(instance)}
+                          >
+                            View Details
+                          </Button>
+                          {instance.status !== 'completed' && (
+                            <>
+                              <Input
+                                type="number"
+                                min="0"
+                                max={totalTasks}
+                                placeholder="Completed tasks"
+                                className="w-32"
+                                defaultValue={completedTasksCount}
+                                onBlur={(e) => {
+                                  const newValue = parseInt(e.target.value) || 0;
+                                  if (newValue !== completedTasksCount && newValue >= 0 && newValue <= totalTasks) {
+                                    updateProgressMutation.mutate({
+                                      id: instance.id,
+                                      completedTasks: newValue
+                                    });
+                                  }
+                                }}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
                                   updateProgressMutation.mutate({
                                     id: instance.id,
-                                    completedTasks: newValue
+                                    completedTasks: totalTasks
                                   });
-                                }
-                              }}
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                updateProgressMutation.mutate({
-                                  id: instance.id,
-                                  completedTasks: totalTasks
-                                });
-                              }}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Mark Complete
-                            </Button>
-                          </div>
-                        )}
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Mark Complete
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -827,6 +975,91 @@ export default function OnboardingTemplates() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsInstancesDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Instance Details Dialog */}
+      <Dialog open={isViewInstanceDialogOpen} onOpenChange={setIsViewInstanceDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Onboarding Details
+              {selectedInstance && users.find((u: User) => u.id === selectedInstance.employeeId) && (
+                <span className="ml-2 text-muted-foreground font-normal">
+                  - {users.find((u: User) => u.id === selectedInstance.employeeId)?.firstName} {users.find((u: User) => u.id === selectedInstance.employeeId)?.lastName}
+                </span>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedInstance && templates.find((t: OnboardingTemplate) => t.id === selectedInstance.templateId)?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedInstance && (() => {
+              // Parse progress to get completed tasks count
+              let completedTasksCount = 0;
+              try {
+                if (selectedInstance.progress) {
+                  const progressData = JSON.parse(selectedInstance.progress);
+                  completedTasksCount = progressData.completedTaskIds?.length || 0;
+                }
+              } catch {
+                completedTasksCount = 0;
+              }
+
+              return (
+                <>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Status</Label>
+                      <Badge variant={selectedInstance.status === 'completed' ? 'default' : 'secondary'} className="ml-2">
+                        {selectedInstance.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Start Date</Label>
+                      <div className="text-sm font-medium">{format(new Date(selectedInstance.startDate), 'MMM d, yyyy')}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-base font-semibold">Tasks ({tasks.length})</Label>
+                    <div className="space-y-2 mt-3">
+                      {tasks.map((task, index) => (
+                        <div key={index} className="p-3 border rounded-lg">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-2 flex-1">
+                              <div className="mt-1">
+                                {index < completedTasksCount ? (
+                                  <CheckCircle className="h-5 w-5 text-green-600" />
+                                ) : (
+                                  <Circle className="h-5 w-5 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <div className={`font-medium ${index < completedTasksCount ? 'line-through text-muted-foreground' : ''}`}>
+                                  {task.title}
+                                </div>
+                                <div className="text-sm text-muted-foreground mt-1">{task.description}</div>
+                                <div className="text-xs text-muted-foreground mt-2">
+                                  {formatDueDate(selectedInstance.startDate.toString(), task.dueInDays)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewInstanceDialogOpen(false)}>
               Close
             </Button>
           </DialogFooter>

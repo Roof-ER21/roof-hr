@@ -9,6 +9,7 @@ import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { DashboardSkeleton } from '@/components/ui/skeleton-patterns';
 import { EventFormModal } from '@/components/calendar/EventFormModal';
 import { DeleteEventDialog } from '@/components/calendar/DeleteEventDialog';
+import OrgChart from '@/components/OrgChart';
 import {
   Calendar,
   Clock,
@@ -36,7 +37,8 @@ import {
   Pencil,
   Trash2,
   ClipboardList,
-  ScrollText
+  ScrollText,
+  GitBranch
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
@@ -481,11 +483,12 @@ function EmployeeDashboard() {
         {/* Center Column - Activity & PTO */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs defaultValue="calendar" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="calendar">My Calendar</TabsTrigger>
               <TabsTrigger value="pto">My PTO</TabsTrigger>
               <TabsTrigger value="pending">Pending Actions</TabsTrigger>
               <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+              <TabsTrigger value="orgchart">Org Chart</TabsTrigger>
             </TabsList>
 
             {/* Calendar Tab */}
@@ -953,6 +956,22 @@ function EmployeeDashboard() {
                       </p>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Org Chart Tab */}
+            <TabsContent value="orgchart" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="w-5 h-5" />
+                    <CardTitle>Organization Chart</CardTitle>
+                  </div>
+                  <CardDescription>View the company structure and reporting relationships</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <OrgChart readOnly={true} />
                 </CardContent>
               </Card>
             </TabsContent>
