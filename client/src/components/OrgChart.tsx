@@ -1,30 +1,27 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient, apiRequest } from '@/lib/queryClient';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/auth';
 import {
-  ChevronDown,
-  ChevronRight,
   ZoomIn,
   ZoomOut,
-  User,
   Users,
-  GripVertical,
   Building2,
   Mail,
   Crown,
-  Briefcase,
-  Settings
 } from 'lucide-react';
 
-// Executive emails for the fixed structure
+// Executive and admin emails
 const OLIVER_EMAIL = 'oliver.brown@theroofdocs.com';
 const REESE_EMAIL = 'reese.samala@theroofdocs.com';
 const FORD_EMAIL = 'ford.barsi@theroofdocs.com';
+const AHMED_EMAIL = 'ahmed.mahmoud@theroofdocs.com';
+
+// Users who can edit the org chart
+const EDIT_EMAILS = [AHMED_EMAIL, OLIVER_EMAIL, REESE_EMAIL, FORD_EMAIL];
 
 type User = {
   id: string;
@@ -34,331 +31,157 @@ type User = {
   role: string;
   position?: string;
   department?: string;
-  managerId?: string | null;
   avatarUrl?: string;
 };
 
 // Helper to get full name
 const getFullName = (user: User) => `${user.firstName} ${user.lastName}`;
 
-type TreeNode = User & {
-  directReports: TreeNode[];
+// Helper to get initials
+const getInitials = (user: User) => {
+  const first = user.firstName?.[0] || '';
+  const last = user.lastName?.[0] || '';
+  return (first + last).toUpperCase();
+};
+
+// Check if user is a sales rep
+const isSalesRep = (user: User) => {
+  return (
+    user.position?.toLowerCase().includes('sales') ||
+    user.department?.toLowerCase() === 'sales' ||
+    user.role?.toLowerCase().includes('sales')
+  );
+};
+
+// Check if user is executive
+const isExecutive = (email?: string) => {
+  const e = email?.toLowerCase();
+  return e === OLIVER_EMAIL || e === REESE_EMAIL || e === FORD_EMAIL;
 };
 
 export default function OrgChart() {
-  const { toast } = useToast();
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [initialized, setInitialized] = useState(false);
+  const { user: currentUser } = useAuth();
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(0.85);
+
+  // Check if current user can edit
+  const canEdit = EDIT_EMAILS.includes(currentUser?.email?.toLowerCase() || '');
 
   // Fetch all users
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ['/api/users'],
   });
 
-  // Initialize expanded nodes when users load
-  useEffect(() => {
-    if (users.length && !initialized) {
-      const oliver = users.find(u => u.email?.toLowerCase() === OLIVER_EMAIL);
-      const reese = users.find(u => u.email?.toLowerCase() === REESE_EMAIL);
-      const ford = users.find(u => u.email?.toLowerCase() === FORD_EMAIL);
-
-      const execIds = [oliver?.id, reese?.id, ford?.id].filter(Boolean) as string[];
-      setExpandedNodes(new Set(execIds));
-      setInitialized(true);
-    }
-  }, [users, initialized]);
-
-  // Update user mutation (for drag-drop reassignment)
-  const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, managerId }: { userId: string; managerId: string | null }) => {
-      return apiRequest(`/api/users/${userId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ managerId }),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
-      toast({
-        title: 'Success',
-        description: 'Reporting structure updated successfully',
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update reporting structure',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Build the org chart with fixed structure
-  const orgTree = useMemo(() => {
+  // Build the org structure
+  const orgData = useMemo(() => {
     if (!users.length) return null;
 
-    // Find the executives
+    // Find executives
     const oliver = users.find(u => u.email?.toLowerCase() === OLIVER_EMAIL);
     const reese = users.find(u => u.email?.toLowerCase() === REESE_EMAIL);
     const ford = users.find(u => u.email?.toLowerCase() === FORD_EMAIL);
 
-    // Get all other employees (excluding executives)
+    if (!oliver || !reese || !ford) return null;
+
+    // Filter out executives and Ahmed
     const otherEmployees = users.filter(u =>
-      u.email?.toLowerCase() !== OLIVER_EMAIL &&
-      u.email?.toLowerCase() !== REESE_EMAIL &&
-      u.email?.toLowerCase() !== FORD_EMAIL
+      !isExecutive(u.email) &&
+      u.email?.toLowerCase() !== AHMED_EMAIL
     );
 
-    // Categorize employees: Sales Reps go under Reese, everyone else under Ford
-    const salesReps = otherEmployees.filter(u =>
-      u.position?.toLowerCase().includes('sales') ||
-      u.department?.toLowerCase() === 'sales' ||
-      u.role?.toLowerCase().includes('sales')
-    );
+    // Separate into non-sales (top level) and sales reps
+    const topLevelEmployees = otherEmployees.filter(u => !isSalesRep(u));
+    const salesReps = otherEmployees.filter(u => isSalesRep(u));
 
-    const othersUnderFord = otherEmployees.filter(u =>
-      !u.position?.toLowerCase().includes('sales') &&
-      u.department?.toLowerCase() !== 'sales' &&
-      !u.role?.toLowerCase().includes('sales')
-    );
-
-    // Build tree nodes
-    const buildNode = (user: User | undefined, reports: User[]): TreeNode | null => {
-      if (!user) return null;
-      return {
-        ...user,
-        directReports: reports.map(r => ({ ...r, directReports: [] }))
-      };
+    return {
+      executives: { oliver, reese, ford },
+      topLevelEmployees,
+      salesReps,
     };
-
-    const reeseNode = buildNode(reese, salesReps);
-    const fordNode = buildNode(ford, othersUnderFord);
-
-    const oliverNode: TreeNode | null = oliver ? {
-      ...oliver,
-      directReports: [reeseNode, fordNode].filter((n): n is TreeNode => n !== null)
-    } : null;
-
-    return oliverNode;
   }, [users]);
 
-  // Toggle node expansion
-  const toggleExpand = (nodeId: string) => {
-    setExpandedNodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
-      return next;
-    });
-  };
-
-  // Expand all nodes
-  // Get executive IDs for expand/collapse
-  const getExecIds = () => {
-    const oliver = users.find(u => u.email?.toLowerCase() === OLIVER_EMAIL);
-    const reese = users.find(u => u.email?.toLowerCase() === REESE_EMAIL);
-    const ford = users.find(u => u.email?.toLowerCase() === FORD_EMAIL);
-    return [oliver?.id, reese?.id, ford?.id].filter(Boolean) as string[];
-  };
-
-  const expandAll = () => {
-    const allIds = new Set(users.map((u) => u.id));
-    setExpandedNodes(allIds);
-  };
-
-  // Collapse all nodes - show only executives expanded
-  const collapseAll = () => {
-    setExpandedNodes(new Set(getExecIds()));
-  };
-
   // Zoom controls
-  const zoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.1, 2));
-  const zoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.1, 0.5));
-  const resetZoom = () => setZoomLevel(1);
+  const zoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.1, 1.5));
+  const zoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.1, 0.4));
+  const resetZoom = () => setZoomLevel(0.85);
 
-  // Get initials for avatar fallback
-  const getInitials = (user: TreeNode) => {
-    const first = user.firstName?.[0] || '';
-    const last = user.lastName?.[0] || '';
-    return (first + last).toUpperCase();
-  };
+  // Render employee card
+  const renderEmployeeCard = (user: User, isExec: boolean = false, execType?: 'oliver' | 'reese' | 'ford') => {
+    const isSelected = selectedUser === user.id;
 
-  // Check if node is an executive
-  const isExecutive = (email?: string) => {
-    const e = email?.toLowerCase();
-    return e === OLIVER_EMAIL || e === REESE_EMAIL || e === FORD_EMAIL;
-  };
+    let cardStyle = 'bg-white dark:bg-gray-800';
+    let avatarStyle = '';
+    let badgeContent = null;
 
-  // Get branch info
-  const getBranchInfo = (email?: string) => {
-    const e = email?.toLowerCase();
-    if (e === OLIVER_EMAIL) return { icon: Crown, label: 'CEO', color: 'text-amber-500' };
-    if (e === REESE_EMAIL) return { icon: Briefcase, label: 'Sales Division', color: 'text-blue-500' };
-    if (e === FORD_EMAIL) return { icon: Settings, label: 'Operations Division', color: 'text-green-500' };
-    return null;
-  };
-
-  // Render individual node
-  const renderNode = (node: TreeNode, level: number = 0, branchType?: 'sales' | 'operations') => {
-    const isExpanded = expandedNodes.has(node.id);
-    const hasChildren = node.directReports.length > 0;
-    const isSelected = selectedNode === node.id;
-    const isExec = isExecutive(node.email);
-    const branchInfo = getBranchInfo(node.email);
-
-    // Determine card style based on role
-    let cardStyle = '';
-    if (node.email?.toLowerCase() === OLIVER_EMAIL) {
+    if (execType === 'oliver') {
       cardStyle = 'border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/20';
-    } else if (node.email?.toLowerCase() === REESE_EMAIL) {
+      avatarStyle = 'ring-2 ring-amber-500';
+      badgeContent = <Badge className="bg-amber-500 text-white text-xs">CEO</Badge>;
+    } else if (execType === 'reese') {
       cardStyle = 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20';
-    } else if (node.email?.toLowerCase() === FORD_EMAIL) {
+      avatarStyle = 'ring-2 ring-blue-500';
+      badgeContent = <Badge className="bg-blue-500 text-white text-xs">Sales</Badge>;
+    } else if (execType === 'ford') {
       cardStyle = 'border-2 border-green-500 bg-green-50 dark:bg-green-900/20';
-    } else if (branchType === 'sales') {
-      cardStyle = 'border-l-4 border-l-blue-400';
-    } else if (branchType === 'operations') {
-      cardStyle = 'border-l-4 border-l-green-400';
+      avatarStyle = 'ring-2 ring-green-500';
+      badgeContent = <Badge className="bg-green-500 text-white text-xs">Operations</Badge>;
+    } else if (isSalesRep(user)) {
+      cardStyle = 'border-l-4 border-l-blue-400 bg-white dark:bg-gray-800';
+    } else {
+      cardStyle = 'border-l-4 border-l-green-400 bg-white dark:bg-gray-800';
     }
 
     return (
-      <div key={node.id} className="relative flex flex-col items-center">
-        {/* Vertical connector to parent */}
-        {level > 0 && (
-          <div className="absolute -top-8 left-1/2 w-0.5 h-8 bg-gray-300 dark:bg-gray-600" />
-        )}
+      <Card
+        key={user.id}
+        onClick={() => setSelectedUser(user.id === selectedUser ? null : user.id)}
+        className={`
+          w-48 transition-all cursor-pointer hover:shadow-lg
+          ${isSelected ? 'ring-2 ring-primary shadow-lg' : ''}
+          ${cardStyle}
+        `}
+      >
+        <CardContent className="p-3">
+          <div className="flex flex-col items-center text-center">
+            <Avatar className={`h-12 w-12 mb-2 ${avatarStyle}`}>
+              <AvatarImage src={user.avatarUrl} alt={getFullName(user)} />
+              <AvatarFallback className={isExec ? 'bg-primary text-primary-foreground' : 'bg-gray-200'}>
+                {getInitials(user)}
+              </AvatarFallback>
+            </Avatar>
 
-        {/* Node card */}
-        <Card
-          onClick={() => setSelectedNode(node.id === selectedNode ? null : node.id)}
-          className={`
-            relative w-64 transition-all cursor-pointer hover:shadow-lg
-            ${isSelected ? 'ring-2 ring-primary shadow-lg' : ''}
-            ${cardStyle}
-          `}
-        >
-          {/* Branch indicator */}
-          {branchInfo && (
-            <div className="absolute top-2 right-2 flex items-center gap-1">
-              <branchInfo.icon className={`h-4 w-4 ${branchInfo.color}`} />
-            </div>
-          )}
+            <h3 className="font-semibold text-sm truncate w-full">{getFullName(user)}</h3>
 
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              {/* Avatar */}
-              <Avatar className={`h-12 w-12 ${isExec ? 'ring-2 ring-offset-2 ring-primary' : ''}`}>
-                <AvatarImage src={node.avatarUrl} alt={getFullName(node)} />
-                <AvatarFallback className={isExec ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'}>
-                  {getInitials(node)}
-                </AvatarFallback>
-              </Avatar>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-sm truncate">{getFullName(node)}</h3>
-                {node.position && (
-                  <p className="text-xs text-muted-foreground truncate">
-                    {node.position}
-                  </p>
-                )}
-
-                {branchInfo && (
-                  <Badge variant="outline" className="mt-1 text-xs">
-                    {branchInfo.label}
-                  </Badge>
-                )}
-
-                {!isExec && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {node.role && (
-                      <Badge variant="secondary" className="text-xs">
-                        {node.role}
-                      </Badge>
-                    )}
-                    {node.department && (
-                      <Badge variant="outline" className="text-xs">
-                        <Building2 className="h-3 w-3 mr-1" />
-                        {node.department}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-
-                {/* Direct reports count */}
-                {hasChildren && (
-                  <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                    <Users className="h-3 w-3" />
-                    <span>{node.directReports.length} report{node.directReports.length !== 1 ? 's' : ''}</span>
-                  </div>
-                )}
-
-                {/* Contact (on selection) */}
-                {isSelected && (
-                  <div className="mt-2 pt-2 border-t">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Mail className="h-3 w-3" />
-                      <span className="truncate">{node.email}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Expand/collapse button */}
-              {hasChildren && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleExpand(node.id);
-                  }}
-                >
-                  {isExpanded ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Children */}
-        {hasChildren && isExpanded && (
-          <div className="relative mt-8">
-            {/* Horizontal connector line */}
-            {node.directReports.length > 1 && (
-              <div
-                className="absolute top-0 h-0.5 bg-gray-300 dark:bg-gray-600"
-                style={{
-                  left: `calc(50% - ${(node.directReports.length - 1) * 140}px)`,
-                  right: `calc(50% - ${(node.directReports.length - 1) * 140}px)`,
-                }}
-              />
+            {user.position && (
+              <p className="text-xs text-muted-foreground truncate w-full">
+                {user.position}
+              </p>
             )}
 
-            {/* Child nodes */}
-            <div className="flex gap-6 justify-center items-start flex-wrap">
-              {node.directReports.map((child) => {
-                // Determine branch type for styling
-                let childBranchType: 'sales' | 'operations' | undefined;
-                if (node.email?.toLowerCase() === REESE_EMAIL) {
-                  childBranchType = 'sales';
-                } else if (node.email?.toLowerCase() === FORD_EMAIL) {
-                  childBranchType = 'operations';
-                }
-                return renderNode(child, level + 1, childBranchType);
-              })}
-            </div>
+            {badgeContent && <div className="mt-1">{badgeContent}</div>}
+
+            {!isExec && (
+              <div className="flex flex-wrap justify-center gap-1 mt-1">
+                {user.department && (
+                  <Badge variant="outline" className="text-xs">
+                    <Building2 className="h-3 w-3 mr-1" />
+                    {user.department}
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {isSelected && (
+              <div className="mt-2 pt-2 border-t w-full">
+                <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                  <Mail className="h-3 w-3" />
+                  <span className="truncate">{user.email}</span>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
     );
   };
 
@@ -373,23 +196,12 @@ export default function OrgChart() {
     );
   }
 
-  if (!users.length) {
+  if (!users.length || !orgData) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">No employees found</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!orgTree) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Unable to build organization chart. Executive users not found.</p>
+          <p className="text-muted-foreground">Unable to build organization chart.</p>
           <p className="text-sm text-muted-foreground mt-2">
             Looking for: Oliver Brown, Reese Samala, Ford Barsi
           </p>
@@ -398,13 +210,8 @@ export default function OrgChart() {
     );
   }
 
-  // Count employees by branch
-  const salesCount = users.filter(u =>
-    u.position?.toLowerCase().includes('sales') ||
-    u.department?.toLowerCase() === 'sales' ||
-    u.role?.toLowerCase().includes('sales')
-  ).length;
-  const opsCount = users.length - salesCount - 3; // minus executives
+  const { executives, topLevelEmployees, salesReps } = orgData;
+  const totalDisplayed = 3 + topLevelEmployees.length + salesReps.length;
 
   return (
     <div className="space-y-4">
@@ -414,32 +221,32 @@ export default function OrgChart() {
           <h1 className="text-2xl font-bold">Organization Chart</h1>
           <p className="text-muted-foreground">Company structure and reporting relationships</p>
         </div>
+        {canEdit && (
+          <Badge variant="outline" className="text-green-600 border-green-600">
+            Edit Access
+          </Badge>
+        )}
       </div>
 
       {/* Controls */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={expandAll}>
-                Expand All
-              </Button>
-              <Button variant="outline" size="sm" onClick={collapseAll}>
-                Collapse All
-              </Button>
-            </div>
-
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-blue-500" />
-                <span>Sales ({salesCount})</span>
+                <div className="w-3 h-3 rounded bg-amber-500" />
+                <span>Leadership (3)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded bg-green-500" />
-                <span>Operations ({opsCount})</span>
+                <span>Operations ({topLevelEmployees.length})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded bg-blue-500" />
+                <span>Sales ({salesReps.length})</span>
               </div>
               <span className="text-muted-foreground">
-                {users.length} total employees
+                {totalDisplayed} displayed
               </span>
             </div>
 
@@ -459,21 +266,101 @@ export default function OrgChart() {
           {/* Legend */}
           <div className="mt-4 p-3 bg-muted/50 rounded-md">
             <p className="text-xs text-muted-foreground">
-              <strong>Structure:</strong> Oliver Brown oversees the company. Reese Samala manages Sales Reps. Ford Barsi manages Operations & all other departments.
+              <strong>Structure:</strong> Oliver Brown (CEO), Reese Samala (Sales), and Ford Barsi (Operations) lead the company together.
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Organization tree */}
-      <div className="relative overflow-auto border rounded-lg bg-background">
-        <div className="min-h-[600px] p-8">
+      {/* Organization chart */}
+      <div className="relative overflow-auto border rounded-lg bg-gray-50 dark:bg-gray-900">
+        <div className="min-h-[700px] p-8">
           <div
             className="transition-transform origin-top"
             style={{ transform: `scale(${zoomLevel})` }}
           >
-            <div className="flex justify-center">
-              {renderNode(orgTree, 0)}
+            <div className="flex flex-col items-center">
+              {/* Leadership Row - Oliver slightly elevated */}
+              <div className="flex flex-col items-center mb-4">
+                {/* Oliver at top */}
+                <div className="mb-4 relative">
+                  {renderEmployeeCard(executives.oliver, true, 'oliver')}
+                  {/* Vertical line down from Oliver */}
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-0.5 h-8 bg-gray-400" />
+                </div>
+
+                {/* Reese and Ford side by side */}
+                <div className="flex items-start gap-16 relative">
+                  {/* Horizontal connector line */}
+                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-4 w-48 h-0.5 bg-gray-400" />
+
+                  {/* Vertical lines down to Reese and Ford */}
+                  <div className="absolute top-0 left-[calc(50%-96px)] transform -translate-y-4 w-0.5 h-4 bg-gray-400" />
+                  <div className="absolute top-0 left-[calc(50%+96px)] transform -translate-x-full -translate-y-4 w-0.5 h-4 bg-gray-400" />
+
+                  <div className="relative">
+                    {renderEmployeeCard(executives.reese, true, 'reese')}
+                  </div>
+                  <div className="relative">
+                    {renderEmployeeCard(executives.ford, true, 'ford')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Joint 3-way connector line */}
+              <div className="relative w-full flex justify-center my-6">
+                <div className="w-0.5 h-12 bg-gray-400" />
+              </div>
+
+              {/* Horizontal spread line */}
+              <div className="relative w-full max-w-6xl mb-4">
+                <div className="absolute top-0 left-8 right-8 h-0.5 bg-gray-400" />
+              </div>
+
+              {/* Top Level Employees (Non-Sales) */}
+              {topLevelEmployees.length > 0 && (
+                <div className="mb-8">
+                  <div className="text-center mb-4">
+                    <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                      <Building2 className="h-3 w-3 mr-1" />
+                      Operations & Departments ({topLevelEmployees.length})
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-4 max-w-6xl">
+                    {topLevelEmployees.map(emp => (
+                      <div key={emp.id} className="relative">
+                        {/* Vertical connector */}
+                        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-4 w-0.5 h-4 bg-gray-300" />
+                        {renderEmployeeCard(emp)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider line */}
+              {salesReps.length > 0 && topLevelEmployees.length > 0 && (
+                <div className="w-full max-w-4xl border-t border-dashed border-gray-300 my-6" />
+              )}
+
+              {/* Sales Reps */}
+              {salesReps.length > 0 && (
+                <div>
+                  <div className="text-center mb-4">
+                    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                      <Users className="h-3 w-3 mr-1" />
+                      Sales Team ({salesReps.length})
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-4 max-w-6xl">
+                    {salesReps.map(emp => (
+                      <div key={emp.id} className="relative">
+                        {renderEmployeeCard(emp)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
