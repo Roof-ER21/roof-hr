@@ -1043,7 +1043,7 @@ export const onboardingSteps = pgTable('onboarding_steps', {
   stepNumber: integer('step_number').notNull(),
   title: text('title').notNull(),
   description: text('description').notNull(),
-  type: text('type').$type<'DOCUMENT_UPLOAD' | 'FORM_FILL' | 'TRAINING' | 'MEETING' | 'TASK' | 'REVIEW'>().notNull(),
+  type: text('type').$type<'DOCUMENT_UPLOAD' | 'FORM_FILL' | 'TRAINING' | 'MEETING' | 'TASK' | 'REVIEW' | 'DOCUMENT_READ' | 'EQUIPMENT'>().notNull(),
   status: text('status').$type<'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED'>().notNull().default('PENDING'),
   isRequired: boolean('is_required').notNull().default(true),
   assignedTo: text('assigned_to'),
@@ -1051,6 +1051,18 @@ export const onboardingSteps = pgTable('onboarding_steps', {
   completedAt: timestamp('completed_at'),
   notes: text('notes'),
   documentIds: text('document_ids').array(), // Related documents
+  // Task completion tracking
+  completedBy: text('completed_by'), // User ID who completed the task
+  completedByRole: text('completed_by_role').$type<'EMPLOYEE' | 'MANAGER'>(), // Who completed: employee or manager
+  // Document integration
+  documentId: text('document_id'), // Single required document to view/sign
+  documentRequired: boolean('document_required').default(false), // Must view document before completing
+  documentViewed: boolean('document_viewed').default(false), // Has the document been viewed
+  documentViewedAt: timestamp('document_viewed_at'), // When document was viewed
+  // Equipment integration
+  equipmentBundleId: text('equipment_bundle_id'), // Equipment bundle to assign on completion
+  equipmentAssigned: boolean('equipment_assigned').default(false), // Has equipment been assigned
+  equipmentAssignedAt: timestamp('equipment_assigned_at'), // When equipment was assigned
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -2776,6 +2788,26 @@ export const insertReportExecutionsSchema = createInsertSchema(reportExecutions)
   executedAt: true,
 });
 
+// Notifications - in-app notifications for users
+export const notifications = pgTable('notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(), // Recipient user
+  type: text('type').$type<'info' | 'success' | 'warning' | 'error' | 'onboarding_assigned' | 'task_overdue' | 'document_required' | 'NEW_CANDIDATE'>().notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  read: boolean('read').notNull().default(false),
+  link: text('link'), // Deep link to relevant page (e.g., /dashboard?tab=onboarding)
+  metadata: text('metadata'), // JSON with additional data (taskId, instanceId, etc.)
+  expiresAt: timestamp('expires_at'), // Auto-cleanup for old notifications
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const notificationsSchema = createInsertSchema(notifications);
+export const insertNotificationsSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Batch 2 Types
 export type MeetingRoom = typeof meetingRooms.$inferSelect;
 export type InsertMeetingRoom = typeof meetingRooms.$inferInsert;
@@ -2791,3 +2823,5 @@ export type ScheduledReport = typeof scheduledReports.$inferSelect;
 export type InsertScheduledReport = typeof scheduledReports.$inferInsert;
 export type ReportExecution = typeof reportExecutions.$inferSelect;
 export type InsertReportExecution = typeof reportExecutions.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;

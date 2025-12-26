@@ -83,10 +83,12 @@ import {
   SqlQueryHistoryEntry, InsertSqlQueryHistory, sqlQueryHistory,
   // Onboarding Templates
   OnboardingTemplate, InsertOnboardingTemplate, onboardingTemplates,
-  OnboardingInstance, InsertOnboardingInstance, onboardingInstances
+  OnboardingInstance, InsertOnboardingInstance, onboardingInstances,
+  // Notifications
+  Notification, InsertNotification, notifications
 } from '@shared/schema';
 import { db } from './db';
-import { eq, and, lt, inArray, or, sql, gte, lte } from 'drizzle-orm';
+import { eq, and, lt, inArray, or, sql, gte, lte, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 // Type definitions for AI Criteria
@@ -1718,6 +1720,92 @@ class DrizzleStorage implements IStorage {
     return instance || null;
   }
 
+  // Overdue Onboarding Steps
+  async getOverdueOnboardingSteps(): Promise<OnboardingStep[]> {
+    const now = new Date();
+    return await db.select()
+      .from(onboardingSteps)
+      .where(
+        and(
+          lt(onboardingSteps.dueDate, now),
+          eq(onboardingSteps.status, 'PENDING')
+        )
+      );
+  }
+
+  // Notification Methods
+  async createNotification(data: InsertNotification & { id?: string }): Promise<Notification> {
+    const id = data.id || `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const [notification] = await db.insert(notifications).values({
+      ...data,
+      id,
+    }).returning();
+    return notification;
+  }
+
+  async getNotificationById(id: string): Promise<Notification | null> {
+    const [notification] = await db.select().from(notifications).where(eq(notifications.id, id));
+    return notification || null;
+  }
+
+  async getNotificationsByUserId(userId: string, limit: number = 50): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+  }
+
+  async getUnreadNotificationsByUserId(userId: string): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.read, false)
+        )
+      )
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification | null> {
+    const [notification] = await db.update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return notification || null;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db.update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async deleteNotification(id: string): Promise<boolean> {
+    await db.delete(notifications).where(eq(notifications.id, id));
+    return true;
+  }
+
+  async deleteAllNotifications(userId: string): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.userId, userId));
+  }
+
+  async getRecentNotification(userId: string, type: string, metadataContains: string, hoursAgo: number): Promise<Notification | null> {
+    const cutoff = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+    const results = await db.select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.type, type as any),
+          gte(notifications.createdAt, cutoff)
+        )
+      );
+    // Filter by metadata contains (since SQL LIKE in drizzle is complex)
+    return results.find(n => n.metadata?.includes(metadataContains)) || null;
+  }
+
   // Analytics Report Methods
   async createAnalyticsReport(data: InsertAnalyticsReport): Promise<AnalyticsReport> {
     const id = uuidv4();
@@ -2402,34 +2490,6 @@ class DrizzleStorage implements IStorage {
     return await db.select().from(equipmentReceipts).where(eq(equipmentReceipts.status, 'PENDING'));
   }
 
-  // Notification methods
-  async getNotifications(userId: string): Promise<any[]> {
-    // For now, return empty array - notifications will be stored in memory/session
-    // In production, you'd want to add a notifications table to the schema
-    return [];
-  }
-  
-  async markNotificationAsRead(id: string, userId: string): Promise<void> {
-    // Mark notification as read in storage
-    // In production, update the notifications table
-  }
-  
-  async markAllNotificationsAsRead(userId: string): Promise<void> {
-    // Mark all notifications for user as read
-    // In production, update all notifications for user
-  }
-  
-  async clearNotifications(userId: string): Promise<void> {
-    // Clear all notifications for user
-    // In production, delete or mark as cleared
-  }
-  
-  async createNotification(data: any): Promise<any> {
-    // Create a new notification
-    // In production, insert into notifications table
-    return { id: uuidv4(), ...data, createdAt: new Date() };
-  }
-  
   // Search method
   async search(query: string, userRole: string): Promise<any[]> {
     const results: any[] = [];

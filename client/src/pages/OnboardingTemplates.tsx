@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Edit2, Trash2, ClipboardList, Users, CheckCircle, Circle, GripVertical, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, ClipboardList, Users, CheckCircle, Circle, GripVertical, X, AlertTriangle, FileText, Package } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { OnboardingTemplate, OnboardingInstance, User } from '@/../../shared/schema';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -47,6 +48,8 @@ export default function OnboardingTemplates() {
   const [isViewInstanceDialogOpen, setIsViewInstanceDialogOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<OnboardingInstance | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [instanceSteps, setInstanceSteps] = useState<any[]>([]);
+  const [isLoadingSteps, setIsLoadingSteps] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -254,6 +257,65 @@ export default function OnboardingTemplates() {
       });
     }
   });
+
+  // Complete step mutation (for manager completing on behalf of employee)
+  const completeStepMutation = useMutation({
+    mutationFn: (stepId: string) =>
+      apiRequest(`/api/onboarding-steps/${stepId}/complete`, {
+        method: 'PUT',
+      }),
+    onSuccess: async (data: any) => {
+      // Refetch steps for the current instance
+      if (selectedInstance) {
+        fetchInstanceSteps(selectedInstance.id);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['/api/onboarding-instances'] });
+      toast({
+        title: 'Task Completed',
+        description: data.progress?.allCompleted
+          ? 'All onboarding tasks have been completed!'
+          : 'Task marked as complete.',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to complete task',
+        variant: 'destructive',
+      });
+    }
+  });
+
+  // Fetch instance steps function
+  const fetchInstanceSteps = async (instanceId: string) => {
+    setIsLoadingSteps(true);
+    try {
+      const response = await fetch(`/api/onboarding-instances/${instanceId}/steps`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const steps = await response.json();
+        setInstanceSteps(steps);
+      } else {
+        setInstanceSteps([]);
+      }
+    } catch {
+      setInstanceSteps([]);
+    } finally {
+      setIsLoadingSteps(false);
+    }
+  };
+
+  // Fetch steps when viewing an instance
+  useEffect(() => {
+    if (isViewInstanceDialogOpen && selectedInstance) {
+      fetchInstanceSteps(selectedInstance.id);
+    } else {
+      setInstanceSteps([]);
+    }
+  }, [isViewInstanceDialogOpen, selectedInstance]);
 
   // Setup drag-and-drop sensors
   const sensors = useSensors(
@@ -1009,69 +1071,147 @@ export default function OnboardingTemplates() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {selectedInstance && (() => {
-              // Parse progress to get completed tasks count
-              let completedTasksCount = 0;
-              try {
-                if (selectedInstance.progress) {
-                  const progressData = JSON.parse(selectedInstance.progress);
-                  completedTasksCount = progressData.completedTaskIds?.length || 0;
-                }
-              } catch {
-                completedTasksCount = 0;
-              }
-
-              return (
-                <>
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <Label className="text-sm text-muted-foreground">Status</Label>
-                      <Badge variant={selectedInstance.status === 'completed' ? 'default' : 'secondary'} className="ml-2">
-                        {selectedInstance.status}
-                      </Badge>
-                    </div>
-                    <div>
-                      <Label className="text-sm text-muted-foreground">Start Date</Label>
-                      <div className="text-sm font-medium">
-                        {selectedInstance.startDate && !isNaN(new Date(selectedInstance.startDate).getTime())
-                          ? format(new Date(selectedInstance.startDate), 'MMM d, yyyy')
-                          : 'Date not set'}
-                      </div>
+            {selectedInstance && (
+              <>
+                <div className="flex items-center gap-4">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Status</Label>
+                    <Badge variant={selectedInstance.status === 'completed' ? 'default' : 'secondary'} className="ml-2">
+                      {selectedInstance.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Start Date</Label>
+                    <div className="text-sm font-medium">
+                      {selectedInstance.startDate && !isNaN(new Date(selectedInstance.startDate).getTime())
+                        ? format(new Date(selectedInstance.startDate), 'MMM d, yyyy')
+                        : 'Date not set'}
                     </div>
                   </div>
-
                   <div>
-                    <Label className="text-base font-semibold">Tasks ({tasks.length})</Label>
+                    <Label className="text-sm text-muted-foreground">Progress</Label>
+                    <div className="text-sm font-medium">
+                      {instanceSteps.filter(s => s.status === 'COMPLETED').length} / {instanceSteps.length} completed
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-base font-semibold">Tasks</Label>
+                  {isLoadingSteps ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                    </div>
+                  ) : instanceSteps.length > 0 ? (
                     <div className="space-y-2 mt-3">
-                      {tasks.map((task, index) => (
-                        <div key={index} className="p-3 border rounded-lg">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-2 flex-1">
-                              <div className="mt-1">
-                                {index < completedTasksCount ? (
-                                  <CheckCircle className="h-5 w-5 text-green-600" />
-                                ) : (
-                                  <Circle className="h-5 w-5 text-muted-foreground" />
+                      {instanceSteps.map((step) => {
+                        const isCompleted = step.status === 'COMPLETED';
+                        const isOverdue = step.dueDate && new Date(step.dueDate) < new Date() && !isCompleted;
+                        const needsDocument = step.documentRequired && !step.documentViewed && !isCompleted;
+
+                        return (
+                          <div
+                            key={step.id}
+                            className={`p-3 border rounded-lg transition-colors ${
+                              isOverdue
+                                ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-900/20'
+                                : isCompleted
+                                  ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-900/20'
+                                  : 'border-border hover:bg-muted/50'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Checkbox */}
+                              <div className="pt-0.5">
+                                <Checkbox
+                                  checked={isCompleted}
+                                  disabled={isCompleted || completeStepMutation.isPending || needsDocument}
+                                  onCheckedChange={() => {
+                                    if (!isCompleted) {
+                                      completeStepMutation.mutate(step.id);
+                                    }
+                                  }}
+                                  className={isCompleted ? 'bg-green-500 border-green-500' : ''}
+                                />
+                              </div>
+
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`font-medium ${isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+                                    {step.title}
+                                  </span>
+
+                                  {isOverdue && (
+                                    <Badge variant="destructive" className="text-xs">
+                                      <AlertTriangle className="w-3 h-3 mr-1" />
+                                      Overdue
+                                    </Badge>
+                                  )}
+
+                                  {step.documentId && (
+                                    <FileText className="w-4 h-4 text-blue-500" />
+                                  )}
+
+                                  {step.equipmentBundleId && (
+                                    <Package className="w-4 h-4 text-green-500" />
+                                  )}
+                                </div>
+
+                                {step.description && (
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    {step.description}
+                                  </p>
+                                )}
+
+                                {/* Due Date */}
+                                {step.dueDate && (
+                                  <p className={`text-xs mt-2 ${isOverdue ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                                    Due: {format(new Date(step.dueDate), 'MMM d, yyyy')}
+                                  </p>
+                                )}
+
+                                {/* Document Required Notice */}
+                                {needsDocument && (
+                                  <p className="text-xs text-amber-600 mt-2">
+                                    Employee must view the required document first
+                                  </p>
+                                )}
+
+                                {/* Completion Info */}
+                                {isCompleted && step.completedAt && (
+                                  <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Completed {format(new Date(step.completedAt), 'MMM d, yyyy')}
+                                    {step.completedByRole === 'MANAGER' && ' (by manager)'}
+                                    {step.completedByRole === 'EMPLOYEE' && ' (by employee)'}
+                                  </p>
                                 )}
                               </div>
-                              <div className="flex-1">
-                                <div className={`font-medium ${index < completedTasksCount ? 'line-through text-muted-foreground' : ''}`}>
-                                  {task.title}
-                                </div>
-                                <div className="text-sm text-muted-foreground mt-1">{task.description}</div>
-                                <div className="text-xs text-muted-foreground mt-2">
-                                  {formatDueDate(selectedInstance.startDate as string, task.dueInDays)}
-                                </div>
+
+                              {/* Status Icon */}
+                              <div className="flex-shrink-0">
+                                {isCompleted ? (
+                                  <CheckCircle className="w-5 h-5 text-green-500" />
+                                ) : isOverdue ? (
+                                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                                ) : (
+                                  <Circle className="w-5 h-5 text-muted-foreground" />
+                                )}
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
-                  </div>
-                </>
-              );
-            })()}
+                  ) : (
+                    <div className="text-center text-muted-foreground py-8">
+                      No tasks found for this onboarding instance
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsViewInstanceDialogOpen(false)}>

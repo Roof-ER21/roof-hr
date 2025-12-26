@@ -10,6 +10,7 @@ import { DashboardSkeleton } from '@/components/ui/skeleton-patterns';
 import { EventFormModal } from '@/components/calendar/EventFormModal';
 import { DeleteEventDialog } from '@/components/calendar/DeleteEventDialog';
 import OrgChart from '@/components/OrgChart';
+import { OnboardingTaskList } from '@/components/onboarding/OnboardingTaskList';
 import {
   Calendar,
   Clock,
@@ -483,9 +484,10 @@ function EmployeeDashboard() {
         {/* Center Column - Activity & PTO */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs defaultValue="calendar" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="calendar">My Calendar</TabsTrigger>
               <TabsTrigger value="pto">My PTO</TabsTrigger>
+              <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
               <TabsTrigger value="pending">Pending Actions</TabsTrigger>
               <TabsTrigger value="activity">Recent Activity</TabsTrigger>
               <TabsTrigger value="orgchart">Org Chart</TabsTrigger>
@@ -774,6 +776,22 @@ function EmployeeDashboard() {
                       </Link>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Onboarding Tab */}
+            <TabsContent value="onboarding" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5" />
+                    <CardTitle>My Onboarding Checklist</CardTitle>
+                  </div>
+                  <CardDescription>Complete your onboarding tasks to get started</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <OnboardingTaskList />
                 </CardContent>
               </Card>
             </TabsContent>

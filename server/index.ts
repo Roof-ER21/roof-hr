@@ -355,6 +355,16 @@ app.use((req, res, next) => {
         logger.error('Failed to start PTO reminder job:', error);
         // Continue - job can be triggered manually via API
       }
+
+      // Initialize onboarding overdue tasks checker (runs daily at 9 AM)
+      try {
+        const { setupOverdueTasksScheduler } = await import('./services/onboarding-notifications');
+        setupOverdueTasksScheduler();
+        logger.info('Onboarding overdue tasks scheduler started (9 AM daily)');
+      } catch (error) {
+        logger.error('Failed to start onboarding overdue tasks scheduler:', error);
+        // Continue - notifications can be triggered manually via API
+      }
     } catch (error) {
       logger.error('Error during server initialization:', error);
     }
