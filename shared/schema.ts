@@ -2480,6 +2480,104 @@ export const insertSqlQueryHistorySchema = createInsertSchema(sqlQueryHistory).o
   createdAt: true,
 });
 
+// ============== NEW FEATURE TABLES ==============
+
+// User Email Preferences - notification settings per user
+export const userEmailPreferences = pgTable('user_email_preferences', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  ptoNotifications: boolean('pto_notifications').notNull().default(true),
+  contractNotifications: boolean('contract_notifications').notNull().default(true),
+  reviewNotifications: boolean('review_notifications').notNull().default(true),
+  taskNotifications: boolean('task_notifications').notNull().default(true),
+  systemAnnouncements: boolean('system_announcements').notNull().default(true),
+  weeklyDigest: boolean('weekly_digest').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const userEmailPreferencesSchema = createInsertSchema(userEmailPreferences);
+export const insertUserEmailPreferencesSchema = createInsertSchema(userEmailPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Candidate Import Logs - track resume/CSV imports
+export const candidateImportLogs = pgTable('candidate_import_logs', {
+  id: text('id').primaryKey(),
+  importType: text('import_type').notNull(), // RESUME, CSV, LINKEDIN, INDEED
+  fileName: text('file_name'),
+  totalRecords: integer('total_records').notNull().default(0),
+  successCount: integer('success_count').notNull().default(0),
+  errorCount: integer('error_count').notNull().default(0),
+  errors: text('errors'), // JSON array of error messages
+  importedBy: text('imported_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const candidateImportLogsSchema = createInsertSchema(candidateImportLogs);
+export const insertCandidateImportLogsSchema = createInsertSchema(candidateImportLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Recruitment Bot Conversations - AI bot interactions with candidates
+export const recruitmentBotConversations = pgTable('recruitment_bot_conversations', {
+  id: text('id').primaryKey(),
+  candidateId: text('candidate_id'),
+  messages: text('messages').notNull(), // JSON array of messages
+  status: text('status').notNull().default('active'), // active, completed, abandoned
+  context: text('context'), // JSON context data
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const recruitmentBotConversationsSchema = createInsertSchema(recruitmentBotConversations);
+export const insertRecruitmentBotConversationsSchema = createInsertSchema(recruitmentBotConversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// AI Evaluations - store AI evaluation results for candidates
+export const aiEvaluations = pgTable('ai_evaluations', {
+  id: text('id').primaryKey(),
+  candidateId: text('candidate_id'),
+  criteriaId: text('criteria_id'),
+  score: integer('score'), // 0-100
+  feedback: text('feedback'),
+  strengths: text('strengths'), // JSON array
+  weaknesses: text('weaknesses'), // JSON array
+  recommendation: text('recommendation'), // HIRE, REJECT, REVIEW
+  evaluatedAt: timestamp('evaluated_at').defaultNow().notNull(),
+});
+
+export const aiEvaluationsSchema = createInsertSchema(aiEvaluations);
+export const insertAiEvaluationsSchema = createInsertSchema(aiEvaluations).omit({
+  id: true,
+  evaluatedAt: true,
+});
+
+// Agent Interactions - log HR agent interactions
+export const agentInteractions = pgTable('agent_interactions', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id'),
+  userId: text('user_id'),
+  action: text('action').notNull(),
+  input: text('input'), // JSON
+  output: text('output'), // JSON
+  status: text('status').notNull().default('completed'),
+  duration: integer('duration'), // milliseconds
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const agentInteractionsSchema = createInsertSchema(agentInteractions);
+export const insertAgentInteractionsSchema = createInsertSchema(agentInteractions).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Export Workflow types
 export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowStep = typeof workflowSteps.$inferSelect;
@@ -2522,3 +2620,15 @@ export type ApiAlert = typeof apiAlerts.$inferSelect;
 export type InsertApiAlert = z.infer<typeof insertApiAlertsSchema>;
 export type SqlQueryHistoryEntry = typeof sqlQueryHistory.$inferSelect;
 export type InsertSqlQueryHistory = z.infer<typeof insertSqlQueryHistorySchema>;
+
+// New Feature Table types
+export type UserEmailPreference = typeof userEmailPreferences.$inferSelect;
+export type InsertUserEmailPreference = z.infer<typeof insertUserEmailPreferencesSchema>;
+export type CandidateImportLog = typeof candidateImportLogs.$inferSelect;
+export type InsertCandidateImportLog = z.infer<typeof insertCandidateImportLogsSchema>;
+export type RecruitmentBotConversation = typeof recruitmentBotConversations.$inferSelect;
+export type InsertRecruitmentBotConversation = z.infer<typeof insertRecruitmentBotConversationsSchema>;
+export type AiEvaluation = typeof aiEvaluations.$inferSelect;
+export type InsertAiEvaluation = z.infer<typeof insertAiEvaluationsSchema>;
+export type AgentInteraction = typeof agentInteractions.$inferSelect;
+export type InsertAgentInteraction = z.infer<typeof insertAgentInteractionsSchema>;

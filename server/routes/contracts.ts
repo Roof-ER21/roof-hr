@@ -598,7 +598,7 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
       // If signing, update dates and send notifications
       if (updateData.status === 'SIGNED' && updateData.signature) {
         updateData.signedDate = new Date();
-        updateData.signatureIp = req.ip;
+        updateData.signatureIp = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
         
         // Send notification to managers and HR after successful signing
         const updatedContract = await storage.updateEmployeeContract(req.params.id, updateData);
@@ -683,21 +683,34 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
     if (contract.employeeId !== user.id) {
       return res.status(403).json({ error: 'Only the employee can sign their contract' });
     }
-    
+
     // Check if contract is in a signable state
     if (!['SENT', 'VIEWED'].includes(contract.status)) {
       return res.status(400).json({ error: 'Contract is not ready for signature' });
     }
-    
+
+    // Capture IP address from request
+    const signatureIp = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
+    const signedDate = new Date();
+
     const updatedContract = await storage.updateEmployeeContract(req.params.id, {
       status: 'SIGNED',
       signature,
-      signatureIp: req.ip,
-      signedDate: new Date()
+      signatureIp,
+      signedDate
     });
-    
-    // Here you would send notification to HR/manager about signed contract
-    
+
+    // Send notification to managers and HR about signed contract
+    await notifyManagersAndHROfSignedContract({
+      contractId: req.params.id,
+      employeeName: contract.recipientName,
+      contractTitle: contract.title,
+      signedDate,
+      signature
+    }, user.email);
+
+    console.log(`Contract ${req.params.id} signed by ${user.email} from IP ${signatureIp}`);
+
     res.json(updatedContract);
   } catch (error) {
     console.error('Error signing contract:', error);

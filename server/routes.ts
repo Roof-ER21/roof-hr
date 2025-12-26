@@ -52,6 +52,11 @@ import employeePortalRoutes from './routes/employee-portal';
 import equipmentAgreementRoutes from './routes/equipment-agreements';
 import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
 import superAdminRoutes from './routes/super-admin';
+import emailPreferencesRoutes from './routes/email-preferences';
+import candidateImportLogsRoutes from './routes/candidate-import-logs';
+import aiEvaluationsRoutes from './routes/ai-evaluations';
+import recruitmentBotConversationsRoutes from './routes/recruitment-bot-conversations';
+import agentInteractionsRoutes from './routes/agent-interactions';
 import { apiMetricsMiddleware } from './middleware/api-metrics';
 import { googleDriveService } from './services/google-drive-service';
 import { googleCalendarService } from './services/google-calendar-service';
@@ -3219,6 +3224,21 @@ export function registerRoutes(app: express.Application) {
 
   // Mount Super Admin routes (Ahmed only)
   app.use('/api/super-admin', superAdminRoutes);
+
+  // Mount Email Preferences routes
+  app.use(emailPreferencesRoutes);
+
+  // Mount Candidate Import Logs routes
+  app.use(candidateImportLogsRoutes);
+
+  // Mount AI Evaluations routes
+  app.use(aiEvaluationsRoutes);
+
+  // Mount Recruitment Bot Conversations routes
+  app.use(recruitmentBotConversationsRoutes);
+
+  // Mount Agent Interactions routes
+  app.use(agentInteractionsRoutes);
 
   // Mount test harmony routes (development only)
   if (process.env.NODE_ENV !== 'production') {
