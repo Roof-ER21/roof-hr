@@ -231,6 +231,86 @@ router.delete('/api/onboarding-templates/:id', requireManager, async (req, res) 
   }
 });
 
+// POST /api/onboarding-templates/:templateId/assign/:employeeId - Assign template to employee
+router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireManager, async (req, res) => {
+  try {
+    const { templateId, employeeId } = req.params;
+
+    // Get the template
+    const template = await storage.getOnboardingTemplateById(templateId);
+    if (!template) {
+      return res.status(404).json({ error: 'Onboarding template not found' });
+    }
+
+    // Parse tasks from template
+    const tasks = typeof template.tasks === 'string' ? JSON.parse(template.tasks) : template.tasks || [];
+
+    // Generate unique ID for the instance
+    const instanceId = `instance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create the onboarding instance
+    const instance = await storage.createOnboardingInstance({
+      id: instanceId,
+      templateId,
+      employeeId,
+      assignedBy: req.user?.id || 'system',
+      status: 'in_progress',
+      progress: JSON.stringify([]), // Empty array of completed task IDs
+      startDate: new Date(),
+    });
+
+    // Create onboarding steps from template tasks
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
+      const stepId = `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Calculate due date based on dueInDays
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + (task.dueInDays || 7));
+
+      await storage.createOnboardingStep({
+        id: stepId,
+        workflowId: instanceId,
+        stepNumber: i + 1,
+        title: task.title,
+        description: task.description || '',
+        type: 'TASK',
+        status: 'PENDING',
+        isRequired: true,
+        dueDate: dueDate.toISOString(),
+      });
+    }
+
+    // Also create a workflow entry for backwards compatibility
+    const workflowId = `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    await storage.createOnboardingWorkflow({
+      id: workflowId,
+      employeeId,
+      templateId,
+      status: 'IN_PROGRESS',
+      currentStep: 1,
+      totalSteps: tasks.length,
+      assignedTo: req.user?.id,
+      notes: `Assigned from template: ${template.name}`,
+      startedAt: new Date().toISOString(),
+    });
+
+    res.json({
+      success: true,
+      message: 'Template assigned successfully',
+      instance: {
+        ...instance,
+        template,
+        tasksCount: tasks.length,
+      },
+      workflowId,
+    });
+  } catch (error) {
+    console.error('Error assigning onboarding template:', error);
+    res.status(500).json({ error: 'Failed to assign onboarding template' });
+  }
+});
+
 // ONBOARDING INSTANCES
 
 // GET /api/onboarding-instances - List instances (filter by employeeId, status)
