@@ -34,7 +34,9 @@ import {
   X,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  ClipboardList,
+  ScrollText
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
@@ -209,6 +211,41 @@ function EmployeeDashboard() {
       return response.json();
     }
   });
+
+  // Fetch my onboarding tasks
+  const { data: onboardingInstances = [] } = useQuery<any[]>({
+    queryKey: ['/api/onboarding-instances', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const response = await fetch(`/api/onboarding-instances?employeeId=${user.id}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!user?.id
+  });
+
+  // Fetch my unsigned contracts
+  const { data: myContracts = [] } = useQuery<any[]>({
+    queryKey: ['/api/employee-contracts/my-contracts'],
+    queryFn: async () => {
+      const response = await fetch('/api/employee-contracts', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!response.ok) return [];
+      const contracts = await response.json();
+      // Filter for contracts assigned to current user
+      return contracts.filter((c: any) => c.employeeId === user?.id);
+    },
+    enabled: !!user?.id
+  });
+
+  // Get unsigned contracts
+  const unsignedContracts = myContracts.filter((c: any) => c.status === 'SENT' || c.status === 'PENDING');
+
+  // Get active onboarding (in progress)
+  const activeOnboarding = onboardingInstances.filter((o: any) => o.status === 'IN_PROGRESS' || o.status === 'NOT_STARTED');
 
   if (ptoLoading || pendingLoading) {
     return (
@@ -792,6 +829,82 @@ function EmployeeDashboard() {
                             <Button size="sm">Acknowledge</Button>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unsigned contracts */}
+                  {unsignedContracts.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <ScrollText className="w-4 h-4" />
+                        Contracts Awaiting Your Signature ({unsignedContracts.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {unsignedContracts.map((contract: any) => (
+                          <div
+                            key={contract.id}
+                            className="flex items-center justify-between p-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20"
+                          >
+                            <div className="flex items-center gap-3">
+                              <ScrollText className="w-4 h-4 text-purple-600" />
+                              <div>
+                                <span className="text-sm font-medium block">{contract.templateName || 'Contract'}</span>
+                                <span className="text-xs text-gray-500">Sent {contract.sentAt ? format(new Date(contract.sentAt), 'MMM d, yyyy') : 'recently'}</span>
+                              </div>
+                            </div>
+                            <Link to="/contracts">
+                              <Button size="sm" className="bg-purple-600 hover:bg-purple-700">Sign Now</Button>
+                            </Link>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Active onboarding tasks */}
+                  {activeOnboarding.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4" />
+                        Onboarding Checklist
+                      </h4>
+                      <div className="space-y-3">
+                        {activeOnboarding.map((instance: any) => {
+                          const progress = instance.progress || { completedSteps: 0, totalSteps: instance.totalSteps || 0, percentage: 0 };
+                          const completedSteps = progress.completedSteps || instance.currentStep || 0;
+                          const totalSteps = progress.totalSteps || instance.totalSteps || 10;
+                          const percentage = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+                          return (
+                            <div
+                              key={instance.id}
+                              className="p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <ClipboardList className="w-4 h-4 text-blue-600" />
+                                  <span className="text-sm font-medium">{instance.notes || 'Onboarding Tasks'}</span>
+                                </div>
+                                <Badge variant="outline" className="text-blue-600 border-blue-300">
+                                  {instance.status === 'NOT_STARTED' ? 'Not Started' : 'In Progress'}
+                                </Badge>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+                                  <span>{completedSteps} of {totalSteps} tasks completed</span>
+                                  <span>{percentage}%</span>
+                                </div>
+                                <Progress value={percentage} className="h-2" />
+                              </div>
+                              <div className="mt-3 flex justify-end">
+                                <Link to="/onboarding-templates">
+                                  <Button size="sm" variant="outline">View Tasks</Button>
+                                </Link>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
