@@ -34,8 +34,26 @@ function requireManager(req: any, res: any, next: any) {
 }
 
 // Validation schemas
+
+// Template schema (for creating reusable templates)
+const createTemplateSchema = z.object({
+  name: z.string().min(1),
+  department: z.string().optional(),
+  description: z.string().optional(),
+  tasks: z.array(z.object({
+    title: z.string(),
+    description: z.string().optional(),
+    dueInDays: z.number().int().default(1),
+  })).optional(),
+  isActive: z.boolean().default(true),
+});
+
+const updateTemplateSchema = createTemplateSchema.partial();
+
+// Workflow/Instance schema (for assigning to employees)
 const createOnboardingWorkflowSchema = z.object({
   employeeId: z.string(),
+  templateId: z.string().optional(),
   status: z.enum(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'PAUSED']).default('NOT_STARTED'),
   currentStep: z.number().int().default(1),
   totalSteps: z.number().int().default(10),
@@ -68,19 +86,22 @@ router.get('/api/onboarding-templates', requireAuth, async (req, res) => {
   try {
     const { department, isActive } = req.query;
 
-    // Get all workflows
-    const workflows = await storage.getAllOnboardingWorkflows();
+    // Get all templates
+    const templates = await storage.getAllOnboardingTemplates();
 
-    // Apply filters
-    let filtered = workflows;
+    // Apply filters and parse tasks JSON
+    let filtered = templates.map((t: any) => ({
+      ...t,
+      tasks: typeof t.tasks === 'string' ? JSON.parse(t.tasks) : t.tasks || [],
+    }));
 
     if (department && department !== 'all') {
-      filtered = filtered.filter((w: any) => w.department === department);
+      filtered = filtered.filter((t: any) => t.department === department);
     }
 
     if (isActive !== undefined) {
       const activeFilter = isActive === 'true';
-      filtered = filtered.filter((w: any) => w.isActive === activeFilter);
+      filtered = filtered.filter((t: any) => t.isActive === activeFilter);
     }
 
     res.json(filtered);
@@ -93,17 +114,14 @@ router.get('/api/onboarding-templates', requireAuth, async (req, res) => {
 // GET /api/onboarding-templates/:id - Get specific template
 router.get('/api/onboarding-templates/:id', requireAuth, async (req, res) => {
   try {
-    const workflow = await storage.getOnboardingWorkflowById(req.params.id);
-    if (!workflow) {
+    const template = await storage.getOnboardingTemplateById(req.params.id);
+    if (!template) {
       return res.status(404).json({ error: 'Onboarding template not found' });
     }
 
-    // Get steps for this workflow
-    const steps = await storage.getOnboardingStepsByWorkflowId(req.params.id);
-
     res.json({
-      ...workflow,
-      steps,
+      ...template,
+      tasks: typeof template.tasks === 'string' ? JSON.parse(template.tasks) : template.tasks || [],
     });
   } catch (error) {
     console.error('Error fetching onboarding template:', error);
@@ -114,27 +132,27 @@ router.get('/api/onboarding-templates/:id', requireAuth, async (req, res) => {
 // POST /api/onboarding-templates - Create template (manager only)
 router.post('/api/onboarding-templates', requireManager, async (req, res) => {
   try {
-    const data = createOnboardingWorkflowSchema.parse(req.body);
-    const { steps, ...workflowData } = req.body;
+    const data = createTemplateSchema.parse(req.body);
 
-    const workflow = await storage.createOnboardingWorkflow(workflowData);
+    // Generate unique ID
+    const id = `template-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create steps if provided
-    const createdSteps = [];
-    if (steps && Array.isArray(steps)) {
-      for (const step of steps) {
-        const stepData = createOnboardingStepSchema.parse({
-          ...step,
-          workflowId: workflow.id,
-        });
-        const createdStep = await storage.createOnboardingStep(stepData);
-        createdSteps.push(createdStep);
-      }
-    }
+    // Create template using onboarding templates table
+    const template = await storage.createOnboardingTemplate({
+      id,
+      name: data.name,
+      department: data.department || null,
+      description: data.description || null,
+      tasks: JSON.stringify(data.tasks || []),
+      isActive: data.isActive ?? true,
+      createdBy: req.user?.id || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     res.json({
-      ...workflow,
-      steps: createdSteps,
+      ...template,
+      tasks: data.tasks || [],
     });
   } catch (error) {
     console.error('Error creating onboarding template:', error);
@@ -148,17 +166,28 @@ router.post('/api/onboarding-templates', requireManager, async (req, res) => {
 // PUT /api/onboarding-templates/:id - Update template (manager only)
 router.put('/api/onboarding-templates/:id', requireManager, async (req, res) => {
   try {
-    const data = updateOnboardingWorkflowSchema.parse(req.body);
-    const workflow = await storage.updateOnboardingWorkflow(req.params.id, {
-      ...data,
-      updatedAt: new Date().toISOString(),
-    });
+    const data = updateTemplateSchema.parse(req.body);
 
-    if (!workflow) {
+    const updateData: any = {
+      ...data,
+      updatedAt: new Date(),
+    };
+
+    // Convert tasks to JSON string if provided
+    if (data.tasks) {
+      updateData.tasks = JSON.stringify(data.tasks);
+    }
+
+    const template = await storage.updateOnboardingTemplate(req.params.id, updateData);
+
+    if (!template) {
       return res.status(404).json({ error: 'Onboarding template not found' });
     }
 
-    res.json(workflow);
+    res.json({
+      ...template,
+      tasks: typeof template.tasks === 'string' ? JSON.parse(template.tasks) : template.tasks || [],
+    });
   } catch (error) {
     console.error('Error updating onboarding template:', error);
     if (error instanceof z.ZodError) {
@@ -171,13 +200,13 @@ router.put('/api/onboarding-templates/:id', requireManager, async (req, res) => 
 // DELETE /api/onboarding-templates/:id - Deactivate template (manager only)
 router.delete('/api/onboarding-templates/:id', requireManager, async (req, res) => {
   try {
-    // Soft delete by setting status to inactive
-    const workflow = await storage.updateOnboardingWorkflow(req.params.id, {
-      status: 'PAUSED',
-      updatedAt: new Date().toISOString(),
+    // Soft delete by setting isActive to false
+    const template = await storage.updateOnboardingTemplate(req.params.id, {
+      isActive: false,
+      updatedAt: new Date(),
     });
 
-    if (!workflow) {
+    if (!template) {
       return res.status(404).json({ error: 'Onboarding template not found' });
     }
 

@@ -80,7 +80,10 @@ import {
   FeatureToggle, InsertFeatureToggle, featureToggles,
   SystemAuditLog, InsertSystemAuditLog, systemAuditLogs,
   ApiAlert, InsertApiAlert, apiAlerts,
-  SqlQueryHistoryEntry, InsertSqlQueryHistory, sqlQueryHistory
+  SqlQueryHistoryEntry, InsertSqlQueryHistory, sqlQueryHistory,
+  // Onboarding Templates
+  OnboardingTemplate, InsertOnboardingTemplate, onboardingTemplates,
+  OnboardingInstance, InsertOnboardingInstance, onboardingInstances
 } from '@shared/schema';
 import { db } from './db';
 import { eq, and, lt, inArray, or, sql, gte, lte } from 'drizzle-orm';
@@ -1653,6 +1656,62 @@ class DrizzleStorage implements IStorage {
       .where(eq(onboardingSteps.id, id))
       .returning();
     return step || null;
+  }
+
+  // Onboarding Template Methods
+  async createOnboardingTemplate(data: InsertOnboardingTemplate): Promise<OnboardingTemplate> {
+    const [template] = await db.insert(onboardingTemplates).values(data).returning();
+    return template;
+  }
+
+  async getOnboardingTemplateById(id: string): Promise<OnboardingTemplate | null> {
+    const [template] = await db.select().from(onboardingTemplates).where(eq(onboardingTemplates.id, id));
+    return template || null;
+  }
+
+  async getAllOnboardingTemplates(): Promise<OnboardingTemplate[]> {
+    return await db.select().from(onboardingTemplates);
+  }
+
+  async updateOnboardingTemplate(id: string, data: Partial<OnboardingTemplate>): Promise<OnboardingTemplate | null> {
+    const [template] = await db.update(onboardingTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(onboardingTemplates.id, id))
+      .returning();
+    return template || null;
+  }
+
+  async deleteOnboardingTemplate(id: string): Promise<boolean> {
+    const result = await db.delete(onboardingTemplates).where(eq(onboardingTemplates.id, id));
+    return true;
+  }
+
+  // Onboarding Instance Methods
+  async createOnboardingInstance(data: InsertOnboardingInstance): Promise<OnboardingInstance> {
+    const id = `instance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const [instance] = await db.insert(onboardingInstances).values({ ...data, id }).returning();
+    return instance;
+  }
+
+  async getOnboardingInstanceById(id: string): Promise<OnboardingInstance | null> {
+    const [instance] = await db.select().from(onboardingInstances).where(eq(onboardingInstances.id, id));
+    return instance || null;
+  }
+
+  async getAllOnboardingInstances(): Promise<OnboardingInstance[]> {
+    return await db.select().from(onboardingInstances);
+  }
+
+  async getOnboardingInstancesByEmployeeId(employeeId: string): Promise<OnboardingInstance[]> {
+    return await db.select().from(onboardingInstances).where(eq(onboardingInstances.employeeId, employeeId));
+  }
+
+  async updateOnboardingInstance(id: string, data: Partial<OnboardingInstance>): Promise<OnboardingInstance | null> {
+    const [instance] = await db.update(onboardingInstances)
+      .set(data)
+      .where(eq(onboardingInstances.id, id))
+      .returning();
+    return instance || null;
   }
 
   // Analytics Report Methods
