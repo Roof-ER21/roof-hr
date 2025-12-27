@@ -278,7 +278,6 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
 
       try {
         const createdStep = await storage.createOnboardingStep({
-          id: stepId,
           workflowId: instanceId,
           stepNumber: i + 1,
           title: task.title,
@@ -288,7 +287,7 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
           isRequired: true,
           dueDate: dueDate,
         });
-        console.log(`[Onboarding] Created step ${i + 1}: ${task.title} (ID: ${stepId})`);
+        console.log(`[Onboarding] Created step ${i + 1}: ${task.title} (ID: ${createdStep.id})`);
       } catch (stepError) {
         console.error(`[Onboarding] Error creating step ${i + 1}:`, stepError);
       }
@@ -299,17 +298,14 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
     console.log(`[Onboarding] Verified ${createdSteps.length} steps created for instance ${instanceId}`);
 
     // Also create a workflow entry for backwards compatibility
-    const workflowId = `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    await storage.createOnboardingWorkflow({
-      id: workflowId,
+    const workflow = await storage.createOnboardingWorkflow({
       employeeId,
-      templateId,
       status: 'IN_PROGRESS',
       currentStep: 1,
       totalSteps: tasks.length,
       assignedTo: req.user?.id,
-      notes: `Assigned from template: ${template.name}`,
-      startedAt: new Date(), // Pass Date object directly, not string
+      notes: `Assigned from template: ${template.name} (templateId: ${templateId})`,
+      startedAt: new Date(),
     });
 
     // Send notification to the employee
@@ -331,7 +327,7 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
         template,
         tasksCount: tasks.length,
       },
-      workflowId,
+      workflowId: workflow.id,
     });
   } catch (error) {
     console.error('Error assigning onboarding template:', error);
@@ -441,7 +437,7 @@ router.get('/api/onboarding-instances/:id/steps', requireAuth, async (req, res) 
       const workflow = await storage.getOnboardingWorkflowById(req.params.id);
       if (workflow) {
         const instances = await storage.getOnboardingInstancesByEmployeeId(workflow.employeeId);
-        const instance = instances.find((i: any) => i.templateId === workflow.templateId);
+        const instance = instances.find((i: any) => workflow.notes?.includes(`templateId: ${i.id}`));
         if (instance) {
           stepsLookupId = instance.id;
         }
@@ -462,7 +458,7 @@ router.post('/api/onboarding-instances', requireManager, async (req, res) => {
     const data = createOnboardingWorkflowSchema.parse(req.body);
     const workflow = await storage.createOnboardingWorkflow({
       ...data,
-      startedAt: new Date().toISOString(),
+      startedAt: new Date(),
     });
 
     res.json(workflow);
@@ -970,11 +966,8 @@ router.get('/api/notifications', requireAuth, async (req: any, res) => {
 // PATCH /api/notifications/:id/read - Mark notification as read
 router.patch('/api/notifications/:id/read', requireAuth, async (req: any, res) => {
   try {
-    const notification = await storage.markNotificationAsRead(req.params.id);
-    if (!notification) {
-      return res.status(404).json({ error: 'Notification not found' });
-    }
-    res.json(notification);
+    await storage.markNotificationAsRead(req.params.id);
+    res.json({ success: true, id: req.params.id });
   } catch (error) {
     console.error('Error marking notification as read:', error);
     res.status(500).json({ error: 'Failed to mark notification as read' });

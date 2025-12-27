@@ -107,9 +107,8 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
               type: 'NEW_CANDIDATE',
               title: 'New Candidate Added',
               message: `${candidate.firstName} ${candidate.lastName} applied for ${candidate.position}`,
-              data: JSON.stringify({ candidateId: candidate.id }),
-              isRead: false,
-              createdAt: new Date(),
+              metadata: JSON.stringify({ candidateId: candidate.id }),
+              read: false,
             });
           }
 
@@ -257,9 +256,8 @@ router.post('/api/candidates/import-indeed', requireManager, async (req: AuthReq
               type: 'NEW_CANDIDATE',
               title: 'New Candidate Added',
               message: `${candidate.firstName} ${candidate.lastName} applied for ${candidate.position}`,
-              data: JSON.stringify({ candidateId: candidate.id }),
-              isRead: false,
-              createdAt: new Date(),
+              metadata: JSON.stringify({ candidateId: candidate.id }),
+              read: false,
             });
           }
 

@@ -1731,9 +1731,8 @@ router.post('/api/candidates', requireAuth, requireManager, async (req, res) => 
           type: 'NEW_CANDIDATE',
           title: 'New Candidate Added',
           message: `${candidate.firstName} ${candidate.lastName} applied for ${candidate.position}`,
-          data: JSON.stringify({ candidateId: candidate.id }),
-          isRead: false,
-          createdAt: new Date(),
+          metadata: JSON.stringify({ candidateId: candidate.id }),
+          read: false,
         });
       }
 
@@ -2356,8 +2355,9 @@ router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) 
     try {
       for (const manager of managersAndAdmins) {
         await storage.createNotification({
+          id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           userId: manager.id,
-          type: 'SCREENING_ALERT',
+          type: 'warning',
           title: `Screening Alert: ${candidateName}`,
           message: `Candidate ${candidateName} (${position}) is proceeding to in-person interview without meeting: ${failedRequirements.join(', ')}`,
           link: `/recruiting?candidate=${candidateId}`,

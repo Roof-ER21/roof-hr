@@ -14,7 +14,7 @@ import { Readable } from 'stream';
 // Extend Express Request type to include user
 interface AuthRequest extends Omit<Request, 'user'> {
   user?: {
-    id: number;
+    id: string;
     email: string;
     role: string;
     firstName?: string;

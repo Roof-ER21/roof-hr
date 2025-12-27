@@ -74,7 +74,7 @@ interface Candidate {
   notes?: string;
   aiMatchScore?: number;
   aiPotentialScore?: number;
-  assignedTo?: string;
+  assignedTo?: string | null;
   sourcer?: {
     id: string;
     firstName: string;

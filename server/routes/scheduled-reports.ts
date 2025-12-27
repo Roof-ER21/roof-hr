@@ -138,7 +138,7 @@ router.put('/api/scheduled-reports/:id', requireManager, async (req, res) => {
     const data = updateScheduledReportSchema.parse(req.body);
     const report = await storage.updateAnalyticsReport(req.params.id, {
       ...data,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     });
 
     if (!report) {
@@ -160,7 +160,7 @@ router.delete('/api/scheduled-reports/:id', requireManager, async (req, res) => 
   try {
     const report = await storage.updateAnalyticsReport(req.params.id, {
       isActive: false,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     });
 
     if (!report) {
@@ -203,7 +203,7 @@ router.post('/api/scheduled-reports/:id/run-now', requireManager, async (req, re
 
         // Update last generated timestamp
         await storage.updateAnalyticsReport(report.id, {
-          lastGenerated: new Date().toISOString(),
+          lastGenerated: new Date(),
         });
       })
       .catch(async (error) => {

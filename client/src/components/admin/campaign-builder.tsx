@@ -278,7 +278,7 @@ export function CampaignBuilder({ onCampaignCreated }: CampaignBuilderProps) {
   const canProceed = () => {
     if (step === 1) return campaign.name.trim() !== '';
     if (step === 2) return campaign.subject.trim() !== '' && campaign.body.trim() !== '';
-    if (step === 3) return campaign.recipientType !== '';
+    if (step === 3) return !!campaign.recipientType;
     return true;
   };
 

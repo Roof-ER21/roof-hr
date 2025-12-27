@@ -86,10 +86,10 @@ router.put('/api/email-preferences/:userId', requireAuth, async (req: any, res) 
         .values({
           id: uuidv4(),
           userId,
-          ptoRequestsAndApprovals: req.body.ptoRequestsAndApprovals ?? true,
-          candidateUpdates: req.body.candidateUpdates ?? true,
-          interviewReminders: req.body.interviewReminders ?? true,
-          taskNotifications: req.body.taskNotifications ?? true,
+          ptoNotifications: req.body.ptoNotifications ?? req.body.ptoRequestsAndApprovals ?? true,
+          contractNotifications: req.body.contractNotifications ?? true,
+          reviewNotifications: req.body.reviewNotifications ?? req.body.candidateUpdates ?? true,
+          taskNotifications: req.body.taskNotifications ?? req.body.interviewReminders ?? true,
           systemAnnouncements: req.body.systemAnnouncements ?? true,
           weeklyDigest: req.body.weeklyDigest ?? false,
         })
@@ -140,9 +140,9 @@ router.post('/api/email-preferences', requireAuth, async (req: any, res) => {
       .values({
         id: uuidv4(),
         userId,
-        ptoRequestsAndApprovals: true,
-        candidateUpdates: true,
-        interviewReminders: true,
+        ptoNotifications: true,
+        contractNotifications: true,
+        reviewNotifications: true,
         taskNotifications: true,
         systemAnnouncements: true,
         weeklyDigest: false,

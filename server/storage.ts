@@ -453,6 +453,20 @@ export interface IStorage {
   getCheckInsByUserId(userId: string): Promise<AttendanceCheckIn[]>;
   hasUserCheckedIn(sessionId: string, userId: string | null, name: string): Promise<boolean>;
   exportSessionAttendance(sessionId: string): Promise<AttendanceCheckIn[]>;
+
+  // Susan AI - Inventory Alert Management
+  getActiveAlerts(): Promise<InventoryAlert[]>;
+  updateAlert(id: string, data: Partial<InsertInventoryAlert>): Promise<InventoryAlert | null>;
+  createAlert(data: InsertInventoryAlert): Promise<InventoryAlert>;
+
+  // Susan AI - Tool Assignment Management
+  createToolAssignment(data: InsertToolAssignment): Promise<ToolAssignment>;
+  getToolAssignmentsByTool(toolId: string): Promise<ToolAssignment[]>;
+  updateToolAssignment(id: string, data: Partial<InsertToolAssignment>): Promise<ToolAssignment | null>;
+
+  // Susan AI - Message Management
+  getUnreadMessages(userId: string): Promise<SmsMessage[]>;
+  createMessage(data: InsertSmsMessage): Promise<SmsMessage>;
 }
 
 class DrizzleStorage implements IStorage {
@@ -1615,7 +1629,11 @@ class DrizzleStorage implements IStorage {
   // Onboarding Workflow Methods
   async createOnboardingWorkflow(data: InsertOnboardingWorkflow): Promise<OnboardingWorkflow> {
     const id = uuidv4();
-    const [workflow] = await db.insert(onboardingWorkflows).values({ ...data, id }).returning();
+    const [workflow] = await db.insert(onboardingWorkflows).values({
+      ...data,
+      id,
+      status: (data.status || 'NOT_STARTED') as 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED',
+    }).returning();
     return workflow;
   }
 
@@ -1639,7 +1657,13 @@ class DrizzleStorage implements IStorage {
   // Onboarding Step Methods
   async createOnboardingStep(data: InsertOnboardingStep): Promise<OnboardingStep> {
     const id = uuidv4();
-    const [step] = await db.insert(onboardingSteps).values({ ...data, id }).returning();
+    const [step] = await db.insert(onboardingSteps).values({
+      ...data,
+      id,
+      type: data.type as 'DOCUMENT_UPLOAD' | 'FORM_FILL' | 'TRAINING' | 'MEETING' | 'TASK' | 'REVIEW' | 'DOCUMENT_READ' | 'EQUIPMENT',
+      status: (data.status || 'PENDING') as 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED',
+      completedByRole: data.completedByRole as 'MANAGER' | 'EMPLOYEE' | null | undefined,
+    }).returning();
     return step;
   }
 
@@ -1768,12 +1792,10 @@ class DrizzleStorage implements IStorage {
       .orderBy(desc(notifications.createdAt));
   }
 
-  async markNotificationAsRead(id: string): Promise<Notification | null> {
-    const [notification] = await db.update(notifications)
+  async markNotificationAsRead(id: string, userId?: string): Promise<void> {
+    await db.update(notifications)
       .set({ read: true })
-      .where(eq(notifications.id, id))
-      .returning();
-    return notification || null;
+      .where(eq(notifications.id, id));
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
@@ -1789,6 +1811,15 @@ class DrizzleStorage implements IStorage {
 
   async deleteAllNotifications(userId: string): Promise<void> {
     await db.delete(notifications).where(eq(notifications.userId, userId));
+  }
+
+  // IStorage interface wrapper methods
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return this.getNotificationsByUserId(userId);
+  }
+
+  async clearNotifications(userId: string): Promise<void> {
+    await this.deleteAllNotifications(userId);
   }
 
   async getRecentNotification(userId: string, type: string, metadataContains: string, hoursAgo: number): Promise<Notification | null> {
@@ -1809,7 +1840,11 @@ class DrizzleStorage implements IStorage {
   // Analytics Report Methods
   async createAnalyticsReport(data: InsertAnalyticsReport): Promise<AnalyticsReport> {
     const id = uuidv4();
-    const [report] = await db.insert(analyticsReports).values({ ...data, id }).returning();
+    const [report] = await db.insert(analyticsReports).values({
+      ...data,
+      id,
+      type: data.type as 'EMPLOYEE_PERFORMANCE' | 'PTO_ANALYSIS' | 'SALES_REPORT' | 'RECRUITMENT_METRICS' | 'CUSTOM',
+    }).returning();
     return report;
   }
 
@@ -1833,7 +1868,11 @@ class DrizzleStorage implements IStorage {
   // Report History Methods
   async createReportHistory(data: InsertReportHistory): Promise<ReportHistory> {
     const id = uuidv4();
-    const [history] = await db.insert(reportHistory).values({ ...data, id }).returning();
+    const [history] = await db.insert(reportHistory).values({
+      ...data,
+      id,
+      status: (data.status || 'GENERATING') as 'GENERATING' | 'COMPLETED' | 'FAILED',
+    }).returning();
     return history;
   }
 
@@ -3262,6 +3301,70 @@ class DrizzleStorage implements IStorage {
     }
 
     return { rows, rowCount, executionTime: Date.now() - startTime };
+  }
+
+  // Susan AI - Inventory Alert Management
+  async getActiveAlerts(): Promise<InventoryAlert[]> {
+    return db.select().from(inventoryAlerts).where(eq(inventoryAlerts.alertEnabled, true));
+  }
+
+  async updateAlert(id: string, data: Partial<InsertInventoryAlert>): Promise<InventoryAlert | null> {
+    const [alert] = await db.update(inventoryAlerts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(inventoryAlerts.id, id))
+      .returning();
+    return alert || null;
+  }
+
+  async createAlert(data: InsertInventoryAlert): Promise<InventoryAlert> {
+    const id = uuidv4();
+    const [alert] = await db.insert(inventoryAlerts).values({ ...data, id }).returning();
+    return alert;
+  }
+
+  // Susan AI - Tool Assignment Management
+  async createToolAssignment(data: InsertToolAssignment): Promise<ToolAssignment> {
+    const id = uuidv4();
+    const insertData = {
+      ...data,
+      id,
+      condition: (data.condition || 'GOOD') as 'NEW' | 'GOOD' | 'FAIR' | 'POOR',
+      status: (data.status || 'ASSIGNED') as 'ASSIGNED' | 'RETURNED' | 'LOST' | 'DAMAGED',
+    };
+    const [assignment] = await db.insert(toolAssignments).values(insertData).returning();
+    return assignment;
+  }
+
+  async getToolAssignmentsByTool(toolId: string): Promise<ToolAssignment[]> {
+    return db.select().from(toolAssignments).where(eq(toolAssignments.toolId, toolId));
+  }
+
+  async updateToolAssignment(id: string, data: Partial<InsertToolAssignment>): Promise<ToolAssignment | null> {
+    const updateData: any = { ...data, updatedAt: new Date() };
+    if (data.status) {
+      updateData.status = data.status as 'ASSIGNED' | 'RETURNED' | 'LOST' | 'DAMAGED';
+    }
+    if (data.condition) {
+      updateData.condition = data.condition as 'NEW' | 'GOOD' | 'FAIR' | 'POOR';
+    }
+    const [assignment] = await db.update(toolAssignments)
+      .set(updateData)
+      .where(eq(toolAssignments.id, id))
+      .returning();
+    return assignment || null;
+  }
+
+  // Susan AI - Message Management (using SMS for external, notifications for internal)
+  async getUnreadMessages(userId: string): Promise<SmsMessage[]> {
+    // SMS messages are for external communications
+    // Return pending messages for tracking purposes
+    return db.select().from(smsMessages)
+      .where(eq(smsMessages.status, 'PENDING'));
+  }
+
+  async createMessage(data: InsertSmsMessage): Promise<SmsMessage> {
+    // Alias for createSmsMessage
+    return this.createSmsMessage(data);
   }
 }
 

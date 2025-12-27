@@ -175,7 +175,7 @@ router.get('/my-meetings', requireAuth, async (req, res) => {
 
     const attendingMeetingIdsList = attendingMeetingIds.map(a => a.meetingId);
 
-    let attendingMeetings = [];
+    let attendingMeetings: typeof organizedMeetings = [];
     if (attendingMeetingIdsList.length > 0) {
       attendingMeetings = await db
         .select({

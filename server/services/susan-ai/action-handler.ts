@@ -1906,19 +1906,20 @@ Should I proceed with scheduling this interview?`,
       }
       
       // Create assignment
-      // TODO: createToolAssignment method not implemented in storage
-      // await storage.createToolAssignment({
-      //   toolId: tool.id,
-      //   employeeId: employee.id,
-      //   assignedDate: new Date().toISOString(),
-      //   status: 'ASSIGNED'
-      // });
-      
+      await storage.createToolAssignment({
+        toolId: tool.id,
+        employeeId: employee.id,
+        assignedBy: user.id,
+        assignedDate: new Date(),
+        status: 'ASSIGNED',
+        condition: 'GOOD',
+      });
+
       // Update tool quantity
       if (tool.quantity > 0) {
         await storage.updateTool(tool.id, {
           quantity: tool.quantity - 1
-        } as any); // TODO: status field not in updateTool
+        });
       }
       
       return {
@@ -1962,27 +1963,26 @@ Should I proceed with scheduling this interview?`,
       }
       
       // Find active assignment
-      // TODO: getToolAssignmentsByTool and updateToolAssignment methods not implemented
-      // const assignments = await storage.getToolAssignmentsByTool(tool.id);
-      // const activeAssignment = assignments.find((a: any) => a.status === 'ASSIGNED');
+      const assignments = await storage.getToolAssignmentsByTool(tool.id);
+      const activeAssignment = assignments.find((a) => a.status === 'ASSIGNED');
 
-      // if (!activeAssignment) {
-      //   return {
-      //     success: false,
-      //     message: `${tool.name} is not currently assigned to anyone.`
-      //   };
-      // }
+      if (!activeAssignment) {
+        return {
+          success: false,
+          message: `${tool.name} is not currently assigned to anyone.`
+        };
+      }
 
       // Update assignment
-      // await storage.updateToolAssignment(activeAssignment.id, {
-      //   returnedDate: new Date().toISOString(),
-      //   status: 'RETURNED'
-      // });
+      await storage.updateToolAssignment(activeAssignment.id, {
+        returnDate: new Date(),
+        status: 'RETURNED'
+      });
 
       // Update tool quantity
       await storage.updateTool(tool.id, {
         quantity: tool.quantity + 1
-      } as any);
+      });
       
       return {
         success: true,
@@ -2340,96 +2340,87 @@ Should I proceed with scheduling this interview?`,
    */
   private async handleAlerts(message: string, user: User): Promise<ActionResult | null> {
     try {
-      // Show alerts
+      // Show alerts - using notifications as the general alert system
       if (message.toLowerCase().includes('show') || message.toLowerCase().includes('list')) {
-        // TODO: getActiveAlerts method not implemented in storage
-        const alerts: any[] = []; // await storage.getActiveAlerts();
-        
-        if (alerts.length === 0) {
+        const notifications = await storage.getNotifications(user.id);
+        const unreadAlerts = notifications.filter((n: any) => !n.read && (n.type === 'warning' || n.type === 'error'));
+
+        if (unreadAlerts.length === 0) {
           return {
             success: true,
             message: "No active alerts at this time."
           };
         }
-        
-        const alertList = alerts.map((a: any) => {
-          const priority = a.priority === 'HIGH' ? '🔴' : a.priority === 'MEDIUM' ? '🟡' : '🟢';
+
+        const alertList = unreadAlerts.map((a: any) => {
+          const priority = a.type === 'error' ? '🔴' : '🟡';
           return `${priority} ${a.title}: ${a.message}`;
         }).join('\n');
-        
+
         return {
           success: true,
           message: `📢 Active Alerts:\n\n${alertList}`,
-          data: { count: alerts.length }
+          data: { count: unreadAlerts.length }
         };
       }
-      
-      // Acknowledge alert
+
+      // Acknowledge alert - mark notification as read
       if (message.toLowerCase().includes('acknowledge') || message.toLowerCase().includes('dismiss')) {
         const alertMatch = message.match(/(?:acknowledge|dismiss)\s+alert\s+(?:about\s+)?(.+)/i);
-        
+
         if (!alertMatch) {
           return {
             success: false,
             message: "Please specify which alert to acknowledge."
           };
         }
-        
-        // TODO: getActiveAlerts method not implemented in storage
-        const alerts: any[] = []; // await storage.getActiveAlerts();
-        const alert = alerts.find((a: any) => 
-          a.title.toLowerCase().includes(alertMatch[1].toLowerCase()) ||
-          a.message.toLowerCase().includes(alertMatch[1].toLowerCase())
+
+        const notifications = await storage.getNotifications(user.id);
+        const alert = notifications.find((a: any) =>
+          !a.read && (a.title?.toLowerCase().includes(alertMatch[1].toLowerCase()) ||
+          a.message?.toLowerCase().includes(alertMatch[1].toLowerCase()))
         );
-        
+
         if (!alert) {
           return {
             success: false,
             message: `Could not find alert matching: ${alertMatch[1]}`
           };
         }
-        
-        // TODO: updateAlert method not implemented in storage
-        // await storage.updateAlert(alert.id, {
-        //   status: 'ACKNOWLEDGED',
-        //   acknowledgedBy: user.id,
-        //   acknowledgedAt: new Date().toISOString()
-        // });
-        
+
+        await storage.markNotificationAsRead(alert.id, user.id);
+
         return {
           success: true,
           message: `✅ Alert "${alert.title}" has been acknowledged.`,
           data: { alertId: alert.id }
         };
       }
-      
-      // Create alert
+
+      // Create alert - create as a notification
       if (message.toLowerCase().includes('create') || message.toLowerCase().includes('add')) {
         const titleMatch = message.match(/alert\s+(?:about|for|titled)\s+"([^"]+)"/i);
         const priorityMatch = message.match(/(?:priority|level)\s+(high|medium|low)/i);
-        
+
         const title = titleMatch?.[1] || 'System Alert';
-        const priority = priorityMatch?.[1]?.toUpperCase() || 'MEDIUM';
-        
-        // TODO: createAlert method not implemented in storage
-        const alert: any = { id: 'temp-alert-id', title };
-        // const alert = await storage.createAlert({
-        //   title,
-        //   message: `Alert created by ${user.firstName} ${user.lastName}`,
-        //   priority: priority as 'HIGH' | 'MEDIUM' | 'LOW',
-        //   type: 'MANUAL',
-        //   createdBy: user.id,
-        //   createdAt: new Date().toISOString(),
-        //   status: 'ACTIVE'
-        // });
-        
+        const type = priorityMatch?.[1]?.toLowerCase() === 'high' ? 'error' : 'warning';
+
+        await storage.createNotification({
+          id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          userId: user.id,
+          type: type as 'warning' | 'error',
+          title,
+          message: `Alert created by ${user.firstName} ${user.lastName}`,
+          read: false,
+        });
+
         return {
           success: true,
-          message: `📢 Alert created: "${title}" with ${priority} priority.`,
-          data: { alertId: alert.id }
+          message: `📢 Alert created: "${title}" with ${priorityMatch?.[1] || 'medium'} priority.`,
+          data: { alertType: title }
         };
       }
-      
+
       return null;
     } catch (error) {
       return {
@@ -2442,41 +2433,41 @@ Should I proceed with scheduling this interview?`,
   
   private async handleMessages(message: string, user: User): Promise<ActionResult | null> {
     try {
-      // Check unread messages
+      // Check unread messages (using notifications for internal messaging)
       if (message.toLowerCase().includes('unread') || message.toLowerCase().includes('new')) {
-        // TODO: getUnreadMessages method not implemented in storage
-        const messages: any[] = []; // await storage.getUnreadMessages(user.id);
-        
-        if (messages.length === 0) {
+        const notifications = await storage.getNotifications(user.id);
+        const unreadNotifications = notifications.filter((n: any) => !n.read);
+
+        if (unreadNotifications.length === 0) {
           return {
             success: true,
             message: "You have no unread messages."
           };
         }
-        
-        const messageList = messages.slice(0, 5).map((m: any) => 
-          `• From ${m.senderName}: ${m.subject}`
+
+        const messageList = unreadNotifications.slice(0, 5).map((m: any) =>
+          `• ${m.title}: ${m.message}`
         ).join('\n');
-        
+
         return {
           success: true,
-          message: `📬 You have ${messages.length} unread messages:\n\n${messageList}${messages.length > 5 ? '\n\n...and more' : ''}`,
-          data: { count: messages.length }
+          message: `📬 You have ${unreadNotifications.length} unread messages:\n\n${messageList}${unreadNotifications.length > 5 ? '\n\n...and more' : ''}`,
+          data: { count: unreadNotifications.length }
         };
       }
-      
-      // Send message
+
+      // Send message (as notification)
       if (message.toLowerCase().includes('send')) {
         const toMatch = message.match(/(?:message|note)\s+to\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
         const contentMatch = message.match(/(?:saying|message)[:]\s*(.+)/i);
-        
+
         if (!toMatch) {
           return {
             success: false,
             message: "Please specify who to send the message to."
           };
         }
-        
+
         // Find recipient
         const employees = await storage.getAllUsers();
         const recipientName = toMatch[1].toLowerCase();
@@ -2484,26 +2475,27 @@ Should I proceed with scheduling this interview?`,
           const fullName = `${e.firstName} ${e.lastName}`.toLowerCase();
           return fullName.includes(recipientName);
         });
-        
+
         if (!recipient) {
           return {
             success: false,
             message: `Could not find employee: ${toMatch[1]}`
           };
         }
-        
+
         const content = contentMatch?.[1] || 'Quick message from Susan AI';
-        
-        // TODO: createMessage method not implemented (only createSmsMessage exists)
-        // await storage.createMessage({
-        //   senderId: user.id,
-        //   recipientId: recipient.id,
-        //   subject: 'Message via Susan AI',
-        //   content,
-        //   sentAt: new Date().toISOString(),
-        //   status: 'SENT'
-        // });
-        
+
+        // Create notification as internal message
+        await storage.createNotification({
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          userId: recipient.id,
+          type: 'info',
+          title: `Message from ${user.firstName} ${user.lastName}`,
+          message: content,
+          read: false,
+          metadata: JSON.stringify({ senderId: user.id, via: 'susan-ai' }),
+        });
+
         return {
           success: true,
           message: `✉️ Message sent to ${recipient.firstName} ${recipient.lastName}.`,

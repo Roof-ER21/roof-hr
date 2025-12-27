@@ -19,7 +19,7 @@ async function seedContractTemplates() {
     // First, get all territories
     const allTerritories = await db.select().from(territories);
     console.log(`Found ${allTerritories.length} territories:`);
-    allTerritories.forEach(t => console.log(`  - ${t.name} (${t.code}): ${t.id}`));
+    allTerritories.forEach(t => console.log(`  - ${t.name}: ${t.id}`));
 
     // Find specific territories by name
     const dmvTerritory = allTerritories.find(t =>

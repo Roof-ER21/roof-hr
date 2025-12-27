@@ -429,7 +429,7 @@ class GoogleCalendarService {
 
       const response = await calendar.events.insert({
         calendarId: 'primary', // Primary calendar of the impersonated user
-        resource: event,
+        requestBody: event,
         sendNotifications: options.sendNotifications ?? true
       });
 
@@ -499,7 +499,7 @@ class GoogleCalendarService {
 
       const response = await calendar.events.insert({
         calendarId: 'primary', // Primary calendar of the impersonated user
-        resource: event,
+        requestBody: event,
         sendNotifications: options.sendNotifications ?? true,
         conferenceDataVersion: 1
       });

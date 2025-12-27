@@ -45,6 +45,7 @@ export async function sendOnboardingAssignedNotification(
     };
 
     await storage.createNotification({
+      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       userId: employeeId,
       type: 'onboarding_assigned',
       title: 'New Onboarding Process Assigned',
@@ -161,6 +162,7 @@ export async function sendOverdueTaskNotification(
     };
 
     await storage.createNotification({
+      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       userId: employeeId,
       type: 'task_overdue',
       title: 'Overdue Onboarding Task',

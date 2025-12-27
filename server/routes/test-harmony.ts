@@ -37,8 +37,6 @@ router.post('/api/test/harmony', async (req, res) => {
           sickDays: 5,
           personalDays: 3,
           totalDays: 18,
-          rolloverAllowed: true,
-          maxRolloverDays: 5,
           blackoutDates: '2025-12-25,2025-01-01,2025-07-04',
           lastUpdatedBy: 'SYSTEM_TEST'
         });

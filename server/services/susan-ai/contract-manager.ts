@@ -385,4 +385,137 @@ export class SusanContractManager {
 
     return null;
   }
+
+  /**
+   * Contract Lifecycle Methods
+   */
+
+  /**
+   * Renew an existing contract - creates a new contract based on the existing one
+   */
+  async renewContract(contractId: string, renewalData?: {
+    newTitle?: string;
+    updatedContent?: string;
+    createdBy: string;
+  }): Promise<{ success: boolean; newContractId?: string; error?: string }> {
+    try {
+      // Get existing contract
+      const [existingContract] = await db.select()
+        .from(employeeContracts)
+        .where(eq(employeeContracts.id, contractId))
+        .limit(1);
+
+      if (!existingContract) {
+        return { success: false, error: 'Contract not found' };
+      }
+
+      if (existingContract.status !== 'SIGNED') {
+        return { success: false, error: 'Only signed contracts can be renewed' };
+      }
+
+      // Create new contract based on existing
+      const newContractId = uuidv4();
+      const renewalTitle = renewalData?.newTitle || `${existingContract.title} (Renewal)`;
+
+      await db.insert(employeeContracts).values({
+        id: newContractId,
+        employeeId: existingContract.employeeId,
+        candidateId: existingContract.candidateId,
+        recipientType: existingContract.recipientType,
+        recipientEmail: existingContract.recipientEmail,
+        recipientName: existingContract.recipientName,
+        templateId: existingContract.templateId,
+        title: renewalTitle,
+        content: renewalData?.updatedContent || existingContract.content,
+        status: 'DRAFT',
+        createdBy: renewalData?.createdBy || existingContract.createdBy,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      console.log(`[SUSAN-CONTRACTS] Renewed contract ${contractId} -> ${newContractId}`);
+      return { success: true, newContractId };
+    } catch (error) {
+      console.error('[SUSAN-CONTRACTS] Error renewing contract:', error);
+      return { success: false, error: 'Failed to renew contract' };
+    }
+  }
+
+  /**
+   * Terminate a contract - marks it as rejected with termination reason
+   */
+  async terminateContract(contractId: string, reason: string, terminatedBy: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const [contract] = await db.select()
+        .from(employeeContracts)
+        .where(eq(employeeContracts.id, contractId))
+        .limit(1);
+
+      if (!contract) {
+        return { success: false, error: 'Contract not found' };
+      }
+
+      if (contract.status !== 'SIGNED') {
+        return { success: false, error: 'Only active/signed contracts can be terminated' };
+      }
+
+      await db.update(employeeContracts)
+        .set({
+          status: 'REJECTED',
+          rejectionReason: `TERMINATED: ${reason}`,
+          updatedAt: new Date()
+        })
+        .where(eq(employeeContracts.id, contractId));
+
+      // Send termination notification
+      await this.sendContractNotification(contractId, 'rejected');
+
+      console.log(`[SUSAN-CONTRACTS] Terminated contract ${contractId}: ${reason}`);
+      return { success: true };
+    } catch (error) {
+      console.error('[SUSAN-CONTRACTS] Error terminating contract:', error);
+      return { success: false, error: 'Failed to terminate contract' };
+    }
+  }
+
+  /**
+   * Expire contracts that have passed their end date
+   * Note: Requires endDate field in schema (placeholder for future enhancement)
+   */
+  async expireContracts(): Promise<{ success: boolean; expiredCount: number; error?: string }> {
+    try {
+      // Get all signed contracts
+      const signedContracts = await db.select()
+        .from(employeeContracts)
+        .where(eq(employeeContracts.status, 'SIGNED'));
+
+      let expiredCount = 0;
+
+      // Check each contract for expiration criteria
+      // Currently using signed date + 1 year as default expiration if no explicit end date
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+      for (const contract of signedContracts) {
+        if (contract.signedDate && contract.signedDate < oneYearAgo) {
+          await db.update(employeeContracts)
+            .set({
+              status: 'REJECTED',
+              rejectionReason: 'EXPIRED: Contract has passed its validity period',
+              updatedAt: new Date()
+            })
+            .where(eq(employeeContracts.id, contract.id));
+
+          expiredCount++;
+          console.log(`[SUSAN-CONTRACTS] Expired contract: ${contract.id}`);
+        }
+      }
+
+      console.log(`[SUSAN-CONTRACTS] Expired ${expiredCount} contracts`);
+      return { success: true, expiredCount };
+    } catch (error) {
+      console.error('[SUSAN-CONTRACTS] Error expiring contracts:', error);
+      return { success: false, expiredCount: 0, error: 'Failed to expire contracts' };
+    }
+  }
 }
