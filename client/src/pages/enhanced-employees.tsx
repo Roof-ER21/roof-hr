@@ -24,6 +24,7 @@ import { PasswordResetDialog } from '@/components/password-reset-dialog';
 import { SendWelcomeDialog } from '@/components/employees/send-welcome-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 // Role display names mapping
 const roleDisplayNames: Record<string, string> = {
@@ -555,20 +556,17 @@ function EnhancedEmployees() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="department">Department *</Label>
-                    <Select 
-                      value={form.watch('department')} 
+                    <Select
+                      value={form.watch('department')}
                       onValueChange={(value) => form.setValue('department', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Human Resources">Human Resources</SelectItem>
-                        <SelectItem value="Field Operations">Field Operations</SelectItem>
-                        <SelectItem value="Administration">Administration</SelectItem>
-                        <SelectItem value="Management">Management</SelectItem>
-                        <SelectItem value="Safety">Safety</SelectItem>
-                        <SelectItem value="Marketing">Marketing</SelectItem>
+                        {DEPARTMENTS.map((dept) => (
+                          <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

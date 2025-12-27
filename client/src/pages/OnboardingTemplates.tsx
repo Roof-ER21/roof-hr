@@ -18,6 +18,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { format, addDays, differenceInDays } from 'date-fns';
+import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 interface Task {
   id?: string;
@@ -25,17 +26,6 @@ interface Task {
   description: string;
   dueInDays: number;
 }
-
-const DEPARTMENTS = [
-  'Sales',
-  'Marketing',
-  'Operations',
-  'Engineering',
-  'HR',
-  'Finance',
-  'IT',
-  'Customer Service'
-];
 
 export default function OnboardingTemplates() {
   const { toast } = useToast();

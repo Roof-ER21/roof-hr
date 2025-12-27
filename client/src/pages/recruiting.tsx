@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 const candidateSchema = z.object({
   firstName: z.string().min(1),
@@ -507,12 +508,9 @@ function Recruiting() {
                           <SelectValue placeholder="Select department" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Operations">Operations</SelectItem>
-                          <SelectItem value="Sales">Sales</SelectItem>
-                          <SelectItem value="Service">Service</SelectItem>
-                          <SelectItem value="Human Resources">Human Resources</SelectItem>
-                          <SelectItem value="Finance">Finance</SelectItem>
-                          <SelectItem value="Marketing">Marketing</SelectItem>
+                          {DEPARTMENTS.map((dept) => (
+                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

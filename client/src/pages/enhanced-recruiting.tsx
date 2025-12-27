@@ -45,6 +45,7 @@ import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
 import { format } from 'date-fns';
+import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 // Droppable Column Component
 function DroppableColumn({ status, children }: { status: string; children: React.ReactNode }) {
@@ -2580,12 +2581,9 @@ export default function EnhancedRecruiting() {
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Operations">Operations</SelectItem>
-                    <SelectItem value="Sales">Sales</SelectItem>
-                    <SelectItem value="Service">Service</SelectItem>
-                    <SelectItem value="Human Resources">Human Resources</SelectItem>
-                    <SelectItem value="Finance">Finance</SelectItem>
-                    <SelectItem value="Marketing">Marketing</SelectItem>
+                    {DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

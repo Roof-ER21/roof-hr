@@ -4,13 +4,14 @@
  */
 
 import { db } from '../../db';
-import { 
-  users, 
+import {
+  users,
   territories
 } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { SusanContext } from './core';
 import { susanDataService, type CompanyStats, type PtoData, type EmployeeData } from './data-service';
+import { DEPARTMENTS, isValidDepartment } from '@shared/constants/departments';
 
 export interface EnhancedContext extends SusanContext {
   userName?: string;
@@ -135,20 +136,25 @@ export class ContextEngine {
   }
 
   /**
-   * Get department display name
+   * Get department display name - validates against standard departments
    */
   private getDepartmentName(department?: string): string {
-    const departmentMap: Record<string, string> = {
-      'sales': 'Sales',
-      'operations': 'Operations',
+    if (!department) return 'Unknown';
+    // If it's a valid standard department, return as-is
+    if (isValidDepartment(department)) return department;
+    // Legacy mapping for old department values
+    const legacyMap: Record<string, string> = {
       'hr': 'Human Resources',
-      'finance': 'Finance',
-      'it': 'Information Technology',
-      'customer_service': 'Customer Service',
-      'installation': 'Installation',
-      'quality': 'Quality Assurance'
+      'it': 'Operations', // Map old IT to Operations
+      'finance': 'Administration',
+      'customer_service': 'Operations',
+      'installation': 'Field Operations',
+      'quality': 'Operations',
+      'marketing': 'Sales', // Map Marketing to Sales
+      'engineering': 'Operations',
+      'admin': 'Administration',
     };
-    return departmentMap[department?.toLowerCase() || ''] || department || 'Unknown';
+    return legacyMap[department.toLowerCase()] || department;
   }
 
   /**

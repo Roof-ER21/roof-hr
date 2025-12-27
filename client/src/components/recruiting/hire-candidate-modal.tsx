@@ -42,6 +42,7 @@ import {
   PartyPopper,
   Send,
 } from 'lucide-react';
+import { DEPARTMENTS, getDepartmentForPosition } from '@/../../shared/constants/departments';
 
 interface Candidate {
   id: string;
@@ -104,9 +105,9 @@ export function HireCandidateModal({
   onCancel,
   isLoading,
 }: HireCandidateModalProps) {
-  // Form state
+  // Form state - use candidate position to suggest department
   const [startDate, setStartDate] = useState(getNextMonday());
-  const [department, setDepartment] = useState('Sales');
+  const [department, setDepartment] = useState(() => getDepartmentForPosition(candidate.position));
   const [role, setRole] = useState('REP');
   const [employmentType, setEmploymentType] = useState('W2');
   const [shirtSize, setShirtSize] = useState('L');
@@ -269,11 +270,9 @@ export function HireCandidateModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Sales">Sales</SelectItem>
-                      <SelectItem value="Operations">Operations</SelectItem>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="Marketing">Marketing</SelectItem>
-                      <SelectItem value="Production">Production</SelectItem>
+                      {DEPARTMENTS.map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/lib/auth';
+import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 const ptoSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
@@ -1014,15 +1015,9 @@ function PTO() {
                         <SelectValue placeholder="Select a department" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Sales">Sales</SelectItem>
-                        <SelectItem value="Marketing">Marketing</SelectItem>
-                        <SelectItem value="Engineering">Engineering</SelectItem>
-                        <SelectItem value="HR">HR</SelectItem>
-                        <SelectItem value="Operations">Operations</SelectItem>
-                        <SelectItem value="Finance">Finance</SelectItem>
-                        <SelectItem value="Customer Service">Customer Service</SelectItem>
-                        <SelectItem value="Production">Production</SelectItem>
-                        <SelectItem value="Field Service">Field Service</SelectItem>
+                        {DEPARTMENTS.map((dept) => (
+                          <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
