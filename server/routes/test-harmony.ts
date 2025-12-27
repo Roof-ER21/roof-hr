@@ -392,7 +392,6 @@ router.post('/api/test/harmony', async (req, res) => {
       if (testEmployeeId) {
         // Workers Comp
         const workersComp = await storage.createCoiDocument({
-          id: uuidv4(),
           employeeId: testEmployeeId,
           type: 'WORKERS_COMP',
           documentUrl: 'https://drive.google.com/workers-comp-jane.pdf',
@@ -406,7 +405,6 @@ router.post('/api/test/harmony', async (req, res) => {
 
         // General Liability
         const liability = await storage.createCoiDocument({
-          id: uuidv4(),
           employeeId: testEmployeeId,
           type: 'GENERAL_LIABILITY',
           documentUrl: 'https://drive.google.com/liability-jane.pdf',

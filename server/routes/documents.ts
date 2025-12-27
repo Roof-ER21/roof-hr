@@ -258,28 +258,19 @@ router.post('/:id/acknowledge', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Check if already acknowledged - method not implemented yet
-    // const existingAck = await storage.getDocumentAcknowledgment(id, user.id);
-    // if (existingAck) {
-    //   return res.status(409).json({ error: 'Document already acknowledged' });
-    // }
+    // Check if already acknowledged
+    const existingAck = await storage.getDocumentAcknowledgment(id, user.id);
+    if (existingAck) {
+      return res.status(409).json({ error: 'Document already acknowledged' });
+    }
 
-    // Document acknowledgment not yet implemented in storage
-    // const acknowledgment = await storage.createDocumentAcknowledgment({
-    //   documentId: id,
-    //   employeeId: user.id,
-    //   signature: signature || `${user.firstName} ${user.lastName}`,
-    //   notes,
-    // });
-
-    const acknowledgment = {
-      id: uuidv4(),
+    // Create acknowledgment record
+    const acknowledgment = await storage.createDocumentAcknowledgment({
       documentId: id,
       employeeId: user.id,
       signature: signature || `${user.firstName} ${user.lastName}`,
       notes,
-      acknowledgedAt: new Date(),
-    };
+    });
 
     console.log('[DOCUMENT ACKNOWLEDGED]', {
       documentId: id,
@@ -290,8 +281,29 @@ router.post('/:id/acknowledge', requireAuth, async (req, res) => {
     res.status(201).json(acknowledgment);
   } catch (error) {
     console.error('[DOCUMENT ACKNOWLEDGE ERROR]', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to acknowledge document',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get document acknowledgments
+router.get('/:id/acknowledgments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const document = await storage.getDocumentById(id);
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const acknowledgments = await storage.getDocumentAcknowledgments(id);
+    res.json(acknowledgments);
+  } catch (error) {
+    console.error('[GET ACKNOWLEDGMENTS ERROR]', error);
+    res.status(500).json({
+      error: 'Failed to get acknowledgments',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -331,20 +343,18 @@ router.get('/:id/analytics', requireManager, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Document access logs and acknowledgments not yet implemented in storage
-    // const [accessLogs, acknowledgments] = await Promise.all([
-    //   storage.getDocumentAccessLogs(id),
-    //   storage.getDocumentAcknowledgments(id)
-    // ]);
+    // Get acknowledgments from storage
+    const acknowledgments = await storage.getDocumentAcknowledgments(id);
 
+    // Access logs not yet implemented in storage
     const accessLogs: any[] = [];
-    const acknowledgments: any[] = [];
 
     const analytics = {
       totalViews: accessLogs.filter((log: any) => log.action === 'VIEW').length,
       totalDownloads: accessLogs.filter((log: any) => log.action === 'DOWNLOAD').length,
       uniqueViewers: new Set(accessLogs.map((log: any) => log.userId)).size,
-      acknowledgmentRate: acknowledgments.length, // Could calculate percentage if needed
+      totalAcknowledgments: acknowledgments.length,
+      acknowledgments: acknowledgments.slice(0, 20), // Recent acknowledgments
       recentActivity: accessLogs.slice(0, 10), // Last 10 activities
     };
 

@@ -261,7 +261,6 @@ router.post('/api/coi-documents/upload', requireAuth, requireHROrManager, upload
     }
 
     const document = await storage.createCoiDocument({
-      id: uuidv4(),
       ...data,
       type: data.type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       status,
@@ -343,7 +342,6 @@ router.post('/api/coi-documents', requireAuth, requireHROrManager, async (req, r
     }
 
     const document = await storage.createCoiDocument({
-      id: uuidv4(),
       ...data,
       type: data.type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
       status,
@@ -857,7 +855,6 @@ router.post('/api/coi-documents/confirm-assignment', requireAuth, requireHROrMan
 
     // Create database record - employeeId can be null for external contractors
     const document = await storage.createCoiDocument({
-      id: uuidv4(),
       employeeId: employeeId || null,
       externalName: externalName || null,
       parsedInsuredName: parsedInsuredName || null,

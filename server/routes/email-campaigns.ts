@@ -1,6 +1,7 @@
 import express from 'express';
 import { storage } from '../storage';
 import { z } from 'zod';
+import { LLMRouter } from '../services/llm/router';
 
 const router = express.Router();
 
@@ -163,39 +164,89 @@ router.patch('/api/communication-preferences/:candidateId', requireAuth, async (
   }
 });
 
+// Initialize LLM router for AI email generation
+const llmRouter = new LLMRouter();
+
 // AI Email Generation
 router.post('/api/ai/generate-email', requireAuth, async (req: any, res) => {
   try {
-    const { prompt, candidateId } = req.body;
-    
+    const { prompt, candidateId, templateType = 'FOLLOW_UP' } = req.body;
+
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
-    
-    // TODO: Integrate with OpenAI to generate email content
-    // For now, return a mock response
-    const generatedContent = {
-      subject: 'Follow-up on Your Application',
-      content: `Dear Candidate,\n\nThank you for your interest in our position. ${prompt}\n\nBest regards,\nThe Recruitment Team`,
-    };
-    
+
+    // Get candidate info if provided
+    let candidateContext = '';
+    if (candidateId) {
+      const candidate = await storage.getCandidateById(candidateId);
+      if (candidate) {
+        candidateContext = `\nCandidate: ${candidate.firstName} ${candidate.lastName}\nPosition: ${candidate.position}\nStage: ${candidate.stage}`;
+      }
+    }
+
+    // Build the AI prompt for email generation
+    const systemPrompt = `You are a professional HR email writer. Generate professional, warm, and concise emails for recruitment purposes.
+Always structure your response as JSON with exactly these fields:
+{"subject": "email subject line", "content": "full email body"}
+Do not include any text outside the JSON object.`;
+
+    const fullPrompt = `Generate a ${templateType.toLowerCase().replace('_', ' ')} email based on this request:
+${prompt}
+${candidateContext}
+
+Remember to:
+- Be professional and warm
+- Keep the content concise
+- Use proper formatting
+- Include appropriate greeting and sign-off`;
+
+    // Use LLM router with fallback to multiple providers
+    const result = await llmRouter.generateText(
+      fullPrompt,
+      { taskType: 'generation', priority: 'medium', requiresPrivacy: false },
+      { systemPrompt, temperature: 0.7, maxTokens: 500 }
+    );
+
+    // Parse the generated content
+    let generatedContent: { subject: string; content: string };
+    try {
+      // Try to parse as JSON
+      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        generatedContent = JSON.parse(jsonMatch[0]);
+      } else {
+        // Fallback: use the text directly
+        generatedContent = {
+          subject: 'Follow-up on Your Application',
+          content: result.text
+        };
+      }
+    } catch {
+      generatedContent = {
+        subject: 'Follow-up on Your Application',
+        content: result.text
+      };
+    }
+
     // Save the generation
     const generation = await storage.createAiEmailGeneration({
       candidateId,
-      templateType: 'FOLLOW_UP',
+      templateType: templateType as 'ONBOARDING' | 'NURTURE' | 'FOLLOW_UP' | 'REJECTION' | 'OFFER' | 'GENERAL',
       prompt,
       generatedSubject: generatedContent.subject,
       generatedContent: generatedContent.content,
-      model: 'gpt-4',
+      model: result.provider,
       approved: false,
       usedInCampaign: false,
       createdBy: req.user.id,
     });
-    
+
     res.json({
       ...generation,
       subject: generatedContent.subject,
       content: generatedContent.content,
+      provider: result.provider
     });
   } catch (error) {
     console.error('Error generating AI email:', error);

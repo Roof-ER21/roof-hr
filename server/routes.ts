@@ -3306,24 +3306,27 @@ export function registerRoutes(app: express.Application) {
       console.log(`Notes: ${notes}`);
       
       // Create notification for each manager/admin
-      const notifications = managersAndAdmins.map(user => ({
-        userId: user.id,
-        type: 'SCREENING_FAILURE',
-        title: 'Interview Screening Alert',
-        message: `${candidateName} for ${position} position failed screening: ${failedRequirements.join(', ')}. Notes: ${notes}`,
-        metadata: {
-          candidateId,
-          candidateName,
-          position,
-          failedRequirements,
-          notes,
-          timestamp
-        },
-        createdAt: new Date()
-      }));
-      
-      // Store notifications (if you have a notifications system)
-      // await storage.createNotifications(notifications);
+      for (const user of managersAndAdmins) {
+        try {
+          await storage.createNotification({
+            userId: user.id,
+            type: 'warning' as const,
+            title: 'Interview Screening Alert',
+            message: `${candidateName} for ${position} position failed screening: ${failedRequirements.join(', ')}. Notes: ${notes}`,
+            metadata: JSON.stringify({
+              candidateId,
+              candidateName,
+              position,
+              failedRequirements,
+              notes,
+              timestamp
+            }),
+            link: `/recruiting?candidate=${candidateId}`
+          });
+        } catch (notifError: any) {
+          console.error('[Screening Alert] Failed to create notification:', notifError.message);
+        }
+      }
       
       // Send email alerts (if email service is configured)
       const emailService = new EmailService();

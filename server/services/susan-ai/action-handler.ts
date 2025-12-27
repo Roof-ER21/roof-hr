@@ -948,8 +948,19 @@ Should I proceed with scheduling this interview?`,
   private async handlePTOBalance(user: User): Promise<ActionResult | null> {
     try {
       const ptoPolicy = await storage.getPtoPolicyByEmployee(user.id);
-      const usedDays = 0; // TODO: Implement getUsedPtoDays method
-      
+
+      // Calculate used PTO days from approved requests this year
+      const requests = await storage.getPtoRequestsByEmployee(user.id);
+      const currentYear = new Date().getFullYear();
+      const usedDays = requests
+        .filter(r => r.status === 'APPROVED' && new Date(r.startDate).getFullYear() === currentYear)
+        .reduce((total, r) => {
+          const start = new Date(r.startDate);
+          const end = new Date(r.endDate);
+          const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          return total + days;
+        }, 0);
+
       const totalDays = ptoPolicy?.totalDays || 0;
       const remaining = totalDays - usedDays;
 
@@ -1543,8 +1554,8 @@ Should I proceed with scheduling this interview?`,
         };
       }
       
-      // Soft delete - set status to INACTIVE
-      await storage.updateUser(employee.id, { role: employee.role } as any); // TODO: Add status field to User schema
+      // Soft delete - set isActive to false
+      await storage.updateUser(employee.id, { isActive: false });
       
       return {
         success: true,
@@ -1784,7 +1795,7 @@ Should I proceed with scheduling this interview?`,
         // Update existing tool quantity
         await storage.updateTool(tool.id, {
           quantity: tool.quantity + quantity
-        } as any); // TODO: lastUpdated field not in schema
+        });
         
         return {
           success: true,
@@ -1796,9 +1807,9 @@ Should I proceed with scheduling this interview?`,
         const newTool = await storage.createTool({
           name: itemName,
           quantity,
-          category: 'OTHER',
+          category: 'OTHER' as const,
           createdBy: 'SYSTEM'
-        } as any); // TODO: Validate category values in schema
+        });
         
         return {
           success: true,
@@ -1850,7 +1861,7 @@ Should I proceed with scheduling this interview?`,
       
       await storage.updateTool(tool.id, {
         quantity: tool.quantity - quantity
-      } as any); // TODO: lastUpdated field not in schema
+      });
       
       return {
         success: true,
@@ -2020,8 +2031,10 @@ Should I proceed with scheduling this interview?`,
         // Approve first pending request
         const request = pendingRequests[0];
         await storage.updatePtoRequest(request.id, {
-          status: 'APPROVED'
-        } as any); // TODO: approvedBy and approvedAt fields not in schema
+          status: 'APPROVED',
+          reviewedBy: user.id,
+          reviewedAt: new Date(),
+        });
         
         const employee = await storage.getUserById(request.employeeId);
         return {
@@ -2059,8 +2072,10 @@ Should I proceed with scheduling this interview?`,
 
       // Approve the request
       await storage.updatePtoRequest(pendingRequest.id, {
-        status: 'APPROVED'
-      } as any); // TODO: approvedBy and approvedAt fields not in schema
+        status: 'APPROVED',
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+      });
       
       return {
         success: true,
@@ -2117,8 +2132,11 @@ Should I proceed with scheduling this interview?`,
 
       // Deny the request
       await storage.updatePtoRequest(pendingRequest.id, {
-        status: 'DENIED'
-      } as any); // TODO: deniedBy, deniedAt, denialReason fields not in schema
+        status: 'DENIED',
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+        reviewNotes: reasonMatch ? reasonMatch[1] : 'Request denied',
+      });
       
       return {
         success: true,
@@ -2166,14 +2184,15 @@ Should I proceed with scheduling this interview?`,
       const startDate = dateMatch?.[1] || new Date(Date.now() + 86400000).toISOString().split('T')[0]; // Tomorrow
       const endDate = dateMatch?.[2] || startDate;
       
-      // Create PTO request
+      // Create PTO request (status defaults to PENDING in storage)
       const request = await storage.createPtoRequest({
         employeeId: employee.id,
         startDate,
         endDate,
         days: 1, // Calculate properly in production
+        type: 'VACATION',
         reason: `Submitted by ${user.firstName} ${user.lastName}`
-      } as any); // TODO: Add type, status, submittedAt, approvedBy, approvedAt fields to schema
+      });
       
       return {
         success: true,
@@ -2218,14 +2237,8 @@ Should I proceed with scheduling this interview?`,
     try {
       // Parse COI action
       if (message.toLowerCase().includes('expired') || message.toLowerCase().includes('expiring')) {
-        // Get expiring COIs
-        const documents = await storage.getAllDocuments();
-        const expiringCOIs = documents.filter((d: any) => {
-          // TODO: COI documents should use coiDocuments table, not documents table
-          if (d.category !== 'LEGAL') return false;
-          // expirationDate field doesn't exist on Document type
-          return false;
-        });
+        // Get expiring COIs using the proper coiDocuments table
+        const expiringCOIs = await storage.getExpiringCoiDocuments(30);
 
         if (expiringCOIs.length === 0) {
           return {
@@ -2234,37 +2247,49 @@ Should I proceed with scheduling this interview?`,
           };
         }
 
-        const coiList = expiringCOIs.map((c: any) => `• ${c.name}: Expires soon`).join('\n');
+        const coiList = expiringCOIs.map(c => {
+          const name = c.employeeId ? `Employee ID: ${c.employeeId}` : (c.externalName || 'Unknown');
+          return `• ${name} (${c.type}): Expires ${c.expirationDate}`;
+        }).join('\n');
+
         return {
           success: true,
           message: `📋 COIs expiring soon:\n\n${coiList}`,
-          data: { count: expiringCOIs.length }
+          data: { count: expiringCOIs.length, cois: expiringCOIs }
         };
       }
-      
+
       // Upload/store COI
       if (message.toLowerCase().includes('upload') || message.toLowerCase().includes('add')) {
-        const titleMatch = message.match(/(?:coi|certificate)\s+(?:for|from)\s+([^.]+)/i);
-        const title = titleMatch?.[1] || 'Certificate of Insurance';
-        
-        // Create COI document record
-        const doc = await storage.createDocument({
-          name: title,
-          category: 'LEGAL',
-          createdBy: user.id,
-          type: 'PDF',
-          fileUrl: '',
-          originalName: title,
-          fileSize: 0
-        } as any); // TODO: Use coiDocuments table instead
-        
+        const nameMatch = message.match(/(?:coi|certificate)\s+(?:for|from)\s+([^.]+)/i);
+        const externalName = nameMatch?.[1]?.trim() || 'Certificate of Insurance';
+
+        // Determine COI type from message
+        const isWorkersComp = message.toLowerCase().includes('workers') || message.toLowerCase().includes('comp');
+        const coiType = isWorkersComp ? 'WORKERS_COMP' : 'GENERAL_LIABILITY';
+
+        // Calculate expiration (1 year from now by default)
+        const issueDate = new Date().toISOString().split('T')[0];
+        const expirationDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        // Create COI document record using proper coiDocuments table
+        const doc = await storage.createCoiDocument({
+          externalName,
+          type: coiType,
+          documentUrl: '', // Will be set when file is uploaded
+          issueDate,
+          expirationDate,
+          uploadedBy: user.id,
+          status: 'ACTIVE'
+        });
+
         return {
           success: true,
-          message: `✅ COI document "${title}" has been stored. Set to expire in 1 year.`,
-          data: { documentId: doc.id }
+          message: `✅ COI document for "${externalName}" has been created. Type: ${coiType}. Expires: ${expirationDate}`,
+          data: { documentId: doc.id, expirationDate }
         };
       }
-      
+
       return null;
     } catch (error) {
       return {
@@ -2303,16 +2328,18 @@ Should I proceed with scheduling this interview?`,
           position: 'General Application',
           phone: '',
           stage: 'APPLIED',
+          status: 'APPLIED',
           appliedDate: new Date()
-        } as any); // TODO: Fix status vs stage field naming
+        });
       }
-      
+
       // Route to appropriate location
       if (message.toLowerCase().includes('move') || message.toLowerCase().includes('file')) {
-        // Update candidate status
+        // Update candidate stage
         await storage.updateCandidate(candidate.id, {
-          stage: 'SCREENING'
-        } as any); // TODO: hasResume field doesn't exist in Candidate schema
+          stage: 'SCREENING',
+          status: 'SCREENING'
+        });
         
         return {
           success: true,
@@ -2958,23 +2985,19 @@ Should I proceed with scheduling this interview?`,
           result = await this.contractManager.signContract(command.contractId!, user.id);
           break;
         case 'renew_contract':
-          // TODO: renewContract method not implemented in SusanContractManager
-          result = { success: false, message: 'Contract renewal not yet implemented' };
-          // result = await this.contractManager.renewContract(
-          //   command.contractId!,
-          //   new Date(command.data.newEndDate),
-          //   command.data.adjustments
-          // );
+          result = await this.contractManager.renewContract(command.contractId!, {
+            createdBy: user.id
+          });
           break;
         case 'terminate_contract':
-          // TODO: terminateContract method not implemented in SusanContractManager
-          result = { success: false, message: 'Contract termination not yet implemented' };
-          // result = await this.contractManager.terminateContract(command.contractId!, command.data.reason);
+          result = await this.contractManager.terminateContract(
+            command.contractId!,
+            command.data?.reason || 'Terminated via Susan AI',
+            user.id
+          );
           break;
         case 'expire_contracts':
-          // TODO: expireContracts method not implemented in SusanContractManager
-          result = { success: false, message: 'Contract expiration check not yet implemented' };
-          // result = await this.contractManager.expireContracts();
+          result = await this.contractManager.expireContracts();
           break;
         case 'generate_report':
           result = await this.contractManager.generateReport();
@@ -3081,8 +3104,7 @@ Should I proceed with scheduling this interview?`,
             position: cand.position,
             status: cand.status,
             appliedDate: cand.appliedDate,
-            // TODO: resumeText field doesn't exist on Candidate type
-            resumeText: null, // cand.resumeText ? `${cand.resumeText.substring(0, 200)}...` : null,
+            resumeUrl: cand.resumeUrl || null,
             interviews: interviews.map(i => ({
               date: i.scheduledDate,
               type: i.type,
@@ -3184,21 +3206,20 @@ Should I proceed with scheduling this interview?`,
 
   private async lookupTools(message: string): Promise<ActionResult> {
     try {
-      // TODO: getInventory method doesn't exist on SusanToolsManager
-      const tools: any[] = []; // await this.toolsManager.getInventory();
-      
+      const tools = await storage.getAllTools();
+
       // Extract tool name from message
       const toolMatch = message.match(/(?:find|look up|show|search for|get)\s+(?:tool\s+)?(\w+)/i);
       const searchTool = toolMatch?.[1]?.toLowerCase();
-      
+
       let filteredTools = tools;
       if (searchTool) {
-        filteredTools = tools.filter((tool: any) => 
+        filteredTools = tools.filter(tool =>
           tool.name?.toLowerCase().includes(searchTool) ||
           tool.category?.toLowerCase().includes(searchTool)
         );
       }
-      
+
       return {
         success: true,
         message: `Found ${filteredTools.length} tool(s) in inventory`,
@@ -3215,13 +3236,25 @@ Should I proceed with scheduling this interview?`,
 
   private async lookupDocuments(message: string): Promise<ActionResult> {
     try {
-      // TODO: searchDocuments method doesn't exist (only archiveDocuments available)
-      const documents: any[] = []; // await this.documentManager.searchDocuments(message);
+      const allDocuments = await storage.getAllDocuments();
+
+      // Extract search term from message
+      const searchMatch = message.match(/(?:find|look up|show|search for|get)\s+(?:document\s+)?(.+)/i);
+      const searchTerm = searchMatch?.[1]?.toLowerCase().trim();
+
+      let filteredDocuments = allDocuments;
+      if (searchTerm) {
+        filteredDocuments = allDocuments.filter(doc =>
+          doc.name?.toLowerCase().includes(searchTerm) ||
+          doc.category?.toLowerCase().includes(searchTerm) ||
+          doc.type?.toLowerCase().includes(searchTerm)
+        );
+      }
 
       return {
         success: true,
-        message: `Found ${documents.length} document(s)`,
-        data: documents
+        message: `Found ${filteredDocuments.length} document(s)`,
+        data: filteredDocuments
       };
     } catch (error) {
       return {

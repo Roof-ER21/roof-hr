@@ -163,6 +163,12 @@ export interface IStorage {
   updateDocument(id: string, data: Partial<InsertDocument>): Promise<Document>;
   deleteDocument(id: string): Promise<void>;
 
+  // Document Acknowledgments
+  createDocumentAcknowledgment(data: Omit<InsertDocumentAcknowledgment, 'id'>): Promise<DocumentAcknowledgment>;
+  getDocumentAcknowledgment(documentId: string, employeeId: string): Promise<DocumentAcknowledgment | null>;
+  getDocumentAcknowledgments(documentId: string): Promise<DocumentAcknowledgment[]>;
+  getEmployeeAcknowledgments(employeeId: string): Promise<DocumentAcknowledgment[]>;
+
   // Employee Review Management
   createEmployeeReview(data: InsertEmployeeReview): Promise<EmployeeReview>;
   getEmployeeReviewById(id: string): Promise<EmployeeReview | null>;
@@ -360,7 +366,7 @@ export interface IStorage {
   getTerritoryBySalesManager(managerId: string): Promise<Territory | null>;
   
   // COI Document Management - NEW
-  createCoiDocument(data: InsertCoiDocument): Promise<CoiDocument>;
+  createCoiDocument(data: Omit<InsertCoiDocument, 'id'>): Promise<CoiDocument>;
   getCoiDocumentById(id: string): Promise<CoiDocument | null>;
   getCoiDocumentsByEmployeeId(employeeId: string): Promise<CoiDocument[]>;
   getAllCoiDocuments(): Promise<CoiDocument[]>;
@@ -421,7 +427,7 @@ export interface IStorage {
   markNotificationAsRead(id: string, userId: string): Promise<void>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
   clearNotifications(userId: string): Promise<void>;
-  createNotification(data: any): Promise<any>;
+  createNotification(data: Omit<InsertNotification, 'id'> & { id?: string }): Promise<Notification>;
   
   // Search
   search(query: string, userRole: string): Promise<any[]>;
@@ -846,6 +852,39 @@ class DrizzleStorage implements IStorage {
       .where(eq(documents.id, id))
       .returning();
     return updated || null;
+  }
+
+  // Document Acknowledgment Methods
+  async createDocumentAcknowledgment(data: Omit<InsertDocumentAcknowledgment, 'id'>): Promise<DocumentAcknowledgment> {
+    const id = uuidv4();
+    const [acknowledgment] = await db.insert(documentAcknowledgments).values({
+      ...data,
+      id
+    }).returning();
+    return acknowledgment;
+  }
+
+  async getDocumentAcknowledgment(documentId: string, employeeId: string): Promise<DocumentAcknowledgment | null> {
+    const [ack] = await db.select()
+      .from(documentAcknowledgments)
+      .where(and(
+        eq(documentAcknowledgments.documentId, documentId),
+        eq(documentAcknowledgments.employeeId, employeeId)
+      ))
+      .limit(1);
+    return ack || null;
+  }
+
+  async getDocumentAcknowledgments(documentId: string): Promise<DocumentAcknowledgment[]> {
+    return await db.select()
+      .from(documentAcknowledgments)
+      .where(eq(documentAcknowledgments.documentId, documentId));
+  }
+
+  async getEmployeeAcknowledgments(employeeId: string): Promise<DocumentAcknowledgment[]> {
+    return await db.select()
+      .from(documentAcknowledgments)
+      .where(eq(documentAcknowledgments.employeeId, employeeId));
   }
 
   // Susan AI Chat Session methods
@@ -1758,7 +1797,7 @@ class DrizzleStorage implements IStorage {
   }
 
   // Notification Methods
-  async createNotification(data: InsertNotification & { id?: string }): Promise<Notification> {
+  async createNotification(data: Omit<InsertNotification, 'id'> & { id?: string }): Promise<Notification> {
     const id = data.id || `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const [notification] = await db.insert(notifications).values({
       ...data,
@@ -2104,7 +2143,7 @@ class DrizzleStorage implements IStorage {
   }
   
   // COI Document Management Implementation - NEW
-  async createCoiDocument(data: InsertCoiDocument): Promise<CoiDocument> {
+  async createCoiDocument(data: Omit<InsertCoiDocument, 'id'>): Promise<CoiDocument> {
     const id = uuidv4();
     const [doc] = await db.insert(coiDocuments).values({ ...data, id }).returning();
     return doc;
