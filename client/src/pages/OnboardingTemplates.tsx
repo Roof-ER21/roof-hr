@@ -698,15 +698,17 @@ export default function OnboardingTemplates() {
                     value={newTask.description}
                     onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
                   />
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Due in</span>
                     <Input
                       type="number"
                       min="1"
-                      placeholder="Days"
+                      placeholder="1"
                       value={newTask.dueInDays}
                       onChange={(e) => setNewTask({ ...newTask, dueInDays: parseInt(e.target.value) || 1 })}
-                      className="w-24"
+                      className="w-16"
                     />
+                    <span className="text-sm text-muted-foreground">days</span>
                     <Button onClick={handleAddTask} variant="outline" size="sm">
                       Add Task
                     </Button>
@@ -800,15 +802,17 @@ export default function OnboardingTemplates() {
                     value={newTask.description}
                     onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
                   />
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Due in</span>
                     <Input
                       type="number"
                       min="1"
-                      placeholder="Days"
+                      placeholder="1"
                       value={newTask.dueInDays}
                       onChange={(e) => setNewTask({ ...newTask, dueInDays: parseInt(e.target.value) || 1 })}
-                      className="w-24"
+                      className="w-16"
                     />
+                    <span className="text-sm text-muted-foreground">days</span>
                     <Button onClick={handleAddTask} variant="outline" size="sm">
                       Add Task
                     </Button>
