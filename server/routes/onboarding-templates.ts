@@ -272,9 +272,11 @@ router.post('/api/onboarding-templates/:templateId/assign/:employeeId', requireM
       const task = tasks[i];
       const stepId = `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // Calculate due date based on dueInDays
+      // Calculate due date based on dueInDays (use ?? for nullish coalescing to allow 0)
+      const daysToAdd = task.dueInDays ?? 1; // Default to 1 day if undefined/null
+      console.log(`[Onboarding] Task "${task.title}" dueInDays=${task.dueInDays}, using ${daysToAdd} days`);
       const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + (task.dueInDays || 7));
+      dueDate.setDate(dueDate.getDate() + daysToAdd);
 
       try {
         const createdStep = await storage.createOnboardingStep({

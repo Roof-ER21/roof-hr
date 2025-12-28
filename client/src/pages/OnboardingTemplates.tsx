@@ -27,6 +27,21 @@ interface Task {
   dueInDays: number;
 }
 
+// Helper to safely parse tasks - handles both JSON string and array
+function parseTasks(tasks: string | Task[] | undefined): Task[] {
+  if (!tasks) return [];
+  if (Array.isArray(tasks)) return tasks;
+  if (typeof tasks === 'string') {
+    try {
+      const parsed = JSON.parse(tasks);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 // Extracted component to properly use useSortable hook (cannot be called inside .map())
 interface SortableTaskItemProps {
   task: Task;
@@ -416,23 +431,13 @@ export default function OnboardingTemplates() {
     setName(template.name);
     setDescription(template.description || '');
     setDepartment(template.department || '');
-    try {
-      const parsedTasks = JSON.parse(template.tasks);
-      setTasks(Array.isArray(parsedTasks) ? parsedTasks : []);
-    } catch {
-      setTasks([]);
-    }
+    setTasks(parseTasks(template.tasks));
     setIsEditDialogOpen(true);
   };
 
   const openViewDialog = (template: OnboardingTemplate) => {
     setSelectedTemplate(template);
-    try {
-      const parsedTasks = JSON.parse(template.tasks);
-      setTasks(Array.isArray(parsedTasks) ? parsedTasks : []);
-    } catch {
-      setTasks([]);
-    }
+    setTasks(parseTasks(template.tasks));
     setIsViewDialogOpen(true);
   };
 
@@ -507,12 +512,7 @@ export default function OnboardingTemplates() {
     setSelectedInstance(instance);
     const template = templates.find((t: OnboardingTemplate) => t.id === instance.templateId);
     if (template) {
-      try {
-        const parsedTasks = JSON.parse(template.tasks);
-        setTasks(Array.isArray(parsedTasks) ? parsedTasks : []);
-      } catch {
-        setTasks([]);
-      }
+      setTasks(parseTasks(template.tasks));
     }
     setIsViewInstanceDialogOpen(true);
   };
@@ -543,13 +543,7 @@ export default function OnboardingTemplates() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {templates && templates.length > 0 ? (
           templates.map((template: OnboardingTemplate) => {
-            let taskCount = 0;
-            try {
-              const parsedTasks = JSON.parse(template.tasks);
-              taskCount = Array.isArray(parsedTasks) ? parsedTasks.length : 0;
-            } catch {
-              taskCount = 0;
-            }
+            const taskCount = parseTasks(template.tasks).length;
 
             return (
               <Card key={template.id}>
@@ -931,17 +925,8 @@ export default function OnboardingTemplates() {
               instances.map((instance: OnboardingInstance) => {
                 const employee = users.find((u: User) => u.id === instance.employeeId);
                 const template = templates.find((t: OnboardingTemplate) => t.id === instance.templateId);
-                let totalTasks = 0;
+                const totalTasks = template ? parseTasks(template.tasks).length : 0;
                 let completedTasksCount = 0;
-
-                try {
-                  if (template) {
-                    const parsedTasks = JSON.parse(template.tasks);
-                    totalTasks = Array.isArray(parsedTasks) ? parsedTasks.length : 0;
-                  }
-                } catch {
-                  totalTasks = 0;
-                }
 
                 // Parse progress JSON to get completed tasks count
                 try {
