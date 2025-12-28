@@ -483,16 +483,16 @@ export default function CalendarScheduler() {
                 Room (Optional)
               </Label>
               <Select
-                value={formData.roomId?.toString()}
+                value={formData.roomId?.toString() || "none"}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, roomId: value ? parseInt(value) : undefined })
+                  setFormData({ ...formData, roomId: value && value !== "none" ? parseInt(value) : undefined })
                 }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a room" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No room</SelectItem>
+                  <SelectItem value="none">No room</SelectItem>
                   {rooms.map((room) => (
                     <SelectItem key={room.id} value={room.id.toString()}>
                       {room.name} (Capacity: {room.capacity})

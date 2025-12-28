@@ -96,7 +96,14 @@ export default function MeetingRooms() {
       if (!response.ok) {
         throw new Error('Failed to fetch meeting rooms');
       }
-      return response.json();
+      const data = await response.json();
+      // Parse amenities from JSON string to array
+      return data.map((room: any) => ({
+        ...room,
+        amenities: typeof room.amenities === 'string'
+          ? JSON.parse(room.amenities || '[]')
+          : (room.amenities || [])
+      }));
     }
   });
 
@@ -130,7 +137,10 @@ export default function MeetingRooms() {
     mutationFn: (data: RoomFormData) =>
       apiRequest('/api/meeting-rooms', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          amenities: JSON.stringify(data.amenities), // Convert array to JSON string for DB
+        }),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['/api/meeting-rooms'] });
@@ -156,7 +166,10 @@ export default function MeetingRooms() {
     mutationFn: (data: { id: string; updates: Partial<RoomFormData> }) =>
       apiRequest(`/api/meeting-rooms/${data.id}`, {
         method: 'PUT',
-        body: JSON.stringify(data.updates),
+        body: JSON.stringify({
+          ...data.updates,
+          amenities: data.updates.amenities ? JSON.stringify(data.updates.amenities) : undefined,
+        }),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['/api/meeting-rooms'] });

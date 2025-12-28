@@ -27,6 +27,43 @@ interface Task {
   dueInDays: number;
 }
 
+// Extracted component to properly use useSortable hook (cannot be called inside .map())
+interface SortableTaskItemProps {
+  task: Task;
+  taskId: string;
+  onRemove: () => void;
+}
+
+function SortableTaskItem({ task, taskId, onRemove }: SortableTaskItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: taskId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-start gap-2 p-3 border rounded-lg cursor-move bg-background hover:bg-muted/50 transition-colors">
+      <div {...attributes} {...listeners}>
+        <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab active:cursor-grabbing" />
+      </div>
+      <div className="flex-1">
+        <div className="font-medium">{task.title}</div>
+        <div className="text-sm text-muted-foreground">{task.description}</div>
+        <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
+      </div>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onRemove}
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 export default function OnboardingTemplates() {
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<OnboardingTemplate | null>(null);
@@ -644,32 +681,13 @@ export default function OnboardingTemplates() {
                   <SortableContext items={tasks.map((task, index) => task.id || `task-${index}`)} strategy={verticalListSortingStrategy}>
                     {tasks.map((task, index) => {
                       const taskId = task.id || `task-${index}`;
-                      const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: taskId });
-
-                      const style = {
-                        transform: CSS.Transform.toString(transform),
-                        transition,
-                        opacity: isDragging ? 0.5 : 1,
-                      };
-
                       return (
-                        <div key={taskId} ref={setNodeRef} style={style} className="flex items-start gap-2 p-3 border rounded-lg cursor-move bg-background hover:bg-muted/50 transition-colors">
-                          <div {...attributes} {...listeners}>
-                            <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab active:cursor-grabbing" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium">{task.title}</div>
-                            <div className="text-sm text-muted-foreground">{task.description}</div>
-                            <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRemoveTask(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <SortableTaskItem
+                          key={taskId}
+                          task={task}
+                          taskId={taskId}
+                          onRemove={() => handleRemoveTask(index)}
+                        />
                       );
                     })}
                   </SortableContext>
@@ -765,32 +783,13 @@ export default function OnboardingTemplates() {
                   <SortableContext items={tasks.map((task, index) => task.id || `task-${index}`)} strategy={verticalListSortingStrategy}>
                     {tasks.map((task, index) => {
                       const taskId = task.id || `task-${index}`;
-                      const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: taskId });
-
-                      const style = {
-                        transform: CSS.Transform.toString(transform),
-                        transition,
-                        opacity: isDragging ? 0.5 : 1,
-                      };
-
                       return (
-                        <div key={taskId} ref={setNodeRef} style={style} className="flex items-start gap-2 p-3 border rounded-lg cursor-move bg-background hover:bg-muted/50 transition-colors">
-                          <div {...attributes} {...listeners}>
-                            <GripVertical className="h-5 w-5 text-muted-foreground mt-1 cursor-grab active:cursor-grabbing" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium">{task.title}</div>
-                            <div className="text-sm text-muted-foreground">{task.description}</div>
-                            <div className="text-xs text-muted-foreground mt-1">Due in {task.dueInDays} days</div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRemoveTask(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <SortableTaskItem
+                          key={taskId}
+                          task={task}
+                          taskId={taskId}
+                          onRemove={() => handleRemoveTask(index)}
+                        />
                       );
                     })}
                   </SortableContext>
