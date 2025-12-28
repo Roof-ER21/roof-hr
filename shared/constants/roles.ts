@@ -224,6 +224,25 @@ export function canApprovePto(user: { role?: string; email?: string } | null): b
 }
 
 // ============================================================================
+// ONBOARDING CHECKLIST ACCESS
+// ============================================================================
+// Users who can access the Onboarding Checklist (in addition to ADMIN_ROLES)
+export const ONBOARDING_ADMIN_EMAILS = [
+  'ahmed.mahmoud@theroofdocs.com',
+  'ford.barsi@theroofdocs.com',
+  'oliver.brown@theroofdocs.com',
+  'reese.samala@theroofdocs.com',
+  'careers@theroofdocs.com',  // Ryan Ferguson
+];
+
+export function canAccessOnboardingChecklist(user: { role?: string; email?: string } | null): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  if (user.email && ONBOARDING_ADMIN_EMAILS.includes(user.email.toLowerCase())) return true;
+  return false;
+}
+
+// ============================================================================
 // POLICY ADMIN ACCESS
 // ============================================================================
 const POLICY_ADMIN_EMAILS = [

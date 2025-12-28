@@ -9,6 +9,8 @@ import {
   MANAGER_ROLES,
   ALL_ROLES,
   SUPER_ADMIN_EMAIL,
+  canAccessOnboardingChecklist,
+  ONBOARDING_ADMIN_EMAILS,
 } from '@shared/constants/roles';
 import {
   LayoutDashboard,
@@ -79,7 +81,7 @@ const navigation = [
     roles: MANAGER_ROLES,
     children: [
       { name: 'Employee Directory', href: '/employees', icon: Users, roles: MANAGER_ROLES },
-      { name: 'Onboarding Checklist', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES },
+      { name: 'Onboarding Checklist', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES, emailAccess: ONBOARDING_ADMIN_EMAILS },
       { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: MANAGER_ROLES },
       { name: 'Territories', href: '/territories', icon: MapPin, roles: MANAGER_ROLES }
     ]
@@ -190,6 +192,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             .filter(child => {
                               // Ahmed always sees all child items (super admin email fallback)
                               if (user?.email === SUPER_ADMIN_EMAIL) return true;
+                              // Check email-based access if defined
+                              if ((child as any).emailAccess && user?.email) {
+                                if ((child as any).emailAccess.includes(user.email.toLowerCase())) return true;
+                              }
                               return !user?.role || child.roles.includes(user.role);
                             })
                             .map((child) => {
