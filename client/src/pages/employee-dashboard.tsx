@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
@@ -609,9 +610,38 @@ function EmployeeDashboard() {
                                 );
                               })}
                               {dayEvents.length > 2 && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
-                                  +{dayEvents.length - 2} more
-                                </div>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-xs text-blue-600 dark:text-blue-400 px-1 hover:underline cursor-pointer"
+                                    >
+                                      +{dayEvents.length - 2} more
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-64 p-2" align="start">
+                                    <div className="text-sm font-medium mb-2 text-gray-900 dark:text-white">
+                                      {format(day, 'MMMM d, yyyy')}
+                                    </div>
+                                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                                      {dayEvents.map((event) => {
+                                        const colors = eventTypeColors[event.type] || eventTypeColors.MEETING;
+                                        return (
+                                          <button
+                                            key={event.id}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedEvent(event);
+                                            }}
+                                            className={`w-full text-left px-2 py-1 text-xs rounded truncate ${colors.bg} ${colors.text} hover:opacity-80`}
+                                          >
+                                            {event.title}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
                               )}
                             </div>
                           </div>

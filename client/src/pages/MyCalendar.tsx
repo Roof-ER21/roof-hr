@@ -289,9 +289,15 @@ export default function MyCalendar() {
                           );
                         })}
                         {dayEvents.length > 2 && (
-                          <div className="text-[10px] text-gray-500 dark:text-gray-400 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDate(day);
+                            }}
+                            className="w-full text-[10px] text-blue-600 dark:text-blue-400 text-center hover:underline cursor-pointer"
+                          >
                             +{dayEvents.length - 2} more
-                          </div>
+                          </button>
                         )}
                       </div>
                     )}
