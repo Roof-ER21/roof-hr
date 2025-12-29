@@ -14,7 +14,7 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES } from '../shared/constants/roles';
 import { PTO_POLICY } from '../shared/constants/pto-policy';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
@@ -1255,7 +1255,9 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
 router.get('/api/pto', requireAuth, async (req: any, res) => {
   try {
     let ptoRequests;
-    if (req.user.role === 'ADMIN' || req.user.role === 'MANAGER') {
+    // Use role groups to check for admin/manager access (includes TRUE_ADMIN, SYSTEM_ADMIN, HR_ADMIN, etc.)
+    const isAdminOrManager = ADMIN_ROLES.includes(req.user.role) || MANAGER_ROLES.includes(req.user.role);
+    if (isAdminOrManager) {
       ptoRequests = await storage.getAllPtoRequests().catch((err) => {
         console.error('[PTO] Failed to fetch all PTO requests:', err.message);
         return [];
