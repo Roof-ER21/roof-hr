@@ -643,7 +643,7 @@ export default function CoiDocuments() {
     setBulkPreviewErrors([]);
 
     try {
-      const response = await apiRequest('POST', '/api/coi-documents/bulk-preview', {});
+      const response = await apiRequest('/api/coi-documents/bulk-preview', 'POST', {});
       const data = response as BulkPreviewResponse;
 
       if (data.success) {
@@ -744,7 +744,7 @@ export default function CoiDocuments() {
         };
       });
 
-      const response = await apiRequest('POST', '/api/coi-documents/bulk-import', { imports });
+      const response = await apiRequest('/api/coi-documents/bulk-import', 'POST', { imports });
       const data = response as { success: boolean; imported: number; skipped: number; failed: number };
 
       if (data.success) {
