@@ -1728,7 +1728,7 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
                 to: employee.email,
                 subject: `${statusEmoji} Your PTO Request Has Been ${statusText}`,
                 html: emailHtml,
-                from: user.email
+                fromUserEmail: user.email  // Use Gmail API with service account impersonation
               });
               console.log(`[PTO Notification] Email sent to ${employee.email}`);
             } catch (emailError) {

@@ -129,7 +129,8 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
                   This is an automated reminder from the Roof HR system.
                 </p>
               </div>
-            `
+            `,
+            fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
           });
         }
         weekRemindersSent++;
@@ -163,7 +164,8 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
                   This is an automated notice from the Roof HR system.
                 </p>
               </div>
-            `
+            `,
+            fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
           });
         }
         monthRemindersSent++;
