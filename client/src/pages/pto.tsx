@@ -41,6 +41,8 @@ function PTO() {
   // Denial dialog state
   const [denyingRequestId, setDenyingRequestId] = useState<string | null>(null);
   const [denyNotes, setDenyNotes] = useState('');
+  // Status filter for PTO requests
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('ALL');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -732,7 +734,43 @@ function PTO() {
       {/* PTO Requests Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All PTO Requests</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardTitle>All PTO Requests</CardTitle>
+            {/* Status Filter Bar */}
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant={statusFilter === 'ALL' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('ALL')}
+              >
+                All
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === 'PENDING' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('PENDING')}
+                className={statusFilter === 'PENDING' ? '' : 'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}
+              >
+                Pending
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === 'APPROVED' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('APPROVED')}
+                className={statusFilter === 'APPROVED' ? 'bg-green-600 hover:bg-green-700' : 'border-green-300 text-green-700 hover:bg-green-50'}
+              >
+                Approved
+              </Button>
+              <Button
+                size="sm"
+                variant={statusFilter === 'DENIED' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('DENIED')}
+                className={statusFilter === 'DENIED' ? 'bg-red-600 hover:bg-red-700' : 'border-red-300 text-red-700 hover:bg-red-50'}
+              >
+                Denied
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -749,7 +787,9 @@ function PTO() {
                 </tr>
               </thead>
               <tbody>
-                {ptoRequests?.map((request: any) => {
+                {ptoRequests
+                  ?.filter((request: any) => statusFilter === 'ALL' || request.status === statusFilter)
+                  .map((request: any) => {
                   const employee = getUserById(request.employeeId);
                   return (
                     <tr key={request.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">

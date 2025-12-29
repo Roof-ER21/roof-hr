@@ -56,8 +56,14 @@ function TeamDashboard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Check if user is a manager - Ahmed always has access via email fallback
-  const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+  // Check if user is a manager - PTO approvers always have access
+  const PTO_APPROVER_EMAILS = [
+    'ahmed.mahmoud@theroofdocs.com',
+    'ford.barsi@theroofdocs.com',
+    'reese.samala@theroofdocs.com',
+    'oliver.brown@theroofdocs.com'
+  ];
+  const isManager = PTO_APPROVER_EMAILS.includes(user?.email || '') ||
     (user?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role));
 
   // Fetch team members (direct reports or department)
