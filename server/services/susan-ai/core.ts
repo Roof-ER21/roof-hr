@@ -5,16 +5,17 @@
  */
 
 import { db } from '../../db';
-import { 
-  users, 
-  candidates, 
-  ptoRequests, 
+import {
+  users,
+  candidates,
+  ptoRequests,
   territories,
   coiDocuments,
   emailTemplates,
   workflows,
   toolInventory
 } from '@shared/schema';
+import { ADMIN_ROLES, MANAGER_ROLES } from '@shared/constants/roles';
 import { eq, and, or, desc, asc, isNull, gte, lte, sql } from 'drizzle-orm';
 import { KnowledgeBase } from './knowledge-base';
 import { SusanActionHandler, type ActionContext } from './action-handler';
@@ -433,11 +434,11 @@ export class SusanAI {
     intent: any,
     context: SusanContext
   ): Promise<boolean> {
-    // Admin and HR_MANAGER have access to everything
-    if (['ADMIN', 'HR_MANAGER'].includes(context.userRole)) return true;
-    
-    // Manager permissions
-    if (context.userRole === 'MANAGER') {
+    // Admin roles have access to everything
+    if (ADMIN_ROLES.includes(context.userRole)) return true;
+
+    // Manager permissions (all manager-level roles)
+    if (MANAGER_ROLES.includes(context.userRole)) {
       // Managers can't access salary data unless it's their team
       if (intent.dataSource?.includes('salary') && intent.scope !== 'team') {
         return false;

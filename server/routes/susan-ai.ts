@@ -10,6 +10,7 @@ import { SusanConfirmationHandler } from '../services/susan-ai/confirmation-hand
 import { z } from 'zod';
 import { storage } from '../storage';
 import { db } from '../db';
+import { ADMIN_ROLES, MANAGER_ROLES } from '@shared/constants/roles';
 
 const router = express.Router();
 
@@ -97,8 +98,8 @@ router.post('/chat', async (req, res) => {
     }
     
     // Use Admin Susan AI for admins and authorized managers
-    const isAdmin = context.userRole === 'ADMIN' || 
-                   (context.userRole === 'MANAGER' && isAuthorizedManager(context.userId));
+    const isAdmin = ADMIN_ROLES.includes(context.userRole) ||
+                   (MANAGER_ROLES.includes(context.userRole) && isAuthorizedManager(context.userId));
     console.log('[SUSAN-AI] Selecting AI instance - isAdmin:', isAdmin, 'userRole:', context.userRole, 'userId:', context.userId);
     const aiInstance = isAdmin ? adminSusanAI : susanAI;
     
@@ -476,7 +477,7 @@ router.get('/analytics', async (req, res) => {
     }
 
     // Only admins and managers can view analytics
-    if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+    if (!ADMIN_ROLES.includes(user.role) && !MANAGER_ROLES.includes(user.role)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -603,7 +604,7 @@ router.post('/confirm-action', async (req, res) => {
     // Check permissions for sensitive actions
     const sensitiveActions = ['confirm_pto_approve', 'confirm_pto_deny', 'confirm_employee_create'];
     if (sensitiveActions.includes(confirmationType)) {
-      if (!['ADMIN', 'HR_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'GENERAL_MANAGER'].includes(user.role)) {
+      if (!ADMIN_ROLES.includes(user.role) && !MANAGER_ROLES.includes(user.role)) {
         return res.status(403).json({
           success: false,
           error: 'Permission denied',

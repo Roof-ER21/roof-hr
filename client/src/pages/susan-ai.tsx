@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
+import { ADMIN_ROLES, MANAGER_ROLES } from '@shared/constants/roles';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
@@ -115,7 +116,7 @@ export default function SusanAI() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Check if user is admin/manager for Admin Susan AI
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isAdmin = ADMIN_ROLES.includes(user?.role || '') || MANAGER_ROLES.includes(user?.role || '');
   const isAdminSusan = isAdmin;
   
   // Check if user is super admin (Ahmed Mahmoud only)
