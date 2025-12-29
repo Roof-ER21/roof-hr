@@ -1638,6 +1638,107 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
       }
     }
 
+    // Send notifications to the employee when their PTO request is approved or denied
+    if (status === 'APPROVED' || status === 'DENIED') {
+      try {
+        const employee = await storage.getUserById(currentRequest.employeeId);
+        if (employee) {
+          const statusText = status === 'APPROVED' ? 'Approved' : 'Denied';
+          const statusEmoji = status === 'APPROVED' ? '✅' : '❌';
+
+          // 1. Create in-app notification for the employee
+          await storage.createNotification({
+            id: `pto-${status.toLowerCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            userId: employee.id,
+            type: status === 'APPROVED' ? 'pto_approved' : 'pto_denied',
+            title: `PTO Request ${statusText}`,
+            message: `Your PTO request from ${currentRequest.startDate} to ${currentRequest.endDate} has been ${statusText.toLowerCase()}.${reviewNotes ? ` Notes: ${reviewNotes}` : ''}`,
+            link: '/pto',
+            metadata: JSON.stringify({
+              ptoRequestId: currentRequest.id,
+              startDate: currentRequest.startDate,
+              endDate: currentRequest.endDate,
+              days: currentRequest.days,
+              reviewedBy: user.email,
+              reviewNotes: reviewNotes || null
+            }),
+            read: false,
+          });
+          console.log(`[PTO Notification] In-app notification created for ${employee.email}`);
+
+          // 2. Send email notification to the employee
+          if (employee.email) {
+            try {
+              const emailService = new EmailService();
+              await emailService.initialize();
+
+              const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: ${status === 'APPROVED' ? '#10b981' : '#ef4444'}; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f9fafb; padding: 25px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; }
+                    .details { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+                    .footer { text-align: center; margin-top: 20px; font-size: 0.85em; color: #666; }
+                    .button { display: inline-block; background: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <div class="header">
+                      <h1 style="margin: 0;">${statusEmoji} PTO Request ${statusText}</h1>
+                    </div>
+                    <div class="content">
+                      <p>Hi ${employee.firstName || 'there'},</p>
+                      <p>Your PTO request has been <strong>${statusText.toLowerCase()}</strong> by ${user.firstName} ${user.lastName}.</p>
+
+                      <div class="details">
+                        <h3 style="margin-top: 0;">Request Details</h3>
+                        <p><strong>Type:</strong> ${currentRequest.type || 'PTO'}</p>
+                        <p><strong>Start Date:</strong> ${currentRequest.startDate}</p>
+                        <p><strong>End Date:</strong> ${currentRequest.endDate}</p>
+                        <p><strong>Days:</strong> ${currentRequest.days || 'N/A'}</p>
+                        ${currentRequest.reason ? `<p><strong>Reason:</strong> ${currentRequest.reason}</p>` : ''}
+                        ${reviewNotes ? `<p><strong>Reviewer Notes:</strong> ${reviewNotes}</p>` : ''}
+                      </div>
+
+                      ${status === 'APPROVED' ? '<p>Your time off has been added to the calendar. Enjoy your break!</p>' : '<p>If you have questions about this decision, please reach out to your manager or HR.</p>'}
+
+                      <div style="text-align: center;">
+                        <a href="https://roofhr.up.railway.app/pto" class="button">View PTO Dashboard</a>
+                      </div>
+
+                      <div class="footer">
+                        <p>This is an automated notification from ROOF HR.</p>
+                      </div>
+                    </div>
+                  </div>
+                </body>
+                </html>
+              `;
+
+              await emailService.sendEmail({
+                to: employee.email,
+                subject: `${statusEmoji} Your PTO Request Has Been ${statusText}`,
+                html: emailHtml,
+                from: user.email
+              });
+              console.log(`[PTO Notification] Email sent to ${employee.email}`);
+            } catch (emailError) {
+              console.error('[PTO Notification] Error sending email:', emailError);
+              // Don't fail the request if email fails
+            }
+          }
+        }
+      } catch (notifError) {
+        console.error('[PTO Notification] Error creating notifications:', notifError);
+        // Don't fail the request if notifications fail
+      }
+    }
+
     res.json(ptoRequest);
   } catch (error) {
     console.error('Error updating PTO request:', error);
