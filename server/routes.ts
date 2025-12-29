@@ -1416,9 +1416,39 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
 
         // Then notify the appropriate approvers (Ford/Reese → Oliver & Ahmed only, others → all 4)
         let managerEmailsSent = 0;
-        console.log(`[PTO Email] Notifying ${approverEmails.length} approvers for ${user.email}'s request`);
+        let managerNotificationsSent = 0;
+        console.log(`[PTO] Notifying ${approverEmails.length} approvers for ${user.email}'s request`);
+
         for (const approverEmail of approverEmails) {
           try {
+            // Find the approver's user ID for in-app notification
+            const approver = await storage.getUserByEmail(approverEmail);
+
+            // Create in-app notification for the approver
+            if (approver) {
+              await storage.createNotification({
+                id: `pto-request-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                userId: approver.id,
+                type: 'pto_request',
+                title: 'New PTO Request',
+                message: `${user.firstName} ${user.lastName} has requested PTO from ${new Date(req.body.startDate).toLocaleDateString()} to ${new Date(req.body.endDate).toLocaleDateString()} (${days} days)`,
+                link: '/pto',
+                metadata: JSON.stringify({
+                  ptoRequestId: ptoRequest.id,
+                  employeeId: user.id,
+                  employeeName: `${user.firstName} ${user.lastName}`,
+                  startDate: req.body.startDate,
+                  endDate: req.body.endDate,
+                  days: days
+                }),
+                read: false,
+                createdAt: new Date()
+              });
+              managerNotificationsSent++;
+              console.log(`[PTO] In-app notification created for: ${approverEmail}`);
+            }
+
+            // Send email notification
             const sent = await emailService.sendEmail({
               to: approverEmail,
               subject: `New PTO Request: ${user.firstName} ${user.lastName}`,
@@ -1438,15 +1468,15 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
             });
             if (sent) {
               managerEmailsSent++;
-              console.log(`[PTO Email] Approver notification SENT to: ${approverEmail}`);
+              console.log(`[PTO] Email notification SENT to: ${approverEmail}`);
             } else {
-              console.log(`[PTO Email] Approver notification NOT SENT (dev mode?) to: ${approverEmail}`);
+              console.log(`[PTO] Email notification NOT SENT (dev mode?) to: ${approverEmail}`);
             }
           } catch (emailErr) {
-            console.error(`[PTO Email] Failed to notify approver ${approverEmail}:`, emailErr);
+            console.error(`[PTO] Failed to notify approver ${approverEmail}:`, emailErr);
           }
         }
-        console.log(`[PTO Email] Completed: ${managerEmailsSent}/${approverEmails.length} approver emails sent`);
+        console.log(`[PTO] Completed: ${managerNotificationsSent} in-app, ${managerEmailsSent} emails sent to ${approverEmails.length} approvers`);
       } catch (notifyError) {
         console.error('[PTO Email] Error sending notifications:', notifyError);
       }

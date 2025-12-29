@@ -38,6 +38,9 @@ function PTO() {
   const [editingEmployeePolicy, setEditingEmployeePolicy] = useState<string | null>(null);
   const [addingIndividual, setAddingIndividual] = useState(false);
   const [addingDepartment, setAddingDepartment] = useState(false);
+  // Denial dialog state
+  const [denyingRequestId, setDenyingRequestId] = useState<string | null>(null);
+  const [denyNotes, setDenyNotes] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -241,14 +244,14 @@ function PTO() {
   });
 
   const updatePTOMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, reviewNotes }: { id: string; status: string; reviewNotes?: string }) => {
       const response = await fetch(`/api/pto/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status, reviewNotes })
       });
       if (!response.ok) throw new Error('Failed to update PTO request');
       return response.json();
@@ -278,7 +281,20 @@ function PTO() {
   };
 
   const handleDeny = (id: string) => {
-    updatePTOMutation.mutate({ id, status: 'DENIED' });
+    setDenyingRequestId(id);
+    setDenyNotes('');
+  };
+
+  const confirmDeny = () => {
+    if (denyingRequestId) {
+      updatePTOMutation.mutate({
+        id: denyingRequestId,
+        status: 'DENIED',
+        reviewNotes: denyNotes.trim() || undefined
+      });
+      setDenyingRequestId(null);
+      setDenyNotes('');
+    }
   };
 
   // Add mutations for policy management (must be before any conditional returns)
@@ -573,7 +589,7 @@ function PTO() {
                 <Alert className="mt-4 border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
                   <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <AlertDescription className="text-amber-800 dark:text-amber-200">
-                    <strong>Reminder:</strong> You must use at least 5 PTO days during January, February, or December each year.
+                    <strong>Reminder:</strong> You must use 5 PTO days during January, February, or December each year.
                   </AlertDescription>
                 </Alert>
               </CardContent>
@@ -1454,6 +1470,50 @@ function PTO() {
       </Card>
     </TabsContent>
   </Tabs>
+
+      {/* Denial Notes Dialog */}
+      <Dialog open={!!denyingRequestId} onOpenChange={(open) => !open && setDenyingRequestId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <X className="w-5 h-5 text-red-500" />
+              Deny PTO Request
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to deny this PTO request? You can optionally add a note explaining the reason.
+            </p>
+            <div>
+              <Label htmlFor="denyNotes">Denial Note (optional)</Label>
+              <Textarea
+                id="denyNotes"
+                placeholder="e.g., Coverage conflict, busy period, short notice..."
+                value={denyNotes}
+                onChange={(e) => setDenyNotes(e.target.value)}
+                className="mt-2"
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setDenyingRequestId(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeny}
+                disabled={updatePTOMutation.isPending}
+              >
+                <X className="w-4 h-4 mr-1" />
+                Deny Request
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

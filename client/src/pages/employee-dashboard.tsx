@@ -401,7 +401,7 @@ function EmployeeDashboard() {
       <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
         <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span><strong>Reminder:</strong> You must use at least 5 PTO days during January, February, or December each year.</span>
+          <span><strong>Reminder:</strong> You must use 5 PTO days during January, February, or December each year.</span>
         </p>
       </div>
 
