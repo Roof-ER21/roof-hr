@@ -4,6 +4,7 @@ import { db } from '../db';
 import { users, ptoRequests, documents, tasks, employeeReviews, ptoPolicies, documentAcknowledgments } from '../../shared/schema';
 import { eq, and, or, gte, lte, desc, notInArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { PTO_POLICY, getPtoAllocation } from '../../shared/constants/pto-policy';
 
 const router = express.Router();
 
@@ -100,19 +101,19 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
         phone: user.phone || null,
         hireDate: user.hireDate
       },
-      // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+      // Use centralized PTO policy constants (17 total days, 0 for sales/1099)
       ptoBalance: ptoPolicy ? {
-        vacationDays: ptoPolicy.vacationDays || 5,
-        sickDays: ptoPolicy.sickDays || 5,
-        personalDays: ptoPolicy.personalDays || 2,
+        vacationDays: ptoPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS,
+        sickDays: ptoPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS,
+        personalDays: ptoPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS,
         usedVacation,
         usedSick,
         usedPersonal,
         pendingDays: pendingDaysTotal
       } : {
-        vacationDays: 5,
-        sickDays: 5,
-        personalDays: 2,
+        vacationDays: PTO_POLICY.DEFAULT_VACATION_DAYS,
+        sickDays: PTO_POLICY.DEFAULT_SICK_DAYS,
+        personalDays: PTO_POLICY.DEFAULT_PERSONAL_DAYS,
         usedVacation: 0,
         usedSick: 0,
         usedPersonal: 0,
@@ -160,34 +161,35 @@ router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res
     const companyPolicy = await storage.getCompanyPtoPolicy();
 
     // Determine effective PTO allowance (individual > department > company > defaults)
-    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
-    let vacationDays = 5;
-    let sickDays = 5;
-    let personalDays = 2;
+    // Use centralized PTO policy constants (17 total days, 0 for sales/1099)
+    const defaultAllocation = getPtoAllocation(user.employmentType, user.department);
+    let vacationDays = defaultAllocation.vacationDays;
+    let sickDays = defaultAllocation.sickDays;
+    let personalDays = defaultAllocation.personalDays;
     let policySource = 'default';
 
     if (individualPolicy) {
-      vacationDays = individualPolicy.vacationDays || 5;
-      sickDays = individualPolicy.sickDays || 5;
-      personalDays = individualPolicy.personalDays || 2;
+      vacationDays = individualPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = individualPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = individualPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
       policySource = 'individual';
     } else if (deptSetting && !deptSetting.inheritFromCompany) {
-      vacationDays = deptSetting.vacationDays || 5;
-      sickDays = deptSetting.sickDays || 5;
-      personalDays = deptSetting.personalDays || 2;
+      vacationDays = deptSetting.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = deptSetting.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = deptSetting.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
       policySource = 'department';
     } else if (companyPolicy) {
-      vacationDays = companyPolicy.vacationDays || 5;
-      sickDays = companyPolicy.sickDays || 5;
-      personalDays = companyPolicy.personalDays || 2;
+      vacationDays = companyPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = companyPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = companyPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
       policySource = 'company';
     }
 
     // Special case: Sales/1099 contractors get 0 PTO unless individual override
     if ((user.department === 'Sales' || user.employmentType === '1099') && !individualPolicy) {
-      vacationDays = 0;
-      sickDays = 0;
-      personalDays = 0;
+      vacationDays = PTO_POLICY.SALES_VACATION_DAYS;
+      sickDays = PTO_POLICY.SALES_SICK_DAYS;
+      personalDays = PTO_POLICY.SALES_PERSONAL_DAYS;
       policySource = 'none (Sales/1099)';
     }
 

@@ -6,40 +6,26 @@ export interface Holiday {
   name: string;
 }
 
-// 2025 US Federal Holidays + Company Holidays
+// 2025 Company Holidays (Standard US Holidays)
 export const US_HOLIDAYS_2025: Holiday[] = [
   { date: '2025-01-01', name: "New Year's Day" },
-  { date: '2025-01-20', name: 'Martin Luther King Jr. Day' },
-  { date: '2025-02-17', name: "Presidents' Day" },
   { date: '2025-05-26', name: 'Memorial Day' },
-  { date: '2025-06-19', name: 'Juneteenth' },
   { date: '2025-07-04', name: 'Independence Day' },
   { date: '2025-09-01', name: 'Labor Day' },
-  { date: '2025-10-13', name: 'Columbus Day' },
-  { date: '2025-11-11', name: 'Veterans Day' },
   { date: '2025-11-27', name: 'Thanksgiving Day' },
-  { date: '2025-11-28', name: 'Day After Thanksgiving' },
-  { date: '2025-12-24', name: 'Christmas Eve' },
+  { date: '2025-11-28', name: 'Black Friday' },
   { date: '2025-12-25', name: 'Christmas Day' },
-  { date: '2025-12-31', name: "New Year's Eve" },
 ];
 
-// 2026 US Federal Holidays + Company Holidays
+// 2026 Company Holidays (Standard US Holidays)
 export const US_HOLIDAYS_2026: Holiday[] = [
   { date: '2026-01-01', name: "New Year's Day" },
-  { date: '2026-01-19', name: 'Martin Luther King Jr. Day' },
-  { date: '2026-02-16', name: "Presidents' Day" },
   { date: '2026-05-25', name: 'Memorial Day' },
-  { date: '2026-06-19', name: 'Juneteenth' },
   { date: '2026-07-04', name: 'Independence Day (Observed)' },
   { date: '2026-09-07', name: 'Labor Day' },
-  { date: '2026-10-12', name: 'Columbus Day' },
-  { date: '2026-11-11', name: 'Veterans Day' },
   { date: '2026-11-26', name: 'Thanksgiving Day' },
-  { date: '2026-11-27', name: 'Day After Thanksgiving' },
-  { date: '2026-12-24', name: 'Christmas Eve' },
+  { date: '2026-11-27', name: 'Black Friday' },
   { date: '2026-12-25', name: 'Christmas Day' },
-  { date: '2026-12-31', name: "New Year's Eve" },
 ];
 
 // Combined holidays for easy lookup

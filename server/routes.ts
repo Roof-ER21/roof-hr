@@ -15,6 +15,7 @@ import {
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee } from '../shared/constants/roles';
+import { PTO_POLICY } from '../shared/constants/pto-policy';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
 import googleAuthRoutes from './routes/google-auth';
@@ -613,17 +614,18 @@ router.delete('/api/admin/clear-tool-assignments', requireAuth, requireAdmin, as
   }
 });
 
-// Update all PTO allocations to 5/5/2 standard (Admin only)
+// Update all PTO allocations to company standard (Admin only)
 router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, async (req: any, res) => {
   try {
-    const NEW_VACATION = 5, NEW_SICK = 5, NEW_PERSONAL = 2, NEW_TOTAL = 12;
+    // Use centralized PTO policy constants
+    const { DEFAULT_VACATION_DAYS, DEFAULT_SICK_DAYS, DEFAULT_PERSONAL_DAYS, DEFAULT_TOTAL_DAYS } = PTO_POLICY;
     const results = { companyUpdated: false, deptCount: 0, policyCount: 0, created: 0 };
 
     // 1. Update company policy
     const existingPolicy = await db.select().from(companyPtoPolicy).limit(1);
     if (existingPolicy.length > 0) {
       await db.update(companyPtoPolicy).set({
-        vacationDays: NEW_VACATION, sickDays: NEW_SICK, personalDays: NEW_PERSONAL, totalDays: NEW_TOTAL, updatedAt: new Date()
+        vacationDays: DEFAULT_VACATION_DAYS, sickDays: DEFAULT_SICK_DAYS, personalDays: DEFAULT_PERSONAL_DAYS, totalDays: DEFAULT_TOTAL_DAYS, updatedAt: new Date()
       }).where(eq(companyPtoPolicy.id, existingPolicy[0].id));
       results.companyUpdated = true;
     }
@@ -632,7 +634,7 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
     const deptSettings = await db.select().from(departmentPtoSettings);
     for (const dept of deptSettings) {
       await db.update(departmentPtoSettings).set({
-        vacationDays: NEW_VACATION, sickDays: NEW_SICK, personalDays: NEW_PERSONAL, totalDays: NEW_TOTAL, updatedAt: new Date()
+        vacationDays: DEFAULT_VACATION_DAYS, sickDays: DEFAULT_SICK_DAYS, personalDays: DEFAULT_PERSONAL_DAYS, totalDays: DEFAULT_TOTAL_DAYS, updatedAt: new Date()
       }).where(eq(departmentPtoSettings.id, dept.id));
       results.deptCount++;
     }
@@ -640,17 +642,17 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
     // 3. Update individual policies
     const policies = await db.select().from(ptoPolicies);
     for (const policy of policies) {
-      const newRemaining = Math.max(0, NEW_TOTAL - (policy.usedDays || 0));
+      const newRemaining = Math.max(0, DEFAULT_TOTAL_DAYS - (policy.usedDays || 0));
       await db.update(ptoPolicies).set({
-        vacationDays: NEW_VACATION, sickDays: NEW_SICK, personalDays: NEW_PERSONAL,
-        baseDays: NEW_TOTAL, totalDays: NEW_TOTAL, remainingDays: newRemaining, updatedAt: new Date()
+        vacationDays: DEFAULT_VACATION_DAYS, sickDays: DEFAULT_SICK_DAYS, personalDays: DEFAULT_PERSONAL_DAYS,
+        baseDays: DEFAULT_TOTAL_DAYS, totalDays: DEFAULT_TOTAL_DAYS, remainingDays: newRemaining, updatedAt: new Date()
       }).where(eq(ptoPolicies.id, policy.id));
       results.policyCount++;
     }
 
     res.json({
       success: true,
-      message: `PTO allocations updated to 5/5/2 standard`,
+      message: `PTO allocations updated to ${DEFAULT_VACATION_DAYS}/${DEFAULT_SICK_DAYS}/${DEFAULT_PERSONAL_DAYS} standard (${DEFAULT_TOTAL_DAYS} total days)`,
       details: results
     });
   } catch (error: any) {

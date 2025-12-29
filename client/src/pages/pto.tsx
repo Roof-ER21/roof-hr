@@ -569,6 +569,13 @@ function PTO() {
                     </AlertDescription>
                   </Alert>
                 )}
+                {/* Soft enforcement reminder for 5 days in Jan/Feb/Dec */}
+                <Alert className="mt-4 border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-800 dark:text-amber-200">
+                    <strong>Reminder:</strong> You must use at least 5 PTO days during January, February, or December each year.
+                  </AlertDescription>
+                </Alert>
               </CardContent>
             </Card>
           )}

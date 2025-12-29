@@ -152,10 +152,10 @@ function EmployeeDashboard() {
       });
       if (!response.ok) {
         // Return defaults if endpoint doesn't exist yet
-        // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
+        // Default to company standard: 12 vacation, 3 sick, 2 personal = 17 total
         return {
-          vacationDays: 5,
-          sickDays: 5,
+          vacationDays: 12,
+          sickDays: 3,
           personalDays: 2,
           usedVacation: 0,
           usedSick: 0,
@@ -395,6 +395,14 @@ function EmployeeDashboard() {
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* PTO Usage Reminder */}
+      <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+        <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span><strong>Reminder:</strong> You must use at least 5 PTO days during January, February, or December each year.</span>
+        </p>
       </div>
 
       {/* Main Content */}

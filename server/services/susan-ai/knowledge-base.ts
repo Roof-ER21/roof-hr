@@ -179,33 +179,29 @@ export class KnowledgeBase {
       id: 'company-holidays',
       title: 'Company Holidays and Observances',
       content: `
-        Roof-ER 2025 Holiday Schedule:
-        
-        Fixed Holidays:
+        The Roof Docs 2025 Holiday Schedule:
+
+        Company Holidays (7 days):
         - New Year's Day - January 1
-        - Martin Luther King Jr. Day - January 20
-        - Presidents Day - February 17
         - Memorial Day - May 26
         - Independence Day - July 4
         - Labor Day - September 1
-        - Veterans Day - November 11
-        - Thanksgiving - November 27-28
-        - Christmas Eve - December 24
+        - Thanksgiving - November 27
+        - Black Friday - November 28
         - Christmas Day - December 25
-        - New Year's Eve - December 31
-        
-        Floating Holidays:
-        - 2 personal days to be used at employee discretion
-        - Must be approved by manager in advance
-        - Cannot be carried over to next year
-        
+
+        PTO Policy:
+        - All employees receive 17 PTO days per year
+        - Sales Representatives (1099) receive 0 PTO days
+        - IMPORTANT: Employees must use at least 5 PTO days during January, February, or December
+
         Holiday Pay:
         - Regular employees receive 8 hours holiday pay
         - Essential workers receive double-time for hours worked
         - Part-time employees pro-rated based on average hours
       `,
       category: 'HR Policy',
-      tags: ['holidays', 'time off', 'schedule', 'calendar'],
+      tags: ['holidays', 'time off', 'schedule', 'calendar', 'pto'],
       department: 'HR',
       lastUpdated: new Date()
     });
