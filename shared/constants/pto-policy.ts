@@ -12,8 +12,8 @@
 
 export const PTO_POLICY = {
   // Default allocation for all employees (17 total)
-  DEFAULT_VACATION_DAYS: 12,
-  DEFAULT_SICK_DAYS: 3,
+  DEFAULT_VACATION_DAYS: 10,
+  DEFAULT_SICK_DAYS: 5,
   DEFAULT_PERSONAL_DAYS: 2,
   DEFAULT_TOTAL_DAYS: 17,
 

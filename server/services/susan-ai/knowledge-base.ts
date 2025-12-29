@@ -191,7 +191,7 @@ export class KnowledgeBase {
         - Christmas Day - December 25
 
         PTO Policy:
-        - All employees receive 17 PTO days per year
+        - All employees receive 17 PTO days per year (10 vacation, 5 sick, 2 personal)
         - Sales Representatives (1099) receive 0 PTO days
         - IMPORTANT: Employees must use at least 5 PTO days during January, February, or December
 
