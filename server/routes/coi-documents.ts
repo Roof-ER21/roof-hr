@@ -1032,4 +1032,274 @@ router.get('/api/coi-documents/employees/list', requireAuth, requireHROrManager,
   }
 });
 
+// ============================================
+// BULK IMPORT - Preview and import from Drive folder
+// ============================================
+
+// Default folder ID for bulk COI import
+const DEFAULT_BULK_COI_FOLDER = '1brvMwfBzzZ_Q6XXJlPJ8BpIUD1Edlf8u';
+
+interface BulkPreviewItem {
+  googleDriveId: string;
+  fileName: string;
+  webViewLink: string;
+  parsedData: COIParsedData;
+  employeeMatch: MatchResult;
+  alreadyImported: boolean;
+}
+
+interface BulkImportItem {
+  googleDriveId: string;
+  fileName: string;
+  webViewLink: string;
+  employeeId?: string;
+  externalName?: string;
+  parsedInsuredName?: string;
+  type: 'WORKERS_COMP' | 'GENERAL_LIABILITY';
+  issueDate: string;
+  expirationDate: string;
+  notes?: string;
+  policyNumber?: string;
+  insurerName?: string;
+}
+
+// Bulk preview - scans Drive folder and parses all COIs without saving
+router.post('/api/coi-documents/bulk-preview', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const { folderId } = req.body;
+    const targetFolderId = folderId || process.env.COI_BULK_IMPORT_FOLDER || DEFAULT_BULK_COI_FOLDER;
+
+    console.log('[COI Bulk Preview] Starting preview for folder:', targetFolderId);
+    console.log('[COI Bulk Preview] Triggered by user:', req.user?.email);
+
+    // Initialize Google Drive service
+    if (!googleDriveService.isInitialized()) {
+      await googleDriveService.initialize();
+    }
+
+    if (!googleDriveService.isConfigured()) {
+      return res.status(503).json({
+        error: 'Google Drive is not configured',
+        details: 'Please configure Google Drive credentials to use bulk import'
+      });
+    }
+
+    // List all PDF files in the folder
+    console.log('[COI Bulk Preview] Listing files in folder...');
+    const files = await googleDriveService.listFiles({
+      q: `'${targetFolderId}' in parents and trashed=false and mimeType='application/pdf'`,
+      pageSize: 100
+    });
+
+    console.log('[COI Bulk Preview] Found', files?.length || 0, 'PDF files');
+
+    if (!files || files.length === 0) {
+      return res.json({
+        success: true,
+        totalFiles: 0,
+        previews: [],
+        errors: [],
+        alreadyImported: 0,
+        message: 'No PDF files found in the specified folder'
+      });
+    }
+
+    // Get existing COI documents to check for duplicates
+    const existingDocs = await storage.getAllCoiDocuments();
+    const existingDriveIds = new Set(
+      existingDocs
+        .map(doc => doc.googleDriveId)
+        .filter((id): id is string => id !== null && id !== undefined)
+    );
+    console.log('[COI Bulk Preview] Found', existingDriveIds.size, 'existing Drive IDs');
+
+    const previews: BulkPreviewItem[] = [];
+    const errors: { file: string; error: string }[] = [];
+    let alreadyImportedCount = 0;
+
+    // Process each file
+    for (const file of files) {
+      if (!file.id || !file.name) continue;
+
+      const alreadyImported = existingDriveIds.has(file.id);
+      if (alreadyImported) {
+        alreadyImportedCount++;
+      }
+
+      try {
+        console.log('[COI Bulk Preview] Processing:', file.name, alreadyImported ? '(already imported)' : '');
+
+        // Download file content
+        const downloadResult = await googleDriveService.downloadFile(file.id);
+
+        // Convert stream to buffer
+        let fileBuffer: Buffer;
+        if (Buffer.isBuffer(downloadResult)) {
+          fileBuffer = downloadResult;
+        } else {
+          const chunks: Buffer[] = [];
+          for await (const chunk of downloadResult) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          fileBuffer = Buffer.concat(chunks);
+        }
+
+        // Parse the PDF
+        const parsedData = await parseCOIDocument(fileBuffer);
+        console.log('[COI Bulk Preview] Parsed:', file.name, '- Insured:', parsedData.insuredName, '- Type:', parsedData.documentType);
+
+        // Match to employee
+        const employeeMatch = await matchEmployeeFromName(parsedData.insuredName);
+        console.log('[COI Bulk Preview] Match result:', employeeMatch.matchedEmployee?.firstName, employeeMatch.matchedEmployee?.lastName, '-', employeeMatch.confidence + '%');
+
+        previews.push({
+          googleDriveId: file.id,
+          fileName: file.name,
+          webViewLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+          parsedData: {
+            ...parsedData,
+            rawText: parsedData.rawText?.substring(0, 200) || '' // Truncate for response size
+          },
+          employeeMatch,
+          alreadyImported
+        });
+
+      } catch (fileError: any) {
+        console.error('[COI Bulk Preview] Error processing', file.name, ':', fileError.message);
+        errors.push({ file: file.name, error: fileError.message });
+      }
+    }
+
+    console.log('[COI Bulk Preview] Complete. Previews:', previews.length, 'Errors:', errors.length, 'Already imported:', alreadyImportedCount);
+
+    res.json({
+      success: true,
+      totalFiles: files.length,
+      previews,
+      errors,
+      alreadyImported: alreadyImportedCount
+    });
+
+  } catch (error: any) {
+    console.error('[COI Bulk Preview] Error:', error.message);
+    console.error('[COI Bulk Preview] Stack:', error.stack);
+    res.status(500).json({
+      error: 'Bulk preview failed',
+      details: error.message
+    });
+  }
+});
+
+// Bulk import - saves confirmed COI documents
+router.post('/api/coi-documents/bulk-import', requireAuth, requireHROrManager, async (req, res) => {
+  try {
+    const currentUser = req.user!;
+    const { imports } = req.body as { imports: BulkImportItem[] };
+
+    if (!imports || !Array.isArray(imports) || imports.length === 0) {
+      return res.status(400).json({ error: 'No imports provided' });
+    }
+
+    console.log('[COI Bulk Import] Starting import of', imports.length, 'documents');
+    console.log('[COI Bulk Import] Triggered by user:', currentUser.email);
+
+    // Get existing COI documents to prevent duplicates
+    const existingDocs = await storage.getAllCoiDocuments();
+    const existingDriveIds = new Set(
+      existingDocs
+        .map(doc => doc.googleDriveId)
+        .filter((id): id is string => id !== null && id !== undefined)
+    );
+
+    const results: { googleDriveId: string; status: 'imported' | 'skipped' | 'failed'; documentId?: string; error?: string }[] = [];
+    let importedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+
+    for (const item of imports) {
+      // Validate item
+      if (!item.employeeId && !item.externalName) {
+        results.push({ googleDriveId: item.googleDriveId, status: 'failed', error: 'Either employee or external name is required' });
+        failedCount++;
+        continue;
+      }
+
+      // Check for duplicate
+      if (existingDriveIds.has(item.googleDriveId)) {
+        console.log('[COI Bulk Import] Skipping duplicate:', item.fileName);
+        results.push({ googleDriveId: item.googleDriveId, status: 'skipped', error: 'Already imported' });
+        skippedCount++;
+        continue;
+      }
+
+      try {
+        console.log('[COI Bulk Import] Importing:', item.fileName, 'for', item.employeeId ? `employee ${item.employeeId}` : `external: ${item.externalName}`);
+
+        // Calculate status based on expiration
+        const status = calculateCoiStatus(item.expirationDate);
+
+        // Build notes with policy and insurer info
+        let notes = item.notes || `Bulk imported from Google Drive: ${item.fileName}`;
+        if (item.policyNumber) {
+          notes += ` | Policy: ${item.policyNumber}`;
+        }
+        if (item.insurerName) {
+          notes += ` | Insurer: ${item.insurerName}`;
+        }
+
+        // Create COI document
+        const docData: any = {
+          employeeId: item.employeeId || null,
+          externalName: item.externalName || null,
+          parsedInsuredName: item.parsedInsuredName || null,
+          type: item.type,
+          documentUrl: item.webViewLink,
+          issueDate: item.issueDate,
+          expirationDate: item.expirationDate,
+          uploadedBy: currentUser.id,
+          status,
+          googleDriveId: item.googleDriveId,
+          notes
+        };
+
+        const doc = await storage.createCoiDocument(docData);
+        existingDriveIds.add(item.googleDriveId); // Prevent duplicates within same batch
+
+        results.push({ googleDriveId: item.googleDriveId, status: 'imported', documentId: doc.id });
+        importedCount++;
+        console.log('[COI Bulk Import] Created document:', doc.id);
+
+      } catch (itemError: any) {
+        console.error('[COI Bulk Import] Error importing', item.fileName, ':', itemError.message);
+        results.push({ googleDriveId: item.googleDriveId, status: 'failed', error: itemError.message });
+        failedCount++;
+      }
+    }
+
+    console.log('[COI Bulk Import] Complete. Imported:', importedCount, 'Skipped:', skippedCount, 'Failed:', failedCount);
+
+    // Emit socket event for real-time refresh
+    const io = (req as any).app?.get?.('io');
+    if (io) {
+      io.emit('coi:updated', { action: 'bulk_import', count: importedCount, importedBy: currentUser.email });
+    }
+
+    res.json({
+      success: true,
+      imported: importedCount,
+      skipped: skippedCount,
+      failed: failedCount,
+      results
+    });
+
+  } catch (error: any) {
+    console.error('[COI Bulk Import] Error:', error.message);
+    console.error('[COI Bulk Import] Stack:', error.stack);
+    res.status(500).json({
+      error: 'Bulk import failed',
+      details: error.message
+    });
+  }
+});
+
 export default router;

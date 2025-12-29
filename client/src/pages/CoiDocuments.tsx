@@ -15,7 +15,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, AlertTriangle, Clock, Upload, ExternalLink, Calendar, Bell, File, X, RefreshCw, CloudDownload, Sparkles, Eye, Download, CheckCircle2, User as UserIcon, Check, ChevronsUpDown } from 'lucide-react';
+import { FileText, AlertTriangle, Clock, Upload, ExternalLink, Calendar, Bell, File, X, RefreshCw, CloudDownload, Sparkles, Eye, Download, CheckCircle2, User as UserIcon, Check, ChevronsUpDown, FolderOpen, Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -105,6 +106,37 @@ interface SmartUploadResponse {
   message?: string;
 }
 
+// Bulk import types
+interface BulkPreviewItem {
+  googleDriveId: string;
+  fileName: string;
+  webViewLink: string;
+  parsedData: COIParsedData;
+  employeeMatch: EmployeeMatch;
+  alreadyImported: boolean;
+}
+
+interface BulkPreviewResponse {
+  success: boolean;
+  totalFiles: number;
+  previews: BulkPreviewItem[];
+  errors: { file: string; error: string }[];
+  alreadyImported: number;
+  message?: string;
+}
+
+interface BulkEditItem {
+  selected: boolean;
+  employeeId: string;
+  externalName: string;
+  useExternalName: boolean;
+  type: 'WORKERS_COMP' | 'GENERAL_LIABILITY';
+  issueDate: string;
+  expirationDate: string;
+  policyNumber: string;
+  insurerName: string;
+}
+
 const formSchema = z.object({
   employeeId: z.string().min(1, 'Employee is required'),
   type: z.enum(['WORKERS_COMP', 'GENERAL_LIABILITY']),
@@ -147,6 +179,14 @@ export default function CoiDocuments() {
   const [employeeNotFound, setEmployeeNotFound] = useState(false);
   const [smartEmployeeOpen, setSmartEmployeeOpen] = useState(false);
   const [regularEmployeeOpen, setRegularEmployeeOpen] = useState(false);
+
+  // Bulk import states
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkPreviews, setBulkPreviews] = useState<BulkPreviewItem[]>([]);
+  const [isBulkPreviewLoading, setIsBulkPreviewLoading] = useState(false);
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [bulkEditState, setBulkEditState] = useState<Record<string, BulkEditItem>>({});
+  const [bulkPreviewErrors, setBulkPreviewErrors] = useState<{ file: string; error: string }[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -583,6 +623,150 @@ export default function CoiDocuments() {
       policyNumber: smartFormData.policyNumber || undefined,
       insurerName: smartFormData.insurerName || undefined,
     });
+  };
+
+  // ============================================
+  // BULK IMPORT HANDLERS
+  // ============================================
+
+  const resetBulkImport = () => {
+    setIsBulkImportOpen(false);
+    setBulkPreviews([]);
+    setBulkEditState({});
+    setBulkPreviewErrors([]);
+    setIsBulkPreviewLoading(false);
+    setIsBulkImporting(false);
+  };
+
+  const handleBulkPreview = async () => {
+    setIsBulkPreviewLoading(true);
+    setBulkPreviewErrors([]);
+
+    try {
+      const response = await apiRequest('POST', '/api/coi-documents/bulk-preview', {});
+      const data = response as BulkPreviewResponse;
+
+      if (data.success) {
+        setBulkPreviews(data.previews);
+        setBulkPreviewErrors(data.errors || []);
+
+        // Initialize edit state for each preview
+        const editState: Record<string, BulkEditItem> = {};
+        for (const preview of data.previews) {
+          editState[preview.googleDriveId] = {
+            selected: !preview.alreadyImported, // Auto-select new items
+            employeeId: preview.employeeMatch.matchedEmployee?.id || '',
+            externalName: '',
+            useExternalName: !preview.employeeMatch.matchedEmployee && preview.employeeMatch.confidence < 50,
+            type: preview.parsedData.documentType === 'WORKERS_COMP' || preview.parsedData.documentType === 'GENERAL_LIABILITY'
+              ? preview.parsedData.documentType
+              : 'GENERAL_LIABILITY',
+            issueDate: formatDateForInput(preview.parsedData.effectiveDate),
+            expirationDate: formatDateForInput(preview.parsedData.expirationDate),
+            policyNumber: preview.parsedData.policyNumber || '',
+            insurerName: preview.parsedData.insurerName || '',
+          };
+        }
+        setBulkEditState(editState);
+
+        toast({
+          title: 'Scan Complete',
+          description: `Found ${data.totalFiles} files. ${data.alreadyImported} already imported, ${data.errors?.length || 0} errors.`,
+        });
+      } else {
+        throw new Error('Failed to scan folder');
+      }
+    } catch (error: any) {
+      console.error('Bulk preview error:', error);
+      toast({
+        title: 'Scan Failed',
+        description: error.message || 'Failed to scan Google Drive folder',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkPreviewLoading(false);
+    }
+  };
+
+  const handleBulkEditChange = (googleDriveId: string, updates: Partial<BulkEditItem>) => {
+    setBulkEditState(prev => ({
+      ...prev,
+      [googleDriveId]: { ...prev[googleDriveId], ...updates }
+    }));
+  };
+
+  const getSelectedBulkCount = () => {
+    return Object.values(bulkEditState).filter(item => item.selected).length;
+  };
+
+  const handleBulkImport = async () => {
+    const selectedItems = bulkPreviews.filter(p => bulkEditState[p.googleDriveId]?.selected && !p.alreadyImported);
+
+    if (selectedItems.length === 0) {
+      toast({
+        title: 'No Items Selected',
+        description: 'Please select at least one document to import',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate all selected items have either employeeId or externalName
+    for (const item of selectedItems) {
+      const editItem = bulkEditState[item.googleDriveId];
+      if (!editItem.employeeId && !editItem.externalName) {
+        toast({
+          title: 'Missing Assignment',
+          description: `Please assign "${item.fileName}" to an employee or enter an external name`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    setIsBulkImporting(true);
+
+    try {
+      const imports = selectedItems.map(item => {
+        const editItem = bulkEditState[item.googleDriveId];
+        return {
+          googleDriveId: item.googleDriveId,
+          fileName: item.fileName,
+          webViewLink: item.webViewLink,
+          employeeId: editItem.useExternalName ? undefined : editItem.employeeId || undefined,
+          externalName: editItem.useExternalName ? editItem.externalName : undefined,
+          parsedInsuredName: item.parsedData.rawInsuredName || item.parsedData.insuredName || undefined,
+          type: editItem.type,
+          issueDate: editItem.issueDate,
+          expirationDate: editItem.expirationDate,
+          policyNumber: editItem.policyNumber || undefined,
+          insurerName: editItem.insurerName || undefined,
+        };
+      });
+
+      const response = await apiRequest('POST', '/api/coi-documents/bulk-import', { imports });
+      const data = response as { success: boolean; imported: number; skipped: number; failed: number };
+
+      if (data.success) {
+        toast({
+          title: 'Import Complete',
+          description: `Imported ${data.imported} documents. Skipped: ${data.skipped}, Failed: ${data.failed}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/coi-documents'] });
+        resetBulkImport();
+      } else {
+        throw new Error('Import failed');
+      }
+    } catch (error: any) {
+      console.error('Bulk import error:', error);
+      toast({
+        title: 'Import Failed',
+        description: error.message || 'Failed to import documents',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkImporting(false);
+    }
   };
 
 
@@ -1037,7 +1221,289 @@ export default function CoiDocuments() {
               </DialogContent>
             </Dialog>
 
-            {/* Manual Upload button removed - use Smart Upload instead */}
+            {/* Bulk Import Button */}
+            <Dialog open={isBulkImportOpen} onOpenChange={(open) => {
+              if (!open) resetBulkImport();
+              setIsBulkImportOpen(open);
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="border-blue-400 text-blue-600 hover:bg-blue-50">
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  Bulk Import
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <FolderOpen className="h-5 w-5 text-blue-500" />
+                    Bulk COI Import from Google Drive
+                  </DialogTitle>
+                  <DialogDescription>
+                    Import multiple COI documents from your Google Drive folder. Review and assign each document before importing.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {/* Phase 1: Initial - Scan Button */}
+                {bulkPreviews.length === 0 && !isBulkPreviewLoading && (
+                  <div className="py-8 text-center">
+                    <FolderOpen className="h-16 w-16 mx-auto text-blue-400 mb-4" />
+                    <p className="text-lg font-medium mb-2">Scan Google Drive for COI Documents</p>
+                    <p className="text-sm text-gray-500 mb-6">
+                      This will scan your configured COI folder and parse all PDF documents for review.
+                    </p>
+                    <Button onClick={handleBulkPreview} className="bg-blue-500 hover:bg-blue-600">
+                      <CloudDownload className="h-4 w-4 mr-2" />
+                      Scan Drive Folder
+                    </Button>
+                  </div>
+                )}
+
+                {/* Phase 2: Loading */}
+                {isBulkPreviewLoading && (
+                  <div className="py-12 text-center">
+                    <Loader2 className="h-12 w-12 animate-spin mx-auto text-blue-500 mb-4" />
+                    <p className="text-lg font-medium">Scanning and parsing documents...</p>
+                    <p className="text-sm text-gray-500">This may take a few moments depending on file count</p>
+                  </div>
+                )}
+
+                {/* Phase 3: Preview Table */}
+                {bulkPreviews.length > 0 && !isBulkPreviewLoading && (
+                  <div className="space-y-4">
+                    {/* Summary */}
+                    <div className="flex items-center gap-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-blue-500" />
+                        <span className="font-medium">{bulkPreviews.length} documents found</span>
+                      </div>
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                        {bulkPreviews.filter(p => !p.alreadyImported).length} new
+                      </Badge>
+                      <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-300">
+                        {bulkPreviews.filter(p => p.alreadyImported).length} already imported
+                      </Badge>
+                      {bulkPreviewErrors.length > 0 && (
+                        <Badge variant="destructive">
+                          {bulkPreviewErrors.length} errors
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Errors */}
+                    {bulkPreviewErrors.length > 0 && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Parse Errors</AlertTitle>
+                        <AlertDescription>
+                          <ul className="mt-2 text-sm">
+                            {bulkPreviewErrors.slice(0, 3).map((err, i) => (
+                              <li key={i}>{err.file}: {err.error}</li>
+                            ))}
+                            {bulkPreviewErrors.length > 3 && (
+                              <li>...and {bulkPreviewErrors.length - 3} more</li>
+                            )}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Preview Table */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50">
+                            <TableHead className="w-12">
+                              <Checkbox
+                                checked={bulkPreviews.filter(p => !p.alreadyImported).every(p => bulkEditState[p.googleDriveId]?.selected)}
+                                onCheckedChange={(checked) => {
+                                  const newState = { ...bulkEditState };
+                                  bulkPreviews.filter(p => !p.alreadyImported).forEach(p => {
+                                    newState[p.googleDriveId] = { ...newState[p.googleDriveId], selected: !!checked };
+                                  });
+                                  setBulkEditState(newState);
+                                }}
+                              />
+                            </TableHead>
+                            <TableHead>File</TableHead>
+                            <TableHead>Parsed Name</TableHead>
+                            <TableHead className="w-32">Match</TableHead>
+                            <TableHead className="w-48">Assign To</TableHead>
+                            <TableHead className="w-36">Type</TableHead>
+                            <TableHead className="w-36">Expiration</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {bulkPreviews.map((preview) => {
+                            const editItem = bulkEditState[preview.googleDriveId];
+                            if (!editItem) return null;
+
+                            return (
+                              <TableRow
+                                key={preview.googleDriveId}
+                                className={cn(
+                                  preview.alreadyImported && "bg-gray-50 opacity-60"
+                                )}
+                              >
+                                <TableCell>
+                                  <Checkbox
+                                    checked={editItem.selected}
+                                    disabled={preview.alreadyImported}
+                                    onCheckedChange={(checked) => handleBulkEditChange(preview.googleDriveId, { selected: !!checked })}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <div className="max-w-[200px]">
+                                    <p className="truncate text-sm font-medium" title={preview.fileName}>
+                                      {preview.fileName}
+                                    </p>
+                                    <a
+                                      href={preview.webViewLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-500 hover:underline flex items-center gap-1"
+                                    >
+                                      View <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-sm" title={preview.parsedData.rawInsuredName || ''}>
+                                    {preview.parsedData.rawInsuredName || preview.parsedData.insuredName || '-'}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  {preview.alreadyImported ? (
+                                    <Badge variant="outline" className="bg-gray-100">Imported</Badge>
+                                  ) : preview.employeeMatch.confidence >= 80 ? (
+                                    <Badge className="bg-green-100 text-green-700 border-green-300">
+                                      {preview.employeeMatch.confidence}%
+                                    </Badge>
+                                  ) : preview.employeeMatch.confidence >= 50 ? (
+                                    <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300">
+                                      {preview.employeeMatch.confidence}%
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-red-100 text-red-700 border-red-300">
+                                      {preview.employeeMatch.confidence}%
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {preview.alreadyImported ? (
+                                    <span className="text-sm text-gray-500">Already imported</span>
+                                  ) : editItem.useExternalName ? (
+                                    <div className="space-y-1">
+                                      <Input
+                                        placeholder="External name"
+                                        value={editItem.externalName}
+                                        onChange={(e) => handleBulkEditChange(preview.googleDriveId, { externalName: e.target.value })}
+                                        className="h-8 text-sm"
+                                      />
+                                      <Button
+                                        variant="link"
+                                        size="sm"
+                                        className="h-auto p-0 text-xs"
+                                        onClick={() => handleBulkEditChange(preview.googleDriveId, { useExternalName: false })}
+                                      >
+                                        Select employee instead
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      <Select
+                                        value={editItem.employeeId}
+                                        onValueChange={(value) => handleBulkEditChange(preview.googleDriveId, { employeeId: value })}
+                                      >
+                                        <SelectTrigger className="h-8 text-sm">
+                                          <SelectValue placeholder="Select employee" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {sortedUsers.map((user) => (
+                                            <SelectItem key={user.id} value={user.id}>
+                                              {user.firstName} {user.lastName}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        variant="link"
+                                        size="sm"
+                                        className="h-auto p-0 text-xs"
+                                        onClick={() => handleBulkEditChange(preview.googleDriveId, { useExternalName: true })}
+                                      >
+                                        Use external name
+                                      </Button>
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {preview.alreadyImported ? (
+                                    <span className="text-sm text-gray-500">-</span>
+                                  ) : (
+                                    <Select
+                                      value={editItem.type}
+                                      onValueChange={(value: 'WORKERS_COMP' | 'GENERAL_LIABILITY') => handleBulkEditChange(preview.googleDriveId, { type: value })}
+                                    >
+                                      <SelectTrigger className="h-8 text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="WORKERS_COMP">Workers Comp</SelectItem>
+                                        <SelectItem value="GENERAL_LIABILITY">General Liability</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {preview.alreadyImported ? (
+                                    <span className="text-sm text-gray-500">-</span>
+                                  ) : (
+                                    <Input
+                                      type="date"
+                                      value={editItem.expirationDate}
+                                      onChange={(e) => handleBulkEditChange(preview.googleDriveId, { expirationDate: e.target.value })}
+                                      className="h-8 text-sm"
+                                    />
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    <DialogFooter className="flex justify-between items-center">
+                      <div className="text-sm text-gray-500">
+                        {getSelectedBulkCount()} documents selected for import
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={resetBulkImport}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleBulkImport}
+                          disabled={isBulkImporting || getSelectedBulkCount() === 0}
+                          className="bg-blue-500 hover:bg-blue-600"
+                        >
+                          {isBulkImporting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Importing...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4 mr-2" />
+                              Import {getSelectedBulkCount()} Documents
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </DialogFooter>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </div>
