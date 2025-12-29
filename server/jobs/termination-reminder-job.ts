@@ -108,6 +108,7 @@ export async function checkTerminationReminders(): Promise<ReminderJobResult> {
                 </p>
               </div>
             `,
+            fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
           });
 
           await storage.updateTerminationReminder(reminder.id, {

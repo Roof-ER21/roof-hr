@@ -33,24 +33,22 @@ export class KnowledgeBase {
       id: 'pto-policy',
       title: 'PTO (Paid Time Off) Policy',
       content: `
-        Roof-ER PTO Policy:
-        
-        Accrual Rates:
-        - Full-time employees: 15 days per year (1.25 days per month)
-        - Part-time employees: Pro-rated based on hours worked
-        - Additional day per year of service after 5 years (max 25 days)
-        
+        The Roof Docs PTO Policy:
+
+        Annual Allocation:
+        - All employees: 17 days per year (10 vacation, 5 sick, 2 personal)
+        - Sales Representatives (1099 contractors): 0 days
+        - IMPORTANT: Employees must use 5 PTO days during January, February, or December
+
         Usage Guidelines:
         - PTO requests must be submitted at least 2 weeks in advance for 5+ consecutive days
         - 48 hours notice for 1-4 days
         - Emergency leave exceptions apply with manager approval
-        - Blackout dates: December 20-31, major project deadlines
-        
+
         Approval Process:
         - Manager approval required for all requests
-        - HR approval required for 10+ consecutive days
-        - Ford Barsi has final approval authority for all PTO requests
-        
+        - Ford Barsi, Ahmed, Reese, or Oliver can approve/deny requests
+
         Carryover:
         - Maximum 5 days can be carried over to next year
         - Use-it-or-lose-it policy applies to remaining balance
