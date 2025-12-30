@@ -1,0 +1,13 @@
+{
+  "saved_at": "2025-12-30T14:01:38.038505",
+  "processes": {
+    "scheduler": {
+      "state": "failed",
+      "restart_count": 1
+    },
+    "dashboard": {
+      "state": "running",
+      "restart_count": 0
+    }
+  }
+}
