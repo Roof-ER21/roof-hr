@@ -15,7 +15,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, AlertTriangle, Clock, Upload, ExternalLink, Calendar, Bell, File, X, RefreshCw, CloudDownload, Sparkles, Eye, Download, CheckCircle2, User as UserIcon, Check, ChevronsUpDown, FolderOpen, Loader2 } from 'lucide-react';
+import { FileText, AlertTriangle, Clock, Upload, ExternalLink, Calendar, Bell, File, X, RefreshCw, CloudDownload, Sparkles, Eye, Download, CheckCircle2, User as UserIcon, Check, ChevronsUpDown, FolderOpen, Loader2, Pencil } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -321,7 +321,7 @@ export default function CoiDocuments() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => 
+    mutationFn: (id: string) =>
       apiRequest(`/api/coi-documents/${id}`, {
         method: 'DELETE',
       }),
@@ -340,6 +340,75 @@ export default function CoiDocuments() {
       });
     }
   });
+
+  // Edit COI document state and mutation
+  const [editingDocument, setEditingDocument] = useState<CoiDocument | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    employeeId: '',
+    externalName: '',
+    type: 'GENERAL_LIABILITY' as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
+    issueDate: '',
+    expirationDate: '',
+    policyNumber: '',
+    insurerName: '',
+    notes: '',
+  });
+
+  const handleEditDocument = (document: CoiDocument) => {
+    setEditingDocument(document);
+    setEditFormData({
+      employeeId: document.employeeId || '',
+      externalName: document.externalName || '',
+      type: document.type as 'WORKERS_COMP' | 'GENERAL_LIABILITY',
+      issueDate: formatDateForInput(document.issueDate?.toString()),
+      expirationDate: formatDateForInput(document.expirationDate?.toString()),
+      policyNumber: document.policyNumber || '',
+      insurerName: document.insurerName || '',
+      notes: document.notes || '',
+    });
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: { id: string; updates: Record<string, any> }) => {
+      return apiRequest(`/api/coi-documents/${data.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data.updates),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/coi-documents'] });
+      setEditingDocument(null);
+      toast({
+        title: 'Success',
+        description: 'COI document updated successfully',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update COI document',
+        variant: 'destructive',
+      });
+    }
+  });
+
+  const handleSaveEdit = () => {
+    if (!editingDocument) return;
+
+    updateMutation.mutate({
+      id: editingDocument.id,
+      updates: {
+        employeeId: editFormData.employeeId || null,
+        externalName: editFormData.externalName || null,
+        type: editFormData.type,
+        issueDate: editFormData.issueDate,
+        expirationDate: editFormData.expirationDate,
+        policyNumber: editFormData.policyNumber || null,
+        insurerName: editFormData.insurerName || null,
+        notes: editFormData.notes || null,
+      }
+    });
+  };
 
   const sendAlertsMutation = useMutation<{ alertsSent: number }, Error>({
     mutationFn: async () => {
@@ -1664,14 +1733,24 @@ export default function CoiDocuments() {
                           <Download className="h-4 w-4" />
                         </Button>
                         {isManager && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => deleteMutation.mutate(document.id)}
-                            title="Delete document"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditDocument(document)}
+                              title="Edit document"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteMutation.mutate(document.id)}
+                              title="Delete document"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -1722,6 +1801,141 @@ export default function CoiDocuments() {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingDocument} onOpenChange={(open) => !open && setEditingDocument(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Edit COI Document
+            </DialogTitle>
+            <DialogDescription>
+              Update the details of this COI document
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingDocument && (
+            <div className="space-y-4">
+              {/* Employee / External Name Selection */}
+              <div className="space-y-2">
+                <Label>Assign To</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-gray-500">Employee</Label>
+                    <Select
+                      value={editFormData.employeeId}
+                      onValueChange={(value) => setEditFormData(prev => ({ ...prev, employeeId: value, externalName: '' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None (External)</SelectItem>
+                        {sortedUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.firstName} {user.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-500">External Name</Label>
+                    <Input
+                      placeholder="Contractor/Company name"
+                      value={editFormData.externalName}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, externalName: e.target.value, employeeId: '' }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Document Type */}
+              <div className="space-y-2">
+                <Label>Document Type</Label>
+                <Select
+                  value={editFormData.type}
+                  onValueChange={(value: 'WORKERS_COMP' | 'GENERAL_LIABILITY') =>
+                    setEditFormData(prev => ({ ...prev, type: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="WORKERS_COMP">Workers Compensation</SelectItem>
+                    <SelectItem value="GENERAL_LIABILITY">General Liability</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Issue Date</Label>
+                  <Input
+                    type="date"
+                    value={editFormData.issueDate}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, issueDate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expiration Date</Label>
+                  <Input
+                    type="date"
+                    value={editFormData.expirationDate}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, expirationDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Policy & Insurer Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Policy Number</Label>
+                  <Input
+                    placeholder="Policy number"
+                    value={editFormData.policyNumber}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, policyNumber: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Insurer Name</Label>
+                  <Input
+                    placeholder="Insurance company"
+                    value={editFormData.insurerName}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, insurerName: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="Additional notes..."
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingDocument(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
