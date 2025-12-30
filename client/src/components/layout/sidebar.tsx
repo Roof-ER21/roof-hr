@@ -126,10 +126,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // Check if user has candidate assignments (for Recruiting visibility)
   const isManager = user?.role && MANAGER_ROLES.includes(user.role);
   const { data: assignmentData } = useQuery<{ hasAssignments: boolean }>({
-    queryKey: ['/api/user/has-candidate-assignments'],
+    queryKey: ['/api/user/has-candidate-assignments', user?.id],
     queryFn: () => apiRequest('/api/user/has-candidate-assignments'),
     enabled: !!user && !isManager, // Only check for non-managers
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 60 * 1000, // Cache for 1 minute
+    refetchOnMount: true, // Always refresh on login
   });
   const hasAssignedCandidates = assignmentData?.hasAssignments ?? false;
 

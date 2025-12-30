@@ -1827,14 +1827,18 @@ export default function CoiDocuments() {
                   <div>
                     <Label className="text-xs text-gray-500">Employee</Label>
                     <Select
-                      value={editFormData.employeeId}
-                      onValueChange={(value) => setEditFormData(prev => ({ ...prev, employeeId: value, externalName: '' }))}
+                      value={editFormData.employeeId || '__none__'}
+                      onValueChange={(value) => setEditFormData(prev => ({
+                        ...prev,
+                        employeeId: value === '__none__' ? '' : value,
+                        externalName: value === '__none__' ? prev.externalName : ''
+                      }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select employee" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None (External)</SelectItem>
+                        <SelectItem value="__none__">None (External)</SelectItem>
                         {sortedUsers.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
                             {user.firstName} {user.lastName}
