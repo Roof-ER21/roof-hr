@@ -63,6 +63,10 @@ const signatureFormSchema = z.object({
 export default function Contracts() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+
+  // Check if user has manager permissions - needed early for queries
+  const isManager = currentUser?.email === 'ahmed.mahmoud@theroofdocs.com' ||
+    (currentUser?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUser.role));
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
@@ -123,16 +127,21 @@ export default function Contracts() {
   });
 
   const { data: contracts = [], isLoading: contractsLoading } = useQuery({
-    queryKey: ['/api/employee-contracts'],
+    queryKey: ['/api/employee-contracts', isManager, currentUser?.id],
     queryFn: async (): Promise<EmployeeContract[]> => {
-      const response = await fetch('/api/employee-contracts', {
+      // Managers see all contracts, employees see only their own
+      const endpoint = isManager
+        ? '/api/employee-contracts'
+        : `/api/employee-contracts/employee/${currentUser?.id}`;
+      const response = await fetch(endpoint, {
         credentials: 'include'
       });
       if (!response.ok) {
         throw new Error('Failed to fetch contracts');
       }
       return response.json();
-    }
+    },
+    enabled: !!currentUser?.id // Only run query when user is loaded
   });
 
   const { data: users = [] } = useQuery({
@@ -383,15 +392,6 @@ export default function Contracts() {
     const config = statusMap[status] || { variant: 'secondary', label: status };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
-
-  // Debug the current user role  
-  console.log('Auth currentUser:', currentUser);
-  console.log('Auth currentUser role:', currentUser?.role);
-  
-  // Check if user has manager permissions - Ahmed always has access via email fallback
-  const isManager = currentUser?.email === 'ahmed.mahmoud@theroofdocs.com' ||
-    (currentUser?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(currentUser.role));
-  console.log('isManager:', isManager);
 
   // My contracts (for current user)
   const myContracts = contracts.filter((c: EmployeeContract) => c.employeeId === currentUser?.id);
