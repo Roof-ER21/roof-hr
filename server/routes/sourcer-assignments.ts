@@ -478,43 +478,37 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSour
 
 /**
  * GET /api/sourcers/available
- * Get all available sourcers (users with SOURCER role or recruiting-capable roles)
+ * Get all available users who can be assigned candidates
+ * Now returns ALL active users (assignment-based access)
  */
 router.get('/api/sourcers/available', requireAuth, requireManagerOrLeadSourcer, async (req, res) => {
   try {
     const allUsers = await storage.getAllUsers();
 
-    // Filter to users who can be sourcers
-    // Include: designated sourcers (Tim, Sima, Ryan) + role-based sourcers
-    const sourcers = allUsers.filter(user =>
-      user.isActive && (
-        // Users designated as sourcers by email
-        isSourcer(user) ||
-        // Users with recruiting-capable roles
-        ['SOURCER', 'HR_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN', 'ADMIN'].includes(user.role)
-      )
-    );
+    // Return ALL active users - anyone can be assigned candidates
+    // Assignment grants them access to see their assigned candidates
+    const availableUsers = allUsers.filter(user => user.isActive);
 
-    // Get workload for each sourcer
-    const sourcersWithWorkload = await Promise.all(
-      sourcers.map(async (sourcer) => {
-        const activeAssignments = await storage.getActiveAssignmentsByHrMemberId(sourcer.id);
+    // Get workload for each user
+    const usersWithWorkload = await Promise.all(
+      availableUsers.map(async (user) => {
+        const activeAssignments = await storage.getActiveAssignmentsByHrMemberId(user.id);
         return {
-          id: sourcer.id,
-          firstName: sourcer.firstName,
-          lastName: sourcer.lastName,
-          email: sourcer.email,
-          role: sourcer.role,
-          screenerColor: (sourcer as any).screenerColor || '#6B7280',
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          screenerColor: (user as any).screenerColor || '#6B7280',
           activeAssignments: activeAssignments.length,
         };
       })
     );
 
-    res.json(sourcersWithWorkload);
+    res.json(usersWithWorkload);
   } catch (error) {
-    console.error('Error fetching available sourcers:', error);
-    res.status(500).json({ error: 'Failed to fetch available sourcers' });
+    console.error('Error fetching available users:', error);
+    res.status(500).json({ error: 'Failed to fetch available users' });
   }
 });
 
