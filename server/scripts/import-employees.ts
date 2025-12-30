@@ -260,7 +260,7 @@ async function importEmployees() {
     errors: [] as string[]
   };
 
-  const defaultPassword = await bcrypt.hash('Welcome2025!', 10);
+  const defaultPassword = await bcrypt.hash('TRD2025!', 10);
   const today = new Date().toISOString().split('T')[0];
 
   for (const emp of employeeData) {
