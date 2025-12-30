@@ -15,6 +15,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
+import { useAuth } from '@/lib/auth';
+import { MANAGER_ROLES } from '@shared/constants/roles';
 
 const candidateSchema = z.object({
   firstName: z.string().min(1),
@@ -56,6 +58,10 @@ function Recruiting() {
   const [isNewHireDialogOpen, setIsNewHireDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  // Check if user is a manager (can hire candidates)
+  const isManager = user?.role && MANAGER_ROLES.includes(user.role);
 
   const { data: candidates, isLoading: candidatesLoading } = useQuery({
     queryKey: ['/api/candidates'],
@@ -428,6 +434,7 @@ function Recruiting() {
               </DialogContent>
             </Dialog>
             
+            {isManager && (
             <Dialog open={isNewHireDialogOpen} onOpenChange={setIsNewHireDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="default" className="bg-green-600 hover:bg-green-700">
@@ -569,6 +576,7 @@ function Recruiting() {
                 </form>
               </DialogContent>
             </Dialog>
+            )}
             </div>
           </div>
 
@@ -622,7 +630,7 @@ function Recruiting() {
                               <SelectItem value="SCREENING">Screening</SelectItem>
                               <SelectItem value="INTERVIEW">Interview</SelectItem>
                               <SelectItem value="OFFER">Offer</SelectItem>
-                              <SelectItem value="HIRED">Hired</SelectItem>
+                              {isManager && <SelectItem value="HIRED">Hired</SelectItem>}
                               <SelectItem value="REJECTED">Rejected</SelectItem>
                             </SelectContent>
                           </Select>

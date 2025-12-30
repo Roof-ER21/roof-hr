@@ -1815,6 +1815,19 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
   }
 });
 
+// Check if current user has any candidate assignments (for sidebar visibility)
+router.get('/api/user/has-candidate-assignments', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user;
+    const candidates = await storage.getAllCandidates();
+    const hasAssignments = candidates.some((c: any) => c.assignedTo === user.id);
+    res.json({ hasAssignments });
+  } catch (error: any) {
+    console.error('[User Assignments] Error checking assignments:', error);
+    res.status(500).json({ error: 'Failed to check assignments' });
+  }
+});
+
 // Recruiting routes
 router.get('/api/candidates', requireAuth, async (req: any, res) => {
   try {
@@ -1826,16 +1839,16 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
                           'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
 
     // Import sourcer role checks
-    const { isLimitedSourcer, isLeadSourcer } = await import('../shared/constants/roles');
+    const { isLeadSourcer } = await import('../shared/constants/roles');
 
     // Determine who can see all candidates:
     // - Managers see all
     // - Lead sourcers (Ryan) see all
-    // - Limited sourcers (Tim/Sima) only see their assigned candidates
+    // - Everyone else (including assigned sourcers) only see their assigned candidates
     const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user);
 
     if (!canSeeAllCandidates) {
-      // Limited sourcers and others only see their assigned candidates
+      // Non-managers only see their assigned candidates (assignment-based access)
       candidates = candidates.filter((c: any) => c.assignedTo === user.id);
     }
 

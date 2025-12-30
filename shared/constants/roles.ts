@@ -260,29 +260,27 @@ export function canEditPtoPolicies(user: { role?: string; email?: string } | nul
 // ============================================================================
 // RECRUITMENT SOURCER ROLES
 // ============================================================================
-// Limited Sourcers - can only see candidates assigned to them
-export const LIMITED_SOURCER_EMAILS = [
-  'jobs@theroofdocs.com',        // Tim Danelle
-  'sima.popal@theroofdocs.com',  // Sima Popal
-];
+// DEPRECATED: Limited sourcer emails no longer used - access is now assignment-based
+// Anyone with assigned candidates can see recruiting (restricted to their assignments)
+export const LIMITED_SOURCER_EMAILS: string[] = [];
 
 // Lead Sourcer - can see all candidates, bulk import/assign, assign to others
 export const LEAD_SOURCER_EMAILS = [
   'careers@theroofdocs.com',     // Ryan Ferguson
 ];
 
-// All sourcers combined
+// All sourcers combined (kept for backward compatibility)
 export const ALL_SOURCER_EMAILS = [
   ...LIMITED_SOURCER_EMAILS,
   ...LEAD_SOURCER_EMAILS,
 ];
 
 /**
- * Check if user is a limited sourcer (can only see assigned candidates)
+ * @deprecated Access is now assignment-based. Non-managers only see assigned candidates.
+ * This function always returns false.
  */
 export function isLimitedSourcer(user: { email?: string } | null): boolean {
-  if (!user?.email) return false;
-  return LIMITED_SOURCER_EMAILS.includes(user.email.toLowerCase());
+  return false; // Deprecated - access is now assignment-based
 }
 
 /**

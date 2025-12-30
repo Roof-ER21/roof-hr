@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/ui/logo';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
+import { apiRequest } from '@/lib/queryClient';
 import {
   ADMIN_ROLES,
   MANAGER_ROLES,
@@ -121,6 +123,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting', 'Facilities']);
 
+  // Check if user has candidate assignments (for Recruiting visibility)
+  const isManager = user?.role && MANAGER_ROLES.includes(user.role);
+  const { data: assignmentData } = useQuery<{ hasAssignments: boolean }>({
+    queryKey: ['/api/user/has-candidate-assignments'],
+    queryFn: () => apiRequest('/api/user/has-candidate-assignments'),
+    enabled: !!user && !isManager, // Only check for non-managers
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+  const hasAssignedCandidates = assignmentData?.hasAssignments ?? false;
+
   const toggleExpanded = (name: string) => {
     setExpandedItems(prev => 
       prev.includes(name) 
@@ -156,6 +168,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               .filter(item => {
                 // Ahmed always sees all menu items (super admin email fallback)
                 if (user?.email === SUPER_ADMIN_EMAIL) return true;
+                // Special case: Show Recruiting if user has assigned candidates
+                if (item.name === 'Recruiting' && hasAssignedCandidates) return true;
                 return !user?.role || item.roles.includes(user.role);
               })
               .map((item) => {
@@ -196,6 +210,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                               if ((child as any).emailAccess && user?.email) {
                                 if ((child as any).emailAccess.includes(user.email.toLowerCase())) return true;
                               }
+                              // Special case: Show Recruiting children if user has assigned candidates
+                              if (item.name === 'Recruiting' && hasAssignedCandidates) return true;
                               return !user?.role || child.roles.includes(user.role);
                             })
                             .map((child) => {
