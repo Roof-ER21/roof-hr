@@ -125,17 +125,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   // Check if user has candidate assignments (for Recruiting visibility)
   const isManager = user?.role && MANAGER_ROLES.includes(user.role);
-  const { data: assignmentData, isLoading: assignmentLoading } = useQuery<{ hasAssignments: boolean }>({
+  const { data: assignmentData, isLoading: assignmentLoading, error: assignmentError } = useQuery<{ hasAssignments: boolean }>({
     queryKey: ['/api/user/has-candidate-assignments', user?.id],
-    queryFn: () => apiRequest('/api/user/has-candidate-assignments'),
+    queryFn: async () => {
+      console.log('[Sidebar] Fetching has-candidate-assignments...');
+      const result = await apiRequest('/api/user/has-candidate-assignments', 'GET');
+      console.log('[Sidebar] API result:', result);
+      return result;
+    },
     enabled: !!user && !isManager, // Only check for non-managers
     staleTime: 60 * 1000, // Cache for 1 minute
     refetchOnMount: 'always', // Always refresh on login
+    retry: false, // Don't retry on error so we can see what's happening
   });
   const hasAssignedCandidates = assignmentData?.hasAssignments ?? false;
 
   // Debug logging for recruiting visibility
-  console.log('[Sidebar] User:', user?.email, 'Role:', user?.role, 'isManager:', isManager, 'assignmentData:', assignmentData, 'hasAssignedCandidates:', hasAssignedCandidates, 'loading:', assignmentLoading);
+  console.log('[Sidebar] User:', user?.email, 'Role:', user?.role, 'isManager:', isManager, 'assignmentData:', assignmentData, 'hasAssignedCandidates:', hasAssignedCandidates, 'loading:', assignmentLoading, 'error:', assignmentError);
 
   const toggleExpanded = (name: string) => {
     setExpandedItems(prev => 
