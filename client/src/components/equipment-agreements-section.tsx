@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
+import { MANAGER_ROLES } from '@shared/constants/roles';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -276,12 +277,12 @@ export function EquipmentAgreementsSection() {
     }
   };
 
-  // Check if user is an employee (not manager/admin)
-  const isEmployee = user?.role === 'EMPLOYEE';
+  // Check if user is non-manager (restricted access)
+  const isNonManager = !user?.role || !MANAGER_ROLES.includes(user.role);
 
   const filteredAgreements = agreements.filter(agreement => {
-    // Employees only see their own agreements
-    if (isEmployee) {
+    // Non-managers only see their own agreements
+    if (isNonManager) {
       const isOwnAgreement = agreement.employeeId === user?.id ||
                             agreement.employeeEmail?.toLowerCase() === user?.email?.toLowerCase();
       if (!isOwnAgreement) return false;
@@ -294,8 +295,8 @@ export function EquipmentAgreementsSection() {
     return matchesSearch && matchesStatus;
   });
 
-  // Use filtered agreements for stats so employees only see their own counts
-  const statsAgreements = isEmployee ? filteredAgreements : agreements;
+  // Use filtered agreements for stats so non-managers only see their own counts
+  const statsAgreements = isNonManager ? filteredAgreements : agreements;
   const pendingCount = statsAgreements.filter(a => a.status === 'PENDING').length;
   const signedCount = statsAgreements.filter(a => a.status === 'SIGNED').length;
 
@@ -319,7 +320,7 @@ export function EquipmentAgreementsSection() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">{isEmployee ? 'My Agreements' : 'Total Agreements'}</CardTitle>
+            <CardTitle className="text-sm font-medium">{isNonManager ? 'My Agreements' : 'Total Agreements'}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statsAgreements.length}</div>

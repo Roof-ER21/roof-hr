@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
+import { MANAGER_ROLES } from '@shared/constants/roles';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -193,13 +194,13 @@ export default function Documents() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Check if user is employee (not admin/manager)
-  const isEmployee = user?.role === 'EMPLOYEE';
+  // Check if user is non-manager (restricted access)
+  const isNonManager = !user?.role || !MANAGER_ROLES.includes(user.role);
 
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const filteredDocuments = safeDocuments.filter(doc => {
-    // Employee filter: only show their own docs or company-wide docs
-    if (isEmployee) {
+    // Non-manager filter: only show their own docs or company-wide docs
+    if (isNonManager) {
       const isOwnDoc = doc.createdBy === user?.id;
       const isCompanyWide = doc.visibility === 'PUBLIC' || doc.visibility === 'EMPLOYEE';
       if (!isOwnDoc && !isCompanyWide) return false;
