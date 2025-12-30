@@ -193,16 +193,26 @@ export default function Documents() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Check if user is employee (not admin/manager)
+  const isEmployee = user?.role === 'EMPLOYEE';
+
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const filteredDocuments = safeDocuments.filter(doc => {
+    // Employee filter: only show their own docs or company-wide docs
+    if (isEmployee) {
+      const isOwnDoc = doc.createdBy === user?.id;
+      const isCompanyWide = doc.visibility === 'PUBLIC' || doc.visibility === 'EMPLOYEE';
+      if (!isOwnDoc && !isCompanyWide) return false;
+    }
+
     const matchesCategory = filterCategory === 'ALL' || doc.category === filterCategory;
     const matchesStatus = filterStatus === 'ALL' || doc.status === filterStatus;
     const matchesVisibility = filterVisibility === 'ALL' || doc.visibility === filterVisibility;
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       doc.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       doc.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     return matchesCategory && matchesStatus && matchesVisibility && matchesSearch;
   });
 

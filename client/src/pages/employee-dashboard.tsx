@@ -45,6 +45,10 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isToday } from 'date-fns';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -94,8 +98,9 @@ const eventTypeColors: Record<string, { bg: string; text: string; border: string
 };
 
 function EmployeeDashboard() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
@@ -105,6 +110,42 @@ function EmployeeDashboard() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
   const [selectedDateForNew, setSelectedDateForNew] = useState<Date | undefined>();
+
+  // Edit Profile modal state
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    phone: user?.phone || '',
+    emergencyContactName: user?.emergencyContactName || '',
+    emergencyContactPhone: user?.emergencyContactPhone || '',
+    address: user?.address || '',
+    preferredName: user?.preferredName || '',
+    birthday: user?.birthday || ''
+  });
+
+  // Update profile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: typeof profileForm) => {
+      const response = await fetch(`/api/users/${user?.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) throw new Error('Failed to update profile');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Profile updated successfully' });
+      setShowEditProfile(false);
+      refreshUser?.();
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to update profile', variant: 'destructive' });
+    }
+  });
 
   // Helper to check if user owns the event
   const userOwnsEvent = (event: CalendarEvent) => {
@@ -309,12 +350,24 @@ function EmployeeDashboard() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Link to="/settings">
-            <Button variant="outline" size="sm">
-              <Edit className="w-4 h-4 mr-2" />
-              Edit Profile
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setProfileForm({
+                phone: user?.phone || '',
+                emergencyContactName: user?.emergencyContactName || '',
+                emergencyContactPhone: user?.emergencyContactPhone || '',
+                address: user?.address || '',
+                preferredName: user?.preferredName || '',
+                birthday: user?.birthday || ''
+              });
+              setShowEditProfile(true);
+            }}
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Edit Profile
+          </Button>
           <Link to="/pto">
             <Button size="sm">
               <Calendar className="w-4 h-4 mr-2" />
@@ -443,11 +496,23 @@ function EmployeeDashboard() {
                   </span>
                 </div>
               )}
-              <Button variant="outline" className="w-full mt-2" asChild>
-                <Link to="/settings">
-                  <Edit className="w-4 h-4 mr-2" />
-                  Update My Info
-                </Link>
+              <Button
+                variant="outline"
+                className="w-full mt-2"
+                onClick={() => {
+                  setProfileForm({
+                    phone: user?.phone || '',
+                    emergencyContactName: user?.emergencyContactName || '',
+                    emergencyContactPhone: user?.emergencyContactPhone || '',
+                    address: user?.address || '',
+                    preferredName: user?.preferredName || '',
+                    birthday: user?.birthday || ''
+                  });
+                  setShowEditProfile(true);
+                }}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Update My Info
               </Button>
             </CardContent>
           </Card>
@@ -1094,6 +1159,92 @@ function EmployeeDashboard() {
           googleEventId: eventToDelete.googleEventId,
         } : null}
       />
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={showEditProfile} onOpenChange={setShowEditProfile}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit My Profile</DialogTitle>
+            <DialogDescription>
+              Update your personal information
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="preferredName">Preferred Name / Nickname</Label>
+              <Input
+                id="preferredName"
+                value={profileForm.preferredName}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, preferredName: e.target.value }))}
+                placeholder="e.g., Danny"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="(555) 123-4567"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                value={profileForm.address}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, address: e.target.value }))}
+                placeholder="123 Main St, City, State ZIP"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="birthday">Birthday</Label>
+              <Input
+                id="birthday"
+                type="date"
+                value={profileForm.birthday}
+                onChange={(e) => setProfileForm(prev => ({ ...prev, birthday: e.target.value }))}
+              />
+            </div>
+            <div className="border-t pt-4 mt-2">
+              <h4 className="font-medium mb-3">Emergency Contact</h4>
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="emergencyContactName">Contact Name</Label>
+                  <Input
+                    id="emergencyContactName"
+                    value={profileForm.emergencyContactName}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                    placeholder="Jane Doe"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="emergencyContactPhone">Contact Phone</Label>
+                  <Input
+                    id="emergencyContactPhone"
+                    type="tel"
+                    value={profileForm.emergencyContactPhone}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
+                    placeholder="(555) 987-6543"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditProfile(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => updateProfileMutation.mutate(profileForm)}
+              disabled={updateProfileMutation.isPending}
+            >
+              {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

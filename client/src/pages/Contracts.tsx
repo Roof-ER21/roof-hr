@@ -803,11 +803,11 @@ export default function Contracts() {
       </div>
 
       {/* My Contracts (for employees) */}
-      {!isManager && myContracts.length > 0 && (
+      {!isManager && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>My Contracts</CardTitle>
-            <CardDescription>Contracts requiring your review or signature</CardDescription>
+            <CardDescription>Contracts assigned to you</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -820,82 +820,95 @@ export default function Contracts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {myContracts.map((contract: EmployeeContract) => (
-                  <TableRow key={contract.id}>
-                    <TableCell className="font-medium">{contract.title}</TableCell>
-                    <TableCell>{getStatusBadge(contract.status)}</TableCell>
-                    <TableCell>
-                      {contract.sentDate ? 
-                        format(new Date(contract.sentDate), 'MMM dd, yyyy') : 
-                        '-'
-                      }
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedContract(contract)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {['SENT', 'VIEWED'].includes(contract.status) && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedContract(contract);
-                              setIsSignDialogOpen(true);
-                            }}
-                          >
-                            <PenTool className="h-4 w-4 mr-1" />
-                            Sign
-                          </Button>
-                        )}
-                      </div>
+                {myContracts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      No contracts assigned to you
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  myContracts.map((contract: EmployeeContract) => (
+                    <TableRow key={contract.id}>
+                      <TableCell className="font-medium">{contract.title}</TableCell>
+                      <TableCell>{getStatusBadge(contract.status)}</TableCell>
+                      <TableCell>
+                        {contract.sentDate ?
+                          format(new Date(contract.sentDate), 'MMM dd, yyyy') :
+                          '-'
+                        }
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedContract(contract)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {['SENT', 'VIEWED'].includes(contract.status) && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedContract(contract);
+                                setIsSignDialogOpen(true);
+                              }}
+                            >
+                              <PenTool className="h-4 w-4 mr-1" />
+                              Sign
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Draft Contracts</CardTitle>
-            <Edit className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{draftContracts.length}</div>
-            <p className="text-xs text-muted-foreground">Ready to send</p>
-          </CardContent>
-        </Card>
+      {/* Stats cards - managers only */}
+      {isManager && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Draft Contracts</CardTitle>
+              <Edit className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{draftContracts.length}</div>
+              <p className="text-xs text-muted-foreground">Ready to send</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Signature</CardTitle>
-            <Send className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pendingContracts.length}</div>
-            <p className="text-xs text-muted-foreground">Awaiting response</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending Signature</CardTitle>
+              <Send className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingContracts.length}</div>
+              <p className="text-xs text-muted-foreground">Awaiting response</p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Signed Contracts</CardTitle>
-            <Check className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{signedContracts.length}</div>
-            <p className="text-xs text-muted-foreground">Completed</p>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Signed Contracts</CardTitle>
+              <Check className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{signedContracts.length}</div>
+              <p className="text-xs text-muted-foreground">Completed</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
+      {/* All Contracts and Templates tabs - managers only */}
+      {isManager && (
       <Tabs defaultValue="contracts" className="space-y-4">
         <TabsList>
           <TabsTrigger value="contracts">All Contracts</TabsTrigger>
@@ -1088,6 +1101,7 @@ export default function Contracts() {
           </Card>
         </TabsContent>
       </Tabs>
+      )}
 
       {/* View Template Dialog */}
       <Dialog open={!!selectedTemplate} onOpenChange={(open) => !open && setSelectedTemplate(null)}>

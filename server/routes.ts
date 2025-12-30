@@ -1276,6 +1276,41 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
   }
 });
 
+// PTO Calendar - company-wide approved PTO (name + dates only for privacy)
+router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
+  try {
+    const allPto = await storage.getAllPtoRequests().catch((err) => {
+      console.error('[PTO Calendar] Failed to fetch PTO requests:', err.message);
+      return [];
+    });
+
+    const allUsers = await storage.getAllUsers().catch((err) => {
+      console.error('[PTO Calendar] Failed to fetch users:', err.message);
+      return [];
+    });
+
+    // Filter to approved PTO only and return minimal info for privacy
+    const calendarData = allPto
+      .filter((p: any) => p.status === 'APPROVED')
+      .map((p: any) => {
+        const user = allUsers.find((u: any) => u.id === p.employeeId);
+        return {
+          id: p.id,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          employeeId: p.employeeId,
+          employeeName: user ? `${user.firstName} ${user.lastName}` : 'Employee',
+          // PRIVACY: Do NOT include type, reason, or notes
+        };
+      });
+
+    res.json(calendarData);
+  } catch (error) {
+    console.error('Error fetching PTO calendar:', error);
+    res.json([]);
+  }
+});
+
 router.post('/api/pto', requireAuth, async (req: any, res) => {
   try {
     // Calculate days from startDate and endDate BEFORE validation

@@ -90,11 +90,11 @@ const navigation = [
     name: 'Facilities',
     href: '/meeting-rooms',
     icon: DoorOpen,
-    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
+    roles: MANAGER_ROLES,
     children: [
-      { name: 'Attendance', href: '/attendance', icon: Clock, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+      { name: 'Attendance', href: '/attendance', icon: Clock, roles: MANAGER_ROLES },
       { name: 'Meeting Rooms', href: '/meeting-rooms', icon: DoorOpen, roles: MANAGER_ROLES },
-      { name: 'Room Calendar', href: '/meeting-rooms?tab=calendar', icon: Calendar, roles: ALL_ROLES }
+      { name: 'Room Calendar', href: '/meeting-rooms?tab=calendar', icon: Calendar, roles: MANAGER_ROLES }
     ]
   },
   {

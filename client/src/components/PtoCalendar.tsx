@@ -2,40 +2,20 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Star } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, isWithinInterval } from 'date-fns';
 import { isHoliday, getHolidayName, getHolidaysForYear } from '@shared/constants/holidays';
 
-interface PtoRequest {
+// Calendar PTO data - minimal info for privacy
+interface CalendarPtoEntry {
   id: string;
   employeeId: string;
-  employee?: {
-    firstName: string;
-    lastName: string;
-    department: string;
-  };
+  employeeName: string;
   startDate: string;
   endDate: string;
-  type: 'VACATION' | 'SICK' | 'PERSONAL' | 'OTHER';
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  reason: string;
+  // NOTE: type, reason, and department are NOT included for privacy
 }
-
-interface User {
-  id: string;
-  firstName: string;
-  lastName: string;
-  department: string;
-}
-
-const typeColors = {
-  VACATION: 'bg-blue-100 text-blue-800',
-  SICK: 'bg-red-100 text-red-800',
-  PERSONAL: 'bg-purple-100 text-purple-800',
-  OTHER: 'bg-gray-100 text-gray-800'
-};
 
 export function PtoCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -43,35 +23,14 @@ export function PtoCalendar() {
   const monthEnd = endOfMonth(currentDate);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  // Fetch PTO requests
-  const { data: ptoRequests = [], isLoading: ptoLoading } = useQuery<PtoRequest[]>({
-    queryKey: ['/api/pto']
-  });
-
-  // Fetch users to get employee names
-  const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ['/api/users']
-  });
-
-  // Only show approved PTO requests
-  const approvedPtos = ptoRequests.filter(pto => pto.status === 'APPROVED');
-
-  // Map employee data to PTO requests
-  const ptosWithEmployees = approvedPtos.map(pto => {
-    const employee = users.find(user => user.id === pto.employeeId);
-    return {
-      ...pto,
-      employee: employee ? {
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-        department: employee.department
-      } : undefined
-    };
+  // Fetch company-wide approved PTO (name + dates only for privacy)
+  const { data: calendarPtos = [], isLoading } = useQuery<CalendarPtoEntry[]>({
+    queryKey: ['/api/pto/calendar']
   });
 
   // Get PTOs for a specific day
   const getPtosForDay = (day: Date) => {
-    return ptosWithEmployees.filter(pto => {
+    return calendarPtos.filter(pto => {
       const startDate = parseISO(pto.startDate);
       const endDate = parseISO(pto.endDate);
       return isWithinInterval(day, { start: startDate, end: endDate });
@@ -91,7 +50,7 @@ export function PtoCalendar() {
     setCurrentDate(new Date());
   };
 
-  if (ptoLoading || usersLoading) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -187,20 +146,27 @@ export function PtoCalendar() {
                 {dayPtos.length > 0 && (
                   <ScrollArea className={isHolidayDay ? "h-[50px]" : "h-[70px]"}>
                     <div className="space-y-1">
-                      {dayPtos.slice(0, 3).map((pto, ptoIndex) => (
-                        <div
-                          key={`${pto.id}-${ptoIndex}`}
-                          className="text-xs p-1 rounded bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200"
-                          title={`${pto.employee?.firstName} ${pto.employee?.lastName} - ${pto.type}`}
-                        >
-                          <div className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            <span className="truncate">
-                              {pto.employee?.firstName} {pto.employee?.lastName?.charAt(0)}.
-                            </span>
+                      {dayPtos.slice(0, 3).map((pto, ptoIndex) => {
+                        // Extract first name and last initial from employeeName
+                        const nameParts = pto.employeeName.split(' ');
+                        const displayName = nameParts.length > 1
+                          ? `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}.`
+                          : pto.employeeName;
+                        return (
+                          <div
+                            key={`${pto.id}-${ptoIndex}`}
+                            className="text-xs p-1 rounded bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200"
+                            title={pto.employeeName}
+                          >
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span className="truncate">
+                                {displayName}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       {dayPtos.length > 3 && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
                           +{dayPtos.length - 3} more
@@ -235,38 +201,28 @@ export function PtoCalendar() {
           </div>
         </div>
 
-        {/* Time Off Summary */}
+        {/* Time Off Summary - Privacy: only shows name and dates, no PTO type */}
         <div className="pt-4 border-t dark:border-gray-700">
-          <h3 className="text-sm font-medium mb-3 text-gray-900 dark:text-white">Time Off Summary</h3>
+          <h3 className="text-sm font-medium mb-3 text-gray-900 dark:text-white">Upcoming Time Off</h3>
           <div className="space-y-2">
-            {ptosWithEmployees.map(pto => (
+            {calendarPtos.map(pto => (
               <div key={pto.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center">
                     <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <div>
-                    <p className="font-medium text-sm text-gray-900 dark:text-white">
-                      {pto.employee?.firstName} {pto.employee?.lastName}
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      {pto.employee?.department}
-                    </p>
-                  </div>
+                  <p className="font-medium text-sm text-gray-900 dark:text-white">
+                    {pto.employeeName}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={typeColors[pto.type]} variant="secondary">
-                    {pto.type}
-                  </Badge>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {format(parseISO(pto.startDate), 'MMM d')} - {format(parseISO(pto.endDate), 'MMM d')}
-                  </span>
-                </div>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {format(parseISO(pto.startDate), 'MMM d')} - {format(parseISO(pto.endDate), 'MMM d')}
+                </span>
               </div>
             ))}
-            {ptosWithEmployees.length === 0 && (
+            {calendarPtos.length === 0 && (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No approved time off for {format(currentDate, 'MMMM yyyy')}
+                No approved time off scheduled
               </p>
             )}
           </div>

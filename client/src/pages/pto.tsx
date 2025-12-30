@@ -61,6 +61,9 @@ function PTO() {
   ];
   const canApprovePto = user?.email ? PTO_APPROVER_EMAILS.includes(user.email) : false;
 
+  // Check if user is a manager/admin (to show full list vs personal list)
+  const isManager = user?.role && ['ADMIN', 'SYSTEM_ADMIN', 'SUPER_ADMIN', 'REGIONAL_MANAGER', 'MANAGER'].includes(user.role);
+
   const { data: ptoRequests, isLoading } = useQuery({
     queryKey: ['/api/pto'],
     queryFn: async () => {
@@ -735,7 +738,7 @@ function PTO() {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <CardTitle>All PTO Requests</CardTitle>
+            <CardTitle>{isManager ? 'All PTO Requests' : 'My PTO Requests'}</CardTitle>
             {/* Status Filter Bar */}
             <div className="flex gap-2 flex-wrap">
               <Button
@@ -824,6 +827,11 @@ function PTO() {
                         <Badge className={getStatusColor(request.status)}>
                           {request.status}
                         </Badge>
+                        {request.status === 'DENIED' && request.reviewNotes && (
+                          <div className="text-red-600 dark:text-red-400 text-sm mt-1">
+                            <span className="font-medium">Reason:</span> {request.reviewNotes}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         {request.status === 'PENDING' && canApprovePto && (

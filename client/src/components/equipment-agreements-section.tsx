@@ -276,7 +276,17 @@ export function EquipmentAgreementsSection() {
     }
   };
 
+  // Check if user is an employee (not manager/admin)
+  const isEmployee = user?.role === 'EMPLOYEE';
+
   const filteredAgreements = agreements.filter(agreement => {
+    // Employees only see their own agreements
+    if (isEmployee) {
+      const isOwnAgreement = agreement.employeeId === user?.id ||
+                            agreement.employeeEmail?.toLowerCase() === user?.email?.toLowerCase();
+      if (!isOwnAgreement) return false;
+    }
+
     const matchesSearch = !searchTerm ||
       agreement.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       agreement.employeeEmail.toLowerCase().includes(searchTerm.toLowerCase());
@@ -284,8 +294,10 @@ export function EquipmentAgreementsSection() {
     return matchesSearch && matchesStatus;
   });
 
-  const pendingCount = agreements.filter(a => a.status === 'PENDING').length;
-  const signedCount = agreements.filter(a => a.status === 'SIGNED').length;
+  // Use filtered agreements for stats so employees only see their own counts
+  const statsAgreements = isEmployee ? filteredAgreements : agreements;
+  const pendingCount = statsAgreements.filter(a => a.status === 'PENDING').length;
+  const signedCount = statsAgreements.filter(a => a.status === 'SIGNED').length;
 
   const role = user?.role as string | undefined;
   const canManage = role === 'ADMIN' || role === 'MANAGER' || role === 'TRUE_ADMIN';
@@ -307,10 +319,10 @@ export function EquipmentAgreementsSection() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Agreements</CardTitle>
+            <CardTitle className="text-sm font-medium">{isEmployee ? 'My Agreements' : 'Total Agreements'}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{agreements.length}</div>
+            <div className="text-2xl font-bold">{statsAgreements.length}</div>
           </CardContent>
         </Card>
         <Card>
