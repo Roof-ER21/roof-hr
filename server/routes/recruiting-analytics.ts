@@ -6,6 +6,9 @@ import { sql } from 'drizzle-orm';
 
 const router = Router();
 
+// Manager roles that can see all candidates
+const MANAGER_ROLES = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
+
 // Validation schema for date range query parameters
 const dateRangeSchema = z.object({
   startDate: z.string().optional(),
@@ -13,8 +16,8 @@ const dateRangeSchema = z.object({
   period: z.enum(['7d', '30d', '90d', 'year', 'all']).optional(),
 });
 
-// Middleware function for authentication
-function requireAuth(roles: string[]) {
+// Middleware function for authentication - allows managers OR users with assigned candidates
+function requireAuthOrAssignments() {
   return async (req: any, res: any, next: any) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -22,15 +25,36 @@ function requireAuth(roles: string[]) {
 
     // Ahmed always has access (super admin email fallback)
     if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
+      req.isManager = true;
       return next();
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    // Managers have full access
+    if (MANAGER_ROLES.includes(req.user.role)) {
+      req.isManager = true;
+      return next();
     }
 
-    next();
+    // Check if non-manager has any candidate assignments
+    const candidates = await storage.getAllCandidates();
+    const hasAssignments = candidates.some((c: any) => c.assignedTo === req.user.id);
+
+    if (hasAssignments) {
+      req.isManager = false; // Flag for filtering later
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Insufficient permissions' });
   };
+}
+
+// Helper to filter candidates based on user permissions
+function filterCandidatesForUser(candidates: any[], user: any, isManager: boolean) {
+  if (isManager) {
+    return candidates; // Managers see all
+  }
+  // Non-managers only see their assigned candidates
+  return candidates.filter((c: any) => c.assignedTo === user.id);
 }
 
 // Helper to calculate date range
@@ -68,12 +92,13 @@ function getDateRange(period?: string, startDate?: string, endDate?: string) {
 
 // GET /api/recruiting-analytics/overview
 // Summary metrics: totalCandidates, activePipeline, hiredThisMonth, avgDaysToHire
-router.get('/overview', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']), async (req: any, res: any) => {
+router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
-    const candidates = await storage.getAllCandidates();
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
 
     // Filter by date range
     const filteredCandidates = candidates.filter((c: any) => {
@@ -154,12 +179,13 @@ router.get('/overview', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGE
 
 // GET /api/recruiting-analytics/pipeline
 // Pipeline funnel data with counts and conversion rates
-router.get('/pipeline', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']), async (req: any, res: any) => {
+router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
-    const candidates = await storage.getAllCandidates();
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
 
     // Filter by date range
     const filteredCandidates = candidates.filter((c: any) => {
@@ -208,12 +234,13 @@ router.get('/pipeline', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGE
 
 // GET /api/recruiting-analytics/sources
 // Source effectiveness: candidates by source, hire rate by source
-router.get('/sources', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']), async (req: any, res: any) => {
+router.get('/sources', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
-    const candidates = await storage.getAllCandidates();
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
 
     // Filter by date range
     const filteredCandidates = candidates.filter((c: any) => {
@@ -262,12 +289,13 @@ router.get('/sources', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER
 
 // GET /api/recruiting-analytics/time-to-hire
 // Time to hire trend data
-router.get('/time-to-hire', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']), async (req: any, res: any) => {
+router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
-    const candidates = await storage.getAllCandidates();
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
 
     // Filter hired candidates within date range
     const hiredCandidates = candidates.filter((c: any) => {
@@ -358,12 +386,24 @@ router.get('/time-to-hire', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MA
 
 // GET /api/recruiting-analytics/interviews
 // Interview metrics: total, by status, by type, avg ratings
-router.get('/interviews', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']), async (req: any, res: any) => {
+router.get('/interviews', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
-    const interviews = await storage.getAllInterviews();
+    // Get interviews and filter by assigned candidates for non-managers
+    const allInterviews = await storage.getAllInterviews();
+    let interviews = allInterviews;
+
+    if (!req.isManager) {
+      // Get IDs of assigned candidates
+      const allCandidates = await storage.getAllCandidates();
+      const assignedCandidateIds = allCandidates
+        .filter((c: any) => c.assignedTo === req.user.id)
+        .map((c: any) => c.id);
+      // Filter interviews to only those for assigned candidates
+      interviews = allInterviews.filter((i: any) => assignedCandidateIds.includes(i.candidateId));
+    }
 
     // Filter by date range
     const filteredInterviews = interviews.filter((i: any) => {
@@ -436,12 +476,13 @@ router.get('/interviews', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANA
 
 // GET /api/recruiting-analytics/recruiters
 // Recruiter performance: candidates per recruiter, hire rate, avg time to hire
-router.get('/recruiters', requireAuth(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']), async (req: any, res: any) => {
+router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
-    const candidates = await storage.getAllCandidates();
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
     const users = await storage.getAllUsers();
 
     // Filter candidates by date range
