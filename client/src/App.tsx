@@ -5,6 +5,8 @@ import { useToast } from '@/hooks/use-toast';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/queryClient';
 import { AppLayout } from '@/components/layout/app-layout';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ADMIN_ROLES, ONBOARDING_ADMIN_EMAILS } from '@shared/constants/roles';
 import Dashboard from '@/pages/dashboard';
 import EnhancedEmployees from '@/pages/enhanced-employees';
 import PTO from '@/pages/pto';
@@ -47,26 +49,6 @@ import { OnboardingTour } from '@/components/OnboardingTour';
 import { useEffect } from 'react';
 import '@/lib/api-interceptor';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isInitialized } = useAuth();
-  
-  if (!isInitialized || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return <>{children}</>;
-}
 
 function AuthenticatedRoutes() {
   const { user, isLoading, isInitialized } = useAuth();
@@ -110,12 +92,26 @@ function AuthenticatedRoutes() {
         <Route path="/email-templates" element={<EmailTemplates />} />
         <Route path="/workflow-builder" element={<WorkflowBuilder />} />
         <Route path="/territories" element={<Territories />} />
-        <Route path="/pto-policies" element={<PtoPolicies />} />
+        <Route
+          path="/pto-policies"
+          element={
+            <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+              <PtoPolicies />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/coi-documents" element={<CoiDocuments />} />
         <Route path="/employee-assignments" element={<EmployeeAssignments />} />
         <Route path="/contracts" element={<Contracts />} />
         <Route path="/susan-ai" element={<SusanAI />} />
-        <Route path="/susan-ai-admin" element={<SusanAIAdmin />} />
+        <Route
+          path="/susan-ai-admin"
+          element={
+            <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+              <SusanAIAdmin />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/google-integration" element={<Navigate to="/settings?tab=google" replace />} />
         <Route path="/attendance" element={<AttendanceDashboard />} />
         <Route path="/attendance/admin" element={<AttendanceAdminDashboard />} />
@@ -124,7 +120,14 @@ function AuthenticatedRoutes() {
         <Route path="/org-chart" element={<OrgChartPage />} />
         <Route path="/team-dashboard" element={<TeamDashboard />} />
         <Route path="/meeting-rooms" element={<MeetingRooms />} />
-        <Route path="/onboarding-templates" element={<OnboardingTemplates />} />
+        <Route
+          path="/onboarding-templates"
+          element={
+            <ProtectedRoute requiredEmails={ONBOARDING_ADMIN_EMAILS}>
+              <OnboardingTemplates />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/scheduled-reports" element={<Navigate to="/settings?tab=reports" replace />} />
         <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
       </Routes>

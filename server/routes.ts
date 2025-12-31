@@ -1339,6 +1339,17 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     const user = req.user!;
 
     // ========================================================================
+    // PTO ELIGIBILITY CHECK - Reject Sales dept and 1099/CONTRACTOR employees
+    // ========================================================================
+    if (user.department === 'Sales' ||
+        user.employmentType === '1099' ||
+        user.employmentType === 'CONTRACTOR') {
+      return res.status(403).json({
+        error: 'You are not eligible for PTO based on your department or employment type.'
+      });
+    }
+
+    // ========================================================================
     // DEPARTMENT CONFLICT CHECK - Prevent >1 person per department on PTO
     // ========================================================================
     if (user.department) {

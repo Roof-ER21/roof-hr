@@ -14,6 +14,7 @@ import {
   canAccessOnboardingChecklist,
   ONBOARDING_ADMIN_EMAILS,
   getRestrictedPages,
+  employeeGetsPto,
 } from '@shared/constants/roles';
 import {
   LayoutDashboard,
@@ -182,6 +183,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 // Check for page restrictions (email-based hiding)
                 const restrictedPages = getRestrictedPages(user);
                 if (restrictedPages.includes(item.name)) return false;
+                // Special case: Hide Time Off for Sales/1099 employees
+                if (item.name === 'Time Off' && !employeeGetsPto({ department: user?.department, employmentType: user?.employmentType })) return false;
                 // Special case: Show Recruiting if user has assigned candidates
                 if (item.name === 'Recruiting' && hasAssignedCandidates) return true;
                 return !user?.role || item.roles.includes(user.role);

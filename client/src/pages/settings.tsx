@@ -26,6 +26,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { ADMIN_ROLES, isAdmin } from '@shared/constants/roles';
+import { useAuth } from '@/lib/auth';
 import GoogleIntegration from './GoogleIntegration';
 import ScheduledReports from './ScheduledReports';
 
@@ -65,6 +67,10 @@ const COMMON_TIMEZONES = [
 function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  // Check if user is admin to show/hide admin-only tabs
+  const userIsAdmin = isAdmin(user);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['/api/settings'],
@@ -225,22 +231,26 @@ function Settings() {
             <User className="w-4 h-4 mr-2" />
             Personal
           </TabsTrigger>
-          <TabsTrigger value="company">
-            <Building className="w-4 h-4 mr-2" />
-            Company
-          </TabsTrigger>
-          <TabsTrigger value="business">
-            <Clock className="w-4 h-4 mr-2" />
-            Hours
-          </TabsTrigger>
-          <TabsTrigger value="google">
-            <Cloud className="w-4 h-4 mr-2" />
-            Google
-          </TabsTrigger>
-          <TabsTrigger value="reports">
-            <FileBarChart className="w-4 h-4 mr-2" />
-            Reports
-          </TabsTrigger>
+          {userIsAdmin && (
+            <>
+              <TabsTrigger value="company">
+                <Building className="w-4 h-4 mr-2" />
+                Company
+              </TabsTrigger>
+              <TabsTrigger value="business">
+                <Clock className="w-4 h-4 mr-2" />
+                Hours
+              </TabsTrigger>
+              <TabsTrigger value="google">
+                <Cloud className="w-4 h-4 mr-2" />
+                Google
+              </TabsTrigger>
+              <TabsTrigger value="reports">
+                <FileBarChart className="w-4 h-4 mr-2" />
+                Reports
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="personal" className="space-y-6">
@@ -303,15 +313,16 @@ function Settings() {
           </Card>
         </TabsContent>
 
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <TabsContent value="company" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Building className="w-5 h-5 mr-2" />
-                  Company Information
-                </CardTitle>
-              </CardHeader>
+        {userIsAdmin && (
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <TabsContent value="company" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Building className="w-5 h-5 mr-2" />
+                    Company Information
+                  </CardTitle>
+                </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="companyName">Company Name</Label>
@@ -434,28 +445,33 @@ function Settings() {
             </Card>
           </TabsContent>
 
-          {/* Save Button - Fixed at bottom */}
-          <div className="sticky bottom-0 bg-white p-4 border-t mt-8">
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                disabled={updateSettingsMutation.isPending}
-                className="min-w-32"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {updateSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
-              </Button>
+            {/* Save Button - Fixed at bottom */}
+            <div className="sticky bottom-0 bg-white p-4 border-t mt-8">
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  disabled={updateSettingsMutation.isPending}
+                  className="min-w-32"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {updateSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        )}
 
-        <TabsContent value="google" className="space-y-6">
-          <GoogleIntegration embedded />
-        </TabsContent>
+        {userIsAdmin && (
+          <>
+            <TabsContent value="google" className="space-y-6">
+              <GoogleIntegration embedded />
+            </TabsContent>
 
-        <TabsContent value="reports" className="space-y-6">
-          <ScheduledReports embedded />
-        </TabsContent>
+            <TabsContent value="reports" className="space-y-6">
+              <ScheduledReports embedded />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );

@@ -45,6 +45,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { employeeGetsPto } from '@shared/constants/roles';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -103,6 +104,9 @@ function EmployeeDashboard() {
   const { toast } = useToast();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  // Check if user is eligible for PTO
+  const userGetsPto = employeeGetsPto({ department: user?.department, employmentType: user?.employmentType });
 
   // Event CRUD modal state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -368,12 +372,14 @@ function EmployeeDashboard() {
             <Edit className="w-4 h-4 mr-2" />
             Edit Profile
           </Button>
-          <Link to="/pto">
-            <Button size="sm">
-              <Calendar className="w-4 h-4 mr-2" />
-              Request PTO
-            </Button>
-          </Link>
+          {userGetsPto && (
+            <Link to="/pto">
+              <Button size="sm">
+                <Calendar className="w-4 h-4 mr-2" />
+                Request PTO
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -523,13 +529,15 @@ function EmployeeDashboard() {
               <CardTitle className="text-lg">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Link to="/pto" className="block">
-                <Button variant="ghost" className="w-full justify-start">
-                  <Calendar className="w-4 h-4 mr-3 text-blue-500" />
-                  Request Time Off
-                  <ChevronRight className="w-4 h-4 ml-auto" />
-                </Button>
-              </Link>
+              {userGetsPto && (
+                <Link to="/pto" className="block">
+                  <Button variant="ghost" className="w-full justify-start">
+                    <Calendar className="w-4 h-4 mr-3 text-blue-500" />
+                    Request Time Off
+                    <ChevronRight className="w-4 h-4 ml-auto" />
+                  </Button>
+                </Link>
+              )}
               <Link to="/documents" className="block">
                 <Button variant="ghost" className="w-full justify-start">
                   <FileText className="w-4 h-4 mr-3 text-green-500" />
@@ -558,9 +566,9 @@ function EmployeeDashboard() {
         {/* Center Column - Activity & PTO */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs defaultValue="calendar" className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className={`grid w-full ${userGetsPto ? 'grid-cols-6' : 'grid-cols-5'}`}>
               <TabsTrigger value="calendar">My Calendar</TabsTrigger>
-              <TabsTrigger value="pto">My PTO</TabsTrigger>
+              {userGetsPto && <TabsTrigger value="pto">My PTO</TabsTrigger>}
               <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
               <TabsTrigger value="pending">Pending Actions</TabsTrigger>
               <TabsTrigger value="activity">Recent Activity</TabsTrigger>

@@ -491,21 +491,30 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSour
   }
 });
 
+// Priority sourcer emails - these appear first in the list
+const PRIORITY_SOURCER_EMAILS = [
+  'jobs@theroofdocs.com',
+  'sima.popal@theroofdocs.com',
+];
+
 /**
  * GET /api/sourcers/available
  * Get all available users who can be assigned candidates
  * Now returns ALL active users (assignment-based access)
+ * Supports optional ?search= query param for filtering by name or email
+ * Sorts results: priority emails first, then by activeAssignments > 0, then alphabetically by firstName
  */
 router.get('/api/sourcers/available', requireAuth, requireManagerOrLeadSourcer, async (req, res) => {
   try {
+    const { search } = req.query;
     const allUsers = await storage.getAllUsers();
 
     // Return ALL active users - anyone can be assigned candidates
     // Assignment grants them access to see their assigned candidates
-    const availableUsers = allUsers.filter(user => user.isActive);
+    let availableUsers = allUsers.filter(user => user.isActive);
 
     // Get workload for each user
-    const usersWithWorkload = await Promise.all(
+    let usersWithWorkload = await Promise.all(
       availableUsers.map(async (user) => {
         const activeAssignments = await storage.getActiveAssignmentsByHrMemberId(user.id);
         return {
@@ -519,6 +528,36 @@ router.get('/api/sourcers/available', requireAuth, requireManagerOrLeadSourcer, 
         };
       })
     );
+
+    // Apply search filter if provided
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      usersWithWorkload = usersWithWorkload.filter(user =>
+        user.firstName.toLowerCase().includes(searchLower) ||
+        user.lastName.toLowerCase().includes(searchLower) ||
+        user.email.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Sort results:
+    // 1. Priority emails first
+    // 2. Then users with activeAssignments > 0
+    // 3. Then alphabetically by firstName
+    usersWithWorkload.sort((a, b) => {
+      const aIsPriority = PRIORITY_SOURCER_EMAILS.includes(a.email);
+      const bIsPriority = PRIORITY_SOURCER_EMAILS.includes(b.email);
+
+      // Priority emails first
+      if (aIsPriority && !bIsPriority) return -1;
+      if (!aIsPriority && bIsPriority) return 1;
+
+      // Then by activeAssignments (users with assignments come before users with 0)
+      if (a.activeAssignments > 0 && b.activeAssignments === 0) return -1;
+      if (a.activeAssignments === 0 && b.activeAssignments > 0) return 1;
+
+      // Finally alphabetically by firstName
+      return a.firstName.localeCompare(b.firstName);
+    });
 
     res.json(usersWithWorkload);
   } catch (error) {

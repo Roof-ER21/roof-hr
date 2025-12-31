@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/lib/auth';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
+import { employeeGetsPto, ADMIN_ROLES } from '@shared/constants/roles';
 
 const ptoSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
@@ -46,11 +47,17 @@ function PTO() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  
+
+  // Check if user is eligible for PTO
+  const userGetsPto = employeeGetsPto({ department: user?.department, employmentType: user?.employmentType });
+
   // Check if user can edit PTO policies (Ford Barsi or Ahmed Admin)
   const canEditPolicies = user?.email === 'ford.barsi@theroofdocs.com' ||
                          user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
                          user?.role === 'ADMIN';
+
+  // Check if user is an admin (for showing policy tabs)
+  const isAdmin = user?.role && ADMIN_ROLES.includes(user.role);
 
   // PTO Approvers - Only these users can approve/deny PTO requests
   const PTO_APPROVER_EMAILS = [
@@ -516,20 +523,24 @@ function PTO() {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-1'}`}>
           <TabsTrigger value="requests">PTO Requests</TabsTrigger>
-          <TabsTrigger value="company" disabled={!canEditPolicies}>
-            <Building className="w-4 h-4 mr-2" />
-            Company Policy
-          </TabsTrigger>
-          <TabsTrigger value="department" disabled={!canEditPolicies}>
-            <Users className="w-4 h-4 mr-2" />
-            Department Policies
-          </TabsTrigger>
-          <TabsTrigger value="individual" disabled={!canEditPolicies}>
-            <User className="w-4 h-4 mr-2" />
-            Individual Policies
-          </TabsTrigger>
+          {isAdmin && (
+            <>
+              <TabsTrigger value="company" disabled={!canEditPolicies}>
+                <Building className="w-4 h-4 mr-2" />
+                Company Policy
+              </TabsTrigger>
+              <TabsTrigger value="department" disabled={!canEditPolicies}>
+                <Users className="w-4 h-4 mr-2" />
+                Department Policies
+              </TabsTrigger>
+              <TabsTrigger value="individual" disabled={!canEditPolicies}>
+                <User className="w-4 h-4 mr-2" />
+                Individual Policies
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* PTO Requests Tab */}
@@ -658,19 +669,30 @@ function PTO() {
 
       <div className="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-secondary-950">PTO Requests</h1>
-          <p className="mt-2 text-sm text-secondary-600">
+          <h1 className="text-2xl font-semibold text-secondary-950 dark:text-white">PTO Requests</h1>
+          <p className="mt-2 text-sm text-secondary-600 dark:text-gray-400">
             Manage time off requests and approvals
           </p>
         </div>
         <div className="mt-4 sm:mt-0">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Request PTO
-              </Button>
-            </DialogTrigger>
+          {!userGetsPto ? (
+            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                <strong>PTO is not available for your role.</strong>
+                {user?.department === 'Sales' ? ' Sales employees are 1099 contractors and do not receive PTO.' :
+                 user?.employmentType && ['1099', 'CONTRACTOR', 'SUB_CONTRACTOR'].includes(user.employmentType) ? ' Contractors do not receive PTO benefits.' :
+                 ' Please contact HR for more information.'}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Request PTO
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Request Time Off</DialogTitle>
@@ -731,6 +753,7 @@ function PTO() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 

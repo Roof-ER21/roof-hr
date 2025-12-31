@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -26,7 +28,7 @@ import {
   TrendingUp, Award, Zap, GitCompare, MailIcon, X, FileUp, Pencil,
   Shield, Store, Building2, RefreshCw, User, ExternalLink,
   CheckCircle2, Loader2, FolderSync, Megaphone, Target,
-  Clipboard, Wrench, Eye
+  Clipboard, Wrench, Eye, Check, ChevronsUpDown
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { CandidateComparison } from '@/components/recruiting/candidate-comparison';
@@ -329,6 +331,7 @@ function ResumeUploaderContent() {
   const [selectedSourcer, setSelectedSourcer] = useState<string>('');
   const [referralName, setReferralName] = useState<string>('');
   const [isAssigning, setIsAssigning] = useState(false);
+  const [sourcerComboboxOpen, setSourcerComboboxOpen] = useState(false);
 
   // Query for recent uploads
   const { data: recentData, isLoading: isLoadingRecent, refetch: refetchRecent } = useQuery({
@@ -347,7 +350,7 @@ function ResumeUploaderContent() {
   });
 
   // Fetch available sourcers for assignment dialog
-  const { data: sourcers } = useQuery<{id: string; firstName: string; lastName: string; screenerColor?: string; activeAssignments?: number}[]>({
+  const { data: sourcers } = useQuery<{id: string; firstName: string; lastName: string; email?: string; screenerColor?: string; activeAssignments?: number}[]>({
     queryKey: ['/api/sourcers/available'],
     queryFn: async () => {
       const token = localStorage.getItem('token');
@@ -831,6 +834,7 @@ function ResumeUploaderContent() {
           setPendingCandidate(null);
           setSelectedSourcer('');
           setReferralName('');
+          setSourcerComboboxOpen(false);
         }
       }}>
         <DialogContent>
@@ -857,30 +861,101 @@ function ResumeUploaderContent() {
               </p>
             </div>
 
-            {/* Sourcer Selection */}
+            {/* Sourcer Selection - Searchable Combobox */}
             <div className="space-y-2">
               <Label>Assign Sourcer (optional)</Label>
-              <Select value={selectedSourcer} onValueChange={setSelectedSourcer} disabled={isAssigning}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a sourcer..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {sourcers?.map((sourcer) => (
-                    <SelectItem key={sourcer.id} value={sourcer.id}>
+              <Popover open={sourcerComboboxOpen} onOpenChange={setSourcerComboboxOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={sourcerComboboxOpen}
+                    className="w-full justify-between"
+                    disabled={isAssigning}
+                  >
+                    {selectedSourcer ? (
                       <div className="flex items-center gap-2">
                         <div
                           className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                          style={{ backgroundColor: sourcers?.find(s => s.id === selectedSourcer)?.screenerColor || '#6B7280' }}
                         />
-                        <span>{sourcer.firstName} {sourcer.lastName}</span>
-                        <span className="text-muted-foreground text-xs">
-                          ({sourcer.activeAssignments || 0} active)
+                        <span>
+                          {sourcers?.find(s => s.id === selectedSourcer)?.firstName}{' '}
+                          {sourcers?.find(s => s.id === selectedSourcer)?.lastName}
                         </span>
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    ) : (
+                      "Search or select a sourcer..."
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Type name or email to search..." />
+                    <CommandList>
+                      <CommandEmpty>No sourcer found.</CommandEmpty>
+                      <CommandGroup heading="Priority Sourcers">
+                        {sourcers?.filter(s =>
+                          s.email?.toLowerCase() === 'jobs@theroofdocs.com' ||
+                          s.email?.toLowerCase() === 'sima.popal@theroofdocs.com'
+                        ).map((sourcer) => (
+                          <CommandItem
+                            key={sourcer.id}
+                            value={`${sourcer.firstName} ${sourcer.lastName} ${sourcer.email || ''}`}
+                            onSelect={() => {
+                              setSelectedSourcer(sourcer.id);
+                              setSourcerComboboxOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${selectedSourcer === sourcer.id ? "opacity-100" : "opacity-0"}`}
+                            />
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
+                              style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                            />
+                            <span className="flex-1">{sourcer.firstName} {sourcer.lastName}</span>
+                            <span className="text-muted-foreground text-xs">
+                              ({sourcer.activeAssignments || 0} active)
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandGroup heading="All Sourcers">
+                        {sourcers?.filter(s =>
+                          s.email?.toLowerCase() !== 'jobs@theroofdocs.com' &&
+                          s.email?.toLowerCase() !== 'sima.popal@theroofdocs.com'
+                        ).map((sourcer) => (
+                          <CommandItem
+                            key={sourcer.id}
+                            value={`${sourcer.firstName} ${sourcer.lastName} ${sourcer.email || ''}`}
+                            onSelect={() => {
+                              setSelectedSourcer(sourcer.id);
+                              setSourcerComboboxOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${selectedSourcer === sourcer.id ? "opacity-100" : "opacity-0"}`}
+                            />
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
+                              style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                            />
+                            <span className="flex-1">{sourcer.firstName} {sourcer.lastName}</span>
+                            <span className="text-muted-foreground text-xs">
+                              ({sourcer.activeAssignments || 0} active)
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                jobs@ and sima@ appear first. Type to search by name or email.
+              </p>
             </div>
           </div>
           <DialogFooter>

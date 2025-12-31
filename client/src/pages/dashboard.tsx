@@ -17,10 +17,14 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { usePermissions } from '@/hooks/usePermissions';
+import { employeeGetsPto } from '@shared/constants/roles';
 
 function Dashboard() {
   const { user } = useAuth();
   const { isManager, canViewResource } = usePermissions();
+
+  // Check if user is eligible for PTO
+  const userGetsPto = employeeGetsPto({ department: user?.department, employmentType: user?.employmentType });
 
   const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['/api/dashboard/metrics'],
@@ -393,15 +397,17 @@ function Dashboard() {
               {/* Employee Actions */}
               {!isManager() && (
                 <>
-                  <Button 
-                    variant="outline" 
-                    className="flex flex-col items-center p-4 h-auto"
-                    onClick={() => window.location.href = '/pto'}
-                  >
-                    <Calendar className="w-8 h-8 text-primary mb-2" />
-                    <span className="text-sm font-medium">Request PTO</span>
-                  </Button>
-                  
+                  {userGetsPto && (
+                    <Button
+                      variant="outline"
+                      className="flex flex-col items-center p-4 h-auto"
+                      onClick={() => window.location.href = '/pto'}
+                    >
+                      <Calendar className="w-8 h-8 text-primary mb-2" />
+                      <span className="text-sm font-medium">Request PTO</span>
+                    </Button>
+                  )}
+
                   <Button 
                     variant="outline" 
                     className="flex flex-col items-center p-4 h-auto"
