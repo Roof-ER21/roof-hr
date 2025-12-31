@@ -150,8 +150,15 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManagerOrL
     // Send email notification to sourcer
     if (sendNotification && hrMember.email) {
       try {
+        // Use Gmail API via service account (fromUserEmail triggers impersonation)
+        // Send from the assigner's email if they have @theroofdocs.com, otherwise use system email
+        const senderEmail = user.email?.endsWith('@theroofdocs.com')
+          ? user.email
+          : 'hr@theroofdocs.com';
+
         await emailService.sendEmail({
           to: hrMember.email,
+          fromUserEmail: senderEmail, // Use Gmail API instead of SMTP
           subject: `New Candidate Assignment: ${candidate.firstName} ${candidate.lastName}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -184,6 +191,7 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManagerOrL
             </div>
           `,
         });
+        console.log(`[Sourcer Assignment] Email notification sent to ${hrMember.email}`);
       } catch (emailError) {
         console.error('Failed to send assignment notification email:', emailError);
         // Don't fail the assignment if email fails
@@ -426,8 +434,14 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSour
       // Send notification email
       if (sendNotifications && hrMember && hrMember.email) {
         try {
+          // Use Gmail API via service account
+          const senderEmail = user.email?.endsWith('@theroofdocs.com')
+            ? user.email
+            : 'hr@theroofdocs.com';
+
           await emailService.sendEmail({
             to: hrMember.email,
+            fromUserEmail: senderEmail, // Use Gmail API instead of SMTP
             subject: `New Candidate Assignment: ${candidate.firstName} ${candidate.lastName}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -453,6 +467,7 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSour
               </div>
             `,
           });
+          console.log(`[Bulk Assignment] Email notification sent to ${hrMember.email}`);
         } catch (emailError) {
           console.error(`Failed to send assignment notification to ${hrMember.email}:`, emailError);
         }
