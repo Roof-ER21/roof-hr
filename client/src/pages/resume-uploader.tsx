@@ -122,6 +122,8 @@ export default function ResumeUploaderPage() {
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
   const [pendingCandidate, setPendingCandidate] = useState<any>(null);
   const [selectedSourcer, setSelectedSourcer] = useState<string>('');
+  const [referralName, setReferralName] = useState<string>('');
+  const [isAssigning, setIsAssigning] = useState(false);
 
   // Query for recent uploads
   const { data: recentData, isLoading: isLoadingRecent, refetch: refetchRecent } = useQuery({
@@ -249,8 +251,30 @@ export default function ResumeUploaderPage() {
 
   // Handle sourcer assignment completion
   const handleAssignmentComplete = async () => {
-    if (selectedSourcer && pendingCandidate) {
-      try {
+    if (!pendingCandidate) return;
+
+    setIsAssigning(true);
+
+    try {
+      // Update candidate with referral name if provided
+      if (referralName.trim()) {
+        const updateResponse = await fetch(`/api/candidates/${pendingCandidate.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({ referralName: referralName.trim() }),
+        });
+
+        if (!updateResponse.ok) {
+          console.error('[Referral] Failed to save referral name');
+        }
+      }
+
+      // Assign sourcer if selected
+      if (selectedSourcer) {
         const response = await fetch(`/api/candidates/${pendingCandidate.id}/assign-sourcer`, {
           method: 'POST',
           headers: {
@@ -269,29 +293,32 @@ export default function ResumeUploaderPage() {
         const sourcerName = sourcers?.find(s => s.id === selectedSourcer);
         toast({
           title: 'Candidate Created & Assigned',
-          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}`,
+          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
         });
-      } catch (error: any) {
-        console.error('[Assignment] Failed:', error);
+      } else {
         toast({
-          title: 'Assignment Failed',
-          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} created but assignment failed: ${error.message}`,
-          variant: 'destructive',
+          title: 'Resume Uploaded',
+          description: `Created candidate: ${pendingCandidate.firstName} ${pendingCandidate.lastName}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
         });
       }
-    } else {
+    } catch (error: any) {
+      console.error('[Assignment] Failed:', error);
       toast({
-        title: 'Resume Uploaded',
-        description: `Created candidate: ${pendingCandidate?.firstName} ${pendingCandidate?.lastName}`,
+        title: 'Assignment Failed',
+        description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} created but assignment failed: ${error.message}`,
+        variant: 'destructive',
       });
+    } finally {
+      // Always clean up and close dialog
+      setIsAssigning(false);
+      setShowAssignmentDialog(false);
+      setPendingCandidate(null);
+      setSelectedSourcer('');
+      setReferralName('');
+      refetchRecent();
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sourcers/available'] });
     }
-    // Clean up
-    setShowAssignmentDialog(false);
-    setPendingCandidate(null);
-    setSelectedSourcer('');
-    refetchRecent();
-    queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/sourcers/available'] });
   };
 
   return (
@@ -586,48 +613,75 @@ export default function ResumeUploaderPage() {
       </div>
 
       {/* Sourcer Assignment Dialog */}
-      <Dialog open={showAssignmentDialog} onOpenChange={setShowAssignmentDialog}>
+      <Dialog open={showAssignmentDialog} onOpenChange={(open) => {
+        if (!open && !isAssigning) {
+          setShowAssignmentDialog(false);
+          setPendingCandidate(null);
+          setSelectedSourcer('');
+          setReferralName('');
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign Sourcer</DialogTitle>
+            <DialogTitle>Candidate Details</DialogTitle>
             <DialogDescription>
               Candidate <strong>{pendingCandidate?.firstName} {pendingCandidate?.lastName}</strong> created successfully.
-              Would you like to assign a sourcer to this candidate?
+              Add optional details before continuing.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="sourcer-select">Select Sourcer (optional)</Label>
-            <Select value={selectedSourcer} onValueChange={setSelectedSourcer}>
-              <SelectTrigger id="sourcer-select" className="mt-2">
-                <SelectValue placeholder="Select a sourcer..." />
-              </SelectTrigger>
-              <SelectContent>
-                {sourcers?.map((sourcer) => (
-                  <SelectItem key={sourcer.id} value={sourcer.id}>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
-                      />
-                      <span>{sourcer.firstName} {sourcer.lastName}</span>
-                      {sourcer.activeAssignments !== undefined && (
-                        <span className="text-muted-foreground text-xs">
-                          ({sourcer.activeAssignments} active)
-                        </span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-4 py-4">
+            {/* Referral Name Input */}
+            <div className="space-y-2">
+              <Label htmlFor="referral-name">Referred By (optional)</Label>
+              <Input
+                id="referral-name"
+                placeholder="Enter referrer's name..."
+                value={referralName}
+                onChange={(e) => setReferralName(e.target.value)}
+                disabled={isAssigning}
+              />
+              <p className="text-xs text-muted-foreground">
+                If this candidate was referred by someone, enter their name here
+              </p>
+            </div>
+
+            {/* Sourcer Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="sourcer-select">Assign Sourcer (optional)</Label>
+              <Select value={selectedSourcer} onValueChange={setSelectedSourcer} disabled={isAssigning}>
+                <SelectTrigger id="sourcer-select">
+                  <SelectValue placeholder="Select a sourcer..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {sourcers?.map((sourcer) => (
+                    <SelectItem key={sourcer.id} value={sourcer.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
+                        />
+                        <span>{sourcer.firstName} {sourcer.lastName}</span>
+                        {sourcer.activeAssignments !== undefined && (
+                          <span className="text-muted-foreground text-xs">
+                            ({sourcer.activeAssignments} active)
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
+              disabled={isAssigning}
               onClick={() => {
                 setShowAssignmentDialog(false);
                 setPendingCandidate(null);
                 setSelectedSourcer('');
+                setReferralName('');
                 toast({
                   title: 'Resume Uploaded',
                   description: `Created candidate: ${pendingCandidate?.firstName} ${pendingCandidate?.lastName}`,
@@ -638,8 +692,13 @@ export default function ResumeUploaderPage() {
             >
               Skip
             </Button>
-            <Button onClick={handleAssignmentComplete}>
-              {selectedSourcer ? 'Assign & Continue' : 'Continue'}
+            <Button onClick={handleAssignmentComplete} disabled={isAssigning}>
+              {isAssigning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : selectedSourcer ? 'Assign & Continue' : 'Continue'}
             </Button>
           </DialogFooter>
         </DialogContent>
