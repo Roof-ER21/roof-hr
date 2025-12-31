@@ -13,6 +13,7 @@ import {
   SUPER_ADMIN_EMAIL,
   canAccessOnboardingChecklist,
   ONBOARDING_ADMIN_EMAILS,
+  getRestrictedPages,
 } from '@shared/constants/roles';
 import {
   LayoutDashboard,
@@ -178,6 +179,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               .filter(item => {
                 // Ahmed always sees all menu items (super admin email fallback)
                 if (user?.email === SUPER_ADMIN_EMAIL) return true;
+                // Check for page restrictions (email-based hiding)
+                const restrictedPages = getRestrictedPages(user);
+                if (restrictedPages.includes(item.name)) return false;
                 // Special case: Show Recruiting if user has assigned candidates
                 if (item.name === 'Recruiting' && hasAssignedCandidates) return true;
                 return !user?.role || item.roles.includes(user.role);

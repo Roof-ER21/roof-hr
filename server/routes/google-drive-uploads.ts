@@ -297,7 +297,7 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth as any, requir
 router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
-    const { category, assignedTo } = req.body;
+    const { category, assignedTo, referralName } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ error: 'Resume file is required' });
@@ -429,7 +429,8 @@ router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any
       stage: 'Application Review',
       appliedDate: new Date(),
       parsedResumeData: JSON.stringify(parsedData),
-      notes: `Auto-created from resume upload (${req.file.originalname}). Skills: ${(parsedData.skills || []).join(', ')}${!parsedData.email ? ' [Email not extracted]' : ''}${!parsedData.phone ? ' [Phone not extracted]' : ''}`
+      notes: `Auto-created from resume upload (${req.file.originalname}). Skills: ${(parsedData.skills || []).join(', ')}${!parsedData.email ? ' [Email not extracted]' : ''}${!parsedData.phone ? ' [Phone not extracted]' : ''}`,
+      referralName: referralName || null
     });
 
     console.log('[Resume Upload] Candidate created:', candidate.id, candidate.firstName, candidate.lastName);

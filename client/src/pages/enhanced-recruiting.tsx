@@ -26,7 +26,7 @@ import {
   TrendingUp, Award, Zap, GitCompare, MailIcon, X, FileUp, Pencil,
   Shield, Store, Building2, RefreshCw, User, ExternalLink,
   CheckCircle2, Loader2, FolderSync, Megaphone, Target,
-  Clipboard, Wrench
+  Clipboard, Wrench, Eye
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { CandidateComparison } from '@/components/recruiting/candidate-comparison';
@@ -74,7 +74,8 @@ const stages = {
   DEAD: { name: 'Dead', next: null, color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 font-semibold' },
   // Keep these for internal status but combine in display
   DEAD_BY_US: { name: 'DEAD by us', next: null, color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
-  DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 font-semibold' }
+  DEAD_BY_CANDIDATE: { name: 'DEAD by candidate', next: null, color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 font-semibold' },
+  NO_SHOW: { name: 'No Show', next: null, color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 font-semibold' }
 };
 
 // Display stages for Kanban view (combines DEAD_BY_US and DEAD_BY_CANDIDATE into one column)
@@ -119,10 +120,11 @@ function EditCandidateForm({
   const [phone, setPhone] = useState(candidate.phone || '');
   const [position, setPosition] = useState(candidate.position);
   const [notes, setNotes] = useState(candidate.notes || '');
+  const [referralName, setReferralName] = useState(candidate.referralName || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ firstName, lastName, email, phone, position, notes });
+    onSubmit({ firstName, lastName, email, phone, position, notes, referralName });
   };
 
   return (
@@ -188,6 +190,16 @@ function EditCandidateForm({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="edit-referralName">Referred By</Label>
+        <Input
+          id="edit-referralName"
+          value={referralName}
+          onChange={(e) => setReferralName(e.target.value)}
+          placeholder="Who referred this candidate?"
         />
       </div>
 
@@ -860,6 +872,7 @@ export default function EnhancedRecruiting() {
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [filterSourcer, setFilterSourcer] = useState<string>('ALL');
+  const [filterReferral, setFilterReferral] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'interviews' | 'campaigns' | 'workflows' | 'resume-uploads'>('kanban');
   const [showInterviewScheduler, setShowInterviewScheduler] = useState(false);
@@ -872,6 +885,9 @@ export default function EnhancedRecruiting() {
   // Dead type selection modal
   const [showDeadTypeModal, setShowDeadTypeModal] = useState(false);
   const [candidateForDeadType, setCandidateForDeadType] = useState<Candidate | null>(null);
+  // Resume preview
+  const [showResumePreview, setShowResumePreview] = useState(false);
+  const [previewResumeUrl, setPreviewResumeUrl] = useState<string | null>(null);
   // Hire modal
   const [showHireModal, setShowHireModal] = useState(false);
   const [candidateToHire, setCandidateToHire] = useState<Candidate | null>(null);
@@ -902,7 +918,8 @@ export default function EnhancedRecruiting() {
     phone: z.string().min(1, 'Phone is required'),
     position: z.string().min(1, 'Position is required'),
     resumeUrl: z.string().optional(),
-    notes: z.string().optional()
+    notes: z.string().optional(),
+    referralName: z.string().optional()
   });
 
   const newHireFormSchema = z.object({
@@ -931,7 +948,8 @@ export default function EnhancedRecruiting() {
       phone: '',
       position: '',
       resumeUrl: '',
-      notes: ''
+      notes: '',
+      referralName: ''
     }
   });
 
@@ -1307,14 +1325,16 @@ export default function EnhancedRecruiting() {
   const filteredCandidates = candidates.filter(candidate => {
     // Handle combined DEAD filter option
     const matchesFilter = filterStatus === 'ALL' ||
-      (filterStatus === 'DEAD' ? (candidate.status === 'DEAD_BY_US' || candidate.status === 'DEAD_BY_CANDIDATE') : candidate.status === filterStatus);
+      (filterStatus === 'DEAD' ? (candidate.status === 'DEAD_BY_US' || candidate.status === 'DEAD_BY_CANDIDATE' || candidate.status === 'NO_SHOW') : candidate.status === filterStatus);
     const matchesPosition = filterPosition === 'ALL' || candidate.position === filterPosition;
     const matchesSourcer = filterSourcer === 'ALL' || (candidate as any).assignedTo === filterSourcer;
+    const matchesReferral = filterReferral === '' ||
+      (candidate.referralName && candidate.referralName.toLowerCase().includes(filterReferral.toLowerCase()));
     const matchesSearch = searchTerm === '' ||
       `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.position.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesPosition && matchesSourcer && matchesSearch;
+    return matchesFilter && matchesPosition && matchesSourcer && matchesReferral && matchesSearch;
   });
 
   const candidatesByStatus = {
@@ -1323,8 +1343,8 @@ export default function EnhancedRecruiting() {
     INTERVIEW: filteredCandidates.filter(c => c.status === 'INTERVIEW'),
     OFFER: filteredCandidates.filter(c => c.status === 'OFFER'),
     HIRED: filteredCandidates.filter(c => c.status === 'HIRED'),
-    // Combined DEAD column - shows both DEAD_BY_US and DEAD_BY_CANDIDATE
-    DEAD: filteredCandidates.filter(c => c.status === 'DEAD_BY_US' || c.status === 'DEAD_BY_CANDIDATE'),
+    // Combined DEAD column - shows DEAD_BY_US, DEAD_BY_CANDIDATE, and NO_SHOW
+    DEAD: filteredCandidates.filter(c => c.status === 'DEAD_BY_US' || c.status === 'DEAD_BY_CANDIDATE' || c.status === 'NO_SHOW'),
   };
   
   // Helper function to get next status
@@ -1412,7 +1432,7 @@ export default function EnhancedRecruiting() {
     // Directly update status without questionnaire
     updateCandidateMutation.mutate({
       id: candidateId,
-      data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+      data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
     });
   };
 
@@ -1605,6 +1625,13 @@ export default function EnhancedRecruiting() {
                   </SelectContent>
                 </Select>
               )}
+              {/* Referral filter */}
+              <Input
+                placeholder="Filter by referral..."
+                value={filterReferral}
+                onChange={(e) => setFilterReferral(e.target.value)}
+                className="w-[180px]"
+              />
             </div>
 
             {/* Content based on view mode */}
@@ -1686,7 +1713,7 @@ export default function EnhancedRecruiting() {
                             // Directly update status without questionnaire
                             updateCandidateMutation.mutate({
                               id: candidateId,
-                              data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+                              data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
                             });
                           }}
                           onAnalyze={(candidate) => analyzeCandidateMutation.mutate(candidate.id)}
@@ -1782,7 +1809,7 @@ export default function EnhancedRecruiting() {
                           // Directly update status without questionnaire
                           updateCandidateMutation.mutate({
                             id: candidateId,
-                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
                           });
                         }}
                         onAnalyze={(candidate) => analyzeCandidateMutation.mutate(candidate.id)}
@@ -1850,7 +1877,7 @@ export default function EnhancedRecruiting() {
                           // Directly update status without questionnaire
                           updateCandidateMutation.mutate({
                             id: candidate.id,
-                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' }
+                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
                           });
                         }}
                       >
@@ -2089,6 +2116,22 @@ export default function EnhancedRecruiting() {
               Dead by Candidate
             </Button>
             <Button
+              className="bg-gray-600 hover:bg-gray-700 text-white"
+              onClick={() => {
+                if (candidateForDeadType) {
+                  updateCandidateMutation.mutate({
+                    id: candidateForDeadType.id,
+                    data: { status: 'NO_SHOW' }
+                  });
+                  setShowDeadTypeModal(false);
+                  setCandidateForDeadType(null);
+                }
+              }}
+            >
+              <XCircle className="mr-2 h-4 w-4" />
+              No Show
+            </Button>
+            <Button
               variant="outline"
               onClick={() => {
                 setShowDeadTypeModal(false);
@@ -2097,6 +2140,78 @@ export default function EnhancedRecruiting() {
             >
               Cancel
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resume Preview Dialog */}
+      <Dialog open={showResumePreview} onOpenChange={setShowResumePreview}>
+        <DialogContent className="max-w-4xl h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              Resume Preview
+              <div className="flex gap-2">
+                {previewResumeUrl && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(previewResumeUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-1" />
+                      Open in New Tab
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = previewResumeUrl;
+                        link.download = 'resume';
+                        link.click();
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </Button>
+                  </>
+                )}
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 h-full">
+            {previewResumeUrl ? (
+              previewResumeUrl.includes('drive.google.com') ? (
+                <iframe
+                  src={previewResumeUrl.replace('/view', '/preview')}
+                  className="w-full h-full rounded-lg border"
+                  title="Resume Preview"
+                />
+              ) : previewResumeUrl.endsWith('.pdf') || previewResumeUrl.includes('.pdf') ? (
+                <iframe
+                  src={previewResumeUrl}
+                  className="w-full h-full rounded-lg border"
+                  title="Resume Preview"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <FileText className="h-16 w-16 mb-4" />
+                  <p>Preview not available for this file type</p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => window.open(previewResumeUrl, '_blank')}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    Open File
+                  </Button>
+                </div>
+              )
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                No resume available
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -2257,6 +2372,12 @@ export default function EnhancedRecruiting() {
                       </Badge>
                     </div>
                   )}
+                  {selectedCandidate.referralName && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Referred By:</span>
+                      <span className="ml-2 font-medium">{selectedCandidate.referralName}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -2279,6 +2400,19 @@ export default function EnhancedRecruiting() {
                   <Pencil className="h-4 w-4 mr-1" />
                   Edit Candidate
                 </Button>
+
+                {selectedCandidate.resumeUrl && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPreviewResumeUrl(selectedCandidate.resumeUrl!);
+                      setShowResumePreview(true);
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View Resume
+                  </Button>
+                )}
 
                 <Button
                   variant="outline"
@@ -2447,7 +2581,16 @@ export default function EnhancedRecruiting() {
                 rows={3}
               />
             </div>
-            
+
+            <div>
+              <Label htmlFor="referralName">Referred By (optional)</Label>
+              <Input
+                id="referralName"
+                {...candidateForm.register('referralName')}
+                placeholder="Who referred this candidate?"
+              />
+            </div>
+
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsCandidateDialogOpen(false)}>
                 Cancel

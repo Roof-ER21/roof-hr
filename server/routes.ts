@@ -1892,7 +1892,8 @@ router.post('/api/candidates', requireAuth, requireManager, async (req, res) => 
       assignedTo: req.body.assignedTo,
       recruiterId: req.body.recruiterId,
       customTags: req.body.customTags || [],
-      questionnaireCompleted: req.body.questionnaireCompleted || false
+      questionnaireCompleted: req.body.questionnaireCompleted || false,
+      referralName: req.body.referralName || null
     };
 
     const data = insertCandidateSchema.parse(mappedData);

@@ -314,7 +314,7 @@ export const candidates = pgTable('candidates', {
   phone: text('phone').notNull(),
   position: text('position').notNull(),
   resumeUrl: text('resume_url'),
-  status: text('status').$type<'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE'>().notNull().default('APPLIED'),
+  status: text('status').$type<'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW'>().notNull().default('APPLIED'),
   stage: text('stage').notNull(),
   appliedDate: timestamp('applied_date').notNull(),
   notes: text('notes'),
@@ -351,6 +351,8 @@ export const candidates = pgTable('candidates', {
   interviewScreeningDate: timestamp('interview_screening_date'),
   interviewScreeningNotes: text('interview_screening_notes'),
   interviewScreeningBy: text('interview_screening_by'), // User ID who conducted screening
+  // Referral tracking
+  referralName: text('referral_name'), // Who referred this candidate (simple text, not FK)
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

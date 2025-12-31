@@ -85,6 +85,7 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
           stage: 'SCREENING',
           appliedDate: candidateData.appliedDate || new Date(),
           notes: candidateData.notes || null,
+          referralName: candidateData.referralName || null,
         });
 
         // Create source record

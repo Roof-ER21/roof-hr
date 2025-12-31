@@ -359,3 +359,22 @@ export function getRoleDisplayName(role: string | undefined | null): string {
   if (!role) return 'Unknown';
   return ROLE_DISPLAY_NAMES[role] || role;
 }
+
+// ============================================================================
+// PAGE ACCESS RESTRICTIONS
+// ============================================================================
+// Users who have restricted access to certain navigation items
+// Even though they may have a manager role, these pages are hidden
+export const RESTRICTED_PAGE_ACCESS: Record<string, string[]> = {
+  // Bruno Nacipucha - hide Employees and Facilities sections
+  'bruno.n@theroofdocs.com': ['Employees', 'Facilities'],
+};
+
+/**
+ * Get the pages that should be hidden for a specific user
+ * Returns an empty array if no restrictions
+ */
+export function getRestrictedPages(user: { email?: string } | null): string[] {
+  if (!user?.email) return [];
+  return RESTRICTED_PAGE_ACCESS[user.email.toLowerCase()] || [];
+}
