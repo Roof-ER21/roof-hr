@@ -412,14 +412,42 @@ router.post('/api/contracts/generate-from-template',
 router.get('/api/contracts', requireAuth, async (req, res) => {
   try {
     const user = req.user!;
-    // If user is manager/admin, show all contracts. Otherwise show their own.
-    let contracts;
-    if (['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'HR_MANAGER'].includes(user.role)) {
-      contracts = await storage.getAllEmployeeContracts();
-    } else {
-      contracts = await storage.getEmployeeContractsByEmployeeId(user.id);
+    const allContracts = await storage.getAllEmployeeContracts();
+
+    // Admin roles - see all contracts
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    if (isAdmin) {
+      res.json(allContracts || []);
+      return;
     }
-    res.json(contracts || []);
+
+    // Manager role - see own contracts + contracts they created + direct reports' contracts
+    if (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+      // Get direct reports (users where this manager is their primaryManagerId)
+      const allUsers = await storage.getAllUsers();
+      const directReportIds = allUsers
+        .filter(u => u.primaryManagerId === user.id)
+        .map(u => u.id);
+
+      const filteredContracts = allContracts.filter(contract => {
+        // Their own contracts
+        if (contract.employeeId === user.id) return true;
+        // Contracts they created
+        if (contract.createdBy === user.id) return true;
+        // Direct reports' contracts
+        if (contract.employeeId && directReportIds.includes(contract.employeeId)) return true;
+        return false;
+      });
+
+      res.json(filteredContracts || []);
+      return;
+    }
+
+    // Regular employees - only see their own contracts
+    const ownContracts = allContracts.filter(contract => contract.employeeId === user.id);
+    res.json(ownContracts || []);
   } catch (error) {
     console.error('Error fetching contracts:', error);
     res.status(500).json({ error: 'Failed to fetch contracts' });
@@ -429,8 +457,38 @@ router.get('/api/contracts', requireAuth, async (req, res) => {
 // Get all employee contracts
 router.get('/api/employee-contracts', requireAuth, requireManager, async (req, res) => {
   try {
-    const contracts = await storage.getAllEmployeeContracts();
-    res.json(contracts);
+    const user = req.user!;
+    const allContracts = await storage.getAllEmployeeContracts();
+
+    // Admin roles - see all contracts
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    if (isAdmin) {
+      res.json(allContracts);
+      return;
+    }
+
+    // Manager role - see own contracts + contracts they created + direct reports' contracts
+    if (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+      const allUsers = await storage.getAllUsers();
+      const directReportIds = allUsers
+        .filter(u => u.primaryManagerId === user.id)
+        .map(u => u.id);
+
+      const filteredContracts = allContracts.filter(contract => {
+        if (contract.employeeId === user.id) return true;
+        if (contract.createdBy === user.id) return true;
+        if (contract.employeeId && directReportIds.includes(contract.employeeId)) return true;
+        return false;
+      });
+
+      res.json(filteredContracts);
+      return;
+    }
+
+    // Fallback - shouldn't reach here with requireManager but just in case
+    res.json([]);
   } catch (error) {
     console.error('Error fetching employee contracts:', error);
     res.status(500).json({ error: 'Failed to fetch employee contracts' });
@@ -441,13 +499,29 @@ router.get('/api/employee-contracts', requireAuth, requireManager, async (req, r
 router.get('/api/employee-contracts/employee/:employeeId', requireAuth, async (req, res) => {
   try {
     const user = req.user!;
-    // Users can view their own contracts, managers can view any
-    if (user.id !== req.params.employeeId &&
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
-      return res.status(403).json({ error: 'Can only view your own contracts' });
+    const requestedEmployeeId = req.params.employeeId;
+
+    // Admin roles can view any
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    // User viewing their own contracts
+    const isOwnContracts = user.id === requestedEmployeeId;
+
+    // Manager viewing direct report's contracts
+    let isDirectReport = false;
+    if (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+      const targetEmployee = await storage.getUserById(requestedEmployeeId);
+      if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
+        isDirectReport = true;
+      }
     }
 
-    const contracts = await storage.getEmployeeContractsByEmployeeId(req.params.employeeId);
+    if (!isAdmin && !isOwnContracts && !isDirectReport) {
+      return res.status(403).json({ error: 'Can only view your own or direct reports\' contracts' });
+    }
+
+    const contracts = await storage.getEmployeeContractsByEmployeeId(requestedEmployeeId);
     res.json(contracts);
   } catch (error) {
     console.error('Error fetching employee contracts:', error);
@@ -464,9 +538,26 @@ router.get('/api/employee-contracts/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Contract not found' });
     }
 
-    // Check access permissions
-    if (contract.employeeId !== user.id &&
-        !['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role)) {
+    // Admin roles can view any contract
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    // User viewing their own contract
+    const isOwnContract = contract.employeeId === user.id;
+
+    // User created this contract
+    const isCreator = contract.createdBy === user.id;
+
+    // Manager viewing direct report's contract
+    let isDirectReportContract = false;
+    if (contract.employeeId && (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER')) {
+      const targetEmployee = await storage.getUserById(contract.employeeId);
+      if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
+        isDirectReportContract = true;
+      }
+    }
+
+    if (!isAdmin && !isOwnContract && !isCreator && !isDirectReportContract) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -576,10 +667,29 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Contract not found' });
     }
 
-    // Check permissions - employee can update some fields, managers can update all
+    // Admin roles can update any contract
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    // Check permissions - employee can update some fields, authorized managers can update all
     const isEmployee = contract.employeeId === user.id;
-    const isManager = ['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER'].includes(user.role);
-    
+    const isCreator = contract.createdBy === user.id;
+
+    // Manager can only update if they're the creator or it's their direct report's contract
+    let canManagerUpdate = false;
+    if (!isAdmin && (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER')) {
+      if (isCreator) {
+        canManagerUpdate = true;
+      } else if (contract.employeeId) {
+        const targetEmployee = await storage.getUserById(contract.employeeId);
+        if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
+          canManagerUpdate = true;
+        }
+      }
+    }
+
+    const isManager = isAdmin || canManagerUpdate;
+
     if (!isEmployee && !isManager) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -656,6 +766,33 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 // Delete employee contract
 router.delete('/api/employee-contracts/:id', requireAuth, requireManager, async (req, res) => {
   try {
+    const user = req.user!;
+    const contract = await storage.getEmployeeContractById(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+
+    // Admin roles can delete any contract
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    if (!isAdmin) {
+      // Manager can only delete if they created it or it's their direct report's contract
+      const isCreator = contract.createdBy === user.id;
+      let isDirectReportContract = false;
+
+      if (contract.employeeId && (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER')) {
+        const targetEmployee = await storage.getUserById(contract.employeeId);
+        if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
+          isDirectReportContract = true;
+        }
+      }
+
+      if (!isCreator && !isDirectReportContract) {
+        return res.status(403).json({ error: 'Can only delete contracts you created or for your direct reports' });
+      }
+    }
+
     await storage.deleteEmployeeContract(req.params.id);
     res.json({ success: true });
   } catch (error) {

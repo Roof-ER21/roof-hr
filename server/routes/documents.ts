@@ -78,8 +78,32 @@ router.get('/', requireAuth, async (req, res) => {
 
     // Get documents based on user role and visibility
     const documents = await storage.getAllDocuments();
-    // Filter by role visibility
-    const filteredDocs = documents.filter(doc => hasDocumentAccess(doc, user.role));
+
+    // Admin roles get all documents based on visibility
+    const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN'];
+    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+
+    let filteredDocs;
+    if (isAdmin) {
+      // Admins see all documents based on visibility rules
+      filteredDocs = documents.filter(doc => hasDocumentAccess(doc, user.role, user.id, true));
+    } else if (user.role === 'MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+      // Managers only see: their own docs + company-wide docs (PUBLIC/EMPLOYEE visibility)
+      filteredDocs = documents.filter(doc => {
+        // Own documents
+        if (doc.createdBy === user.id) return true;
+        // Company-wide documents (PUBLIC or EMPLOYEE visibility)
+        if (doc.visibility === 'PUBLIC' || doc.visibility === 'EMPLOYEE') return true;
+        return false;
+      });
+    } else {
+      // Regular employees only see their own docs + company-wide docs
+      filteredDocs = documents.filter(doc => {
+        if (doc.createdBy === user.id) return true;
+        if (doc.visibility === 'PUBLIC' || doc.visibility === 'EMPLOYEE') return true;
+        return false;
+      });
+    }
 
     res.json(filteredDocs);
   } catch (error) {
