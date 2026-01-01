@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { UserPlus, Search, Edit, Trash2, RefreshCw, Upload, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -36,6 +37,7 @@ function Employees() {
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isAdmin } = usePermissions();
 
   const { data: employees, isLoading } = useQuery({
     queryKey: ['/api/users'],
@@ -222,13 +224,15 @@ function Employees() {
             )}
             Export to Sheets
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Add Employee
-              </Button>
-            </DialogTrigger>
+          {/* Add Employee - Admin only */}
+          {isAdmin() && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Add Employee
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Add New Employee</DialogTitle>
@@ -369,6 +373,7 @@ function Employees() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
@@ -405,7 +410,7 @@ function Employees() {
                   <th className="text-left py-3 px-4">Employment Type</th>
                   <th className="text-left py-3 px-4">Hire Date</th>
                   <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-left py-3 px-4">Actions</th>
+                  {isAdmin() && <th className="text-left py-3 px-4">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -439,16 +444,19 @@ function Employees() {
                         {employee.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex space-x-2">
-                        <Button variant="ghost" size="sm">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
+                    {/* Actions column - Admin only */}
+                    {isAdmin() && (
+                      <td className="py-3 px-4">
+                        <div className="flex space-x-2">
+                          <Button variant="ghost" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

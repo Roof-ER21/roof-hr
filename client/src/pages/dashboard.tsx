@@ -21,7 +21,7 @@ import { employeeGetsPto } from '@shared/constants/roles';
 
 function Dashboard() {
   const { user } = useAuth();
-  const { isManager, canViewResource } = usePermissions();
+  const { isManager, isAdmin, canViewResource } = usePermissions();
 
   // Check if user is eligible for PTO
   const userGetsPto = employeeGetsPto({ department: user?.department, employmentType: user?.employmentType });
@@ -426,10 +426,10 @@ function Dashboard() {
                     <span className="text-sm font-medium">My Documents</span>
                   </Button>
                   
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="flex flex-col items-center p-4 h-auto"
-                    onClick={() => window.location.href = '/performance'}
+                    onClick={() => window.location.href = '/reviews'}
                   >
                     <TrendingUp className="w-8 h-8 text-primary mb-2" />
                     <span className="text-sm font-medium">My Reviews</span>
@@ -458,17 +458,20 @@ function Dashboard() {
                     <span className="text-sm font-medium">Approve PTO</span>
                   </Button>
                   
-                  <Button 
-                    variant="outline" 
-                    className="flex flex-col items-center p-4 h-auto"
-                    onClick={() => window.location.href = '/performance'}
-                  >
-                    <TrendingUp className="w-8 h-8 text-primary mb-2" />
-                    <span className="text-sm font-medium">Team Reviews</span>
-                  </Button>
-                  
-                  <Button 
-                    variant="outline" 
+                  {/* Team Reviews - Admin only */}
+                  {isAdmin() && (
+                    <Button
+                      variant="outline"
+                      className="flex flex-col items-center p-4 h-auto"
+                      onClick={() => window.location.href = '/reviews'}
+                    >
+                      <TrendingUp className="w-8 h-8 text-primary mb-2" />
+                      <span className="text-sm font-medium">Team Reviews</span>
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
                     className="flex flex-col items-center p-4 h-auto"
                     onClick={() => window.location.href = '/recruiting'}
                   >
