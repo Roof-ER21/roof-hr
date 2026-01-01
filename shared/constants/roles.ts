@@ -14,6 +14,7 @@
 // Level 8: FIELD_TECH - Field worker access
 // Level 9: SALES_REP - Sales-specific access
 // Level 10: CONTRACTOR - Limited contractor access
+// Level 11: SOURCER - Recruiting-focused role (assigned candidates only)
 // ============================================================================
 
 export const ROLE = {
@@ -28,6 +29,7 @@ export const ROLE = {
   FIELD_TECH: 'FIELD_TECH',
   SALES_REP: 'SALES_REP',
   CONTRACTOR: 'CONTRACTOR',
+  SOURCER: 'SOURCER',
 
   // Legacy aliases for backward compatibility during migration
   TRUE_ADMIN: 'SYSTEM_ADMIN',  // Maps to SYSTEM_ADMIN
@@ -47,6 +49,7 @@ export type UserRole =
   | 'FIELD_TECH'
   | 'SALES_REP'
   | 'CONTRACTOR'
+  | 'SOURCER'
   // Legacy roles (for backward compatibility during migration)
   | 'TRUE_ADMIN'
   | 'ADMIN'
@@ -99,6 +102,11 @@ export const HR_ROLES: string[] = [
   'ADMIN',
 ];
 
+// Level 5: Sourcer - recruiting-focused access
+export const SOURCER_ROLES: string[] = [
+  'SOURCER',
+];
+
 // All roles that have basic system access
 export const ALL_ROLES: string[] = [
   'SYSTEM_ADMIN',
@@ -111,6 +119,7 @@ export const ALL_ROLES: string[] = [
   'FIELD_TECH',
   'SALES_REP',
   'CONTRACTOR',
+  'SOURCER',
   // Legacy
   'TRUE_ADMIN',
   'ADMIN',
@@ -349,6 +358,7 @@ export const ROLE_DISPLAY_NAMES: Record<string, string> = {
   FIELD_TECH: 'Field Technician',
   SALES_REP: 'Sales Representative',
   CONTRACTOR: 'Contractor',
+  SOURCER: 'Sourcer',
   // Legacy
   TRUE_ADMIN: 'System Administrator',
   ADMIN: 'HR Administrator',
@@ -377,4 +387,35 @@ export const RESTRICTED_PAGE_ACCESS: Record<string, string[]> = {
 export function getRestrictedPages(user: { email?: string } | null): string[] {
   if (!user?.email) return [];
   return RESTRICTED_PAGE_ACCESS[user.email.toLowerCase()] || [];
+}
+
+// ============================================================================
+// FACILITIES ACCESS (Special email-based access)
+// ============================================================================
+// Non-managers who need Facilities page access
+export const FACILITIES_ACCESS_EMAILS = [
+  'alex.ortega@theroofdocs.com',
+];
+
+/**
+ * Check if user has access to Facilities pages
+ * Admins and managers get access by role, others need to be in FACILITIES_ACCESS_EMAILS
+ */
+export function canAccessFacilities(user: { role?: string; email?: string } | null): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  if (isManager(user.role)) return true;
+  if (user.email && FACILITIES_ACCESS_EMAILS.includes(user.email.toLowerCase())) return true;
+  return false;
+}
+
+// ============================================================================
+// SOURCER ROLE CHECKS
+// ============================================================================
+/**
+ * Check if user has the SOURCER role
+ */
+export function isSourcerRole(user: { role?: string } | null): boolean {
+  if (!user?.role) return false;
+  return SOURCER_ROLES.includes(user.role);
 }

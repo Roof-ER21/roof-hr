@@ -15,6 +15,9 @@ import {
   ONBOARDING_ADMIN_EMAILS,
   getRestrictedPages,
   employeeGetsPto,
+  canAccessFacilities,
+  SOURCER_ROLES,
+  FACILITIES_ACCESS_EMAILS,
 } from '@shared/constants/roles';
 import {
   LayoutDashboard,
@@ -42,10 +45,18 @@ import {
   GitBranch
 } from 'lucide-react';
 
+// Navigation configuration with role-based access
+// ADMIN_ROLES: Full access (SYSTEM_ADMIN, HR_ADMIN, ADMIN, etc.)
+// MANAGER: Restricted access (no Facilities, Reviews, Settings)
+// SOURCER: Recruiting-focused (My Portal, Susan AI, Recruiting, Time Off)
+// EMPLOYEE: Basic access (My Portal, Susan AI, Time Off)
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+  // Dashboard: Admins + Manager only (no Employee, no Sourcer)
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [...ADMIN_ROLES, 'MANAGER'] },
+  // My Portal: Everyone
   { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ALL_ROLES },
-  { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: MANAGER_ROLES },
+  // Team Dashboard: Admins + Manager
+  { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: [...ADMIN_ROLES, 'MANAGER'] },
   {
     name: 'Susan AI',
     href: '/susan-ai',
@@ -60,59 +71,69 @@ const navigation = [
     name: 'Recruiting',
     href: '/recruiting',
     icon: Briefcase,
-    roles: MANAGER_ROLES,
+    // ADMIN_ROLES + MANAGER + SOURCER (Sourcers/Employees with assignments handled separately)
+    roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'],
     children: [
-      { name: 'Candidates', href: '/recruiting', icon: Briefcase, roles: MANAGER_ROLES },
-      { name: 'Analytics', href: '/recruiting-analytics', icon: BarChart, roles: MANAGER_ROLES }
+      { name: 'Candidates', href: '/recruiting', icon: Briefcase, roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'] },
+      { name: 'Analytics', href: '/recruiting-analytics', icon: BarChart, roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'] }
     ]
   },
   {
     name: 'Documents',
     href: '/documents',
     icon: FileText,
-    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
+    // Admins get full, Manager gets limited (handled in children)
+    roles: [...ADMIN_ROLES, 'MANAGER'],
     children: [
-      { name: 'All Documents', href: '/documents', icon: FileText, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
-      { name: 'Tools & Equipment', href: '/tools', icon: Package, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
-      { name: 'COI Tracking', href: '/coi-documents', icon: AlertTriangle, roles: MANAGER_ROLES },
-      { name: 'Contracts', href: '/contracts', icon: ScrollText, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] }
+      { name: 'All Documents', href: '/documents', icon: FileText, roles: [...ADMIN_ROLES, 'MANAGER'] },
+      { name: 'Tools & Equipment', href: '/tools', icon: Package, roles: [...ADMIN_ROLES, 'MANAGER'] },
+      // COI Tracking: Admins only (not Manager)
+      { name: 'COI Tracking', href: '/coi-documents', icon: AlertTriangle, roles: ADMIN_ROLES },
+      { name: 'Contracts', href: '/contracts', icon: ScrollText, roles: [...ADMIN_ROLES, 'MANAGER'] }
     ]
   },
   {
     name: 'Employees',
     href: '/employees',
     icon: Users,
-    roles: MANAGER_ROLES,
+    // Admins get full access, Manager gets Directory only
+    roles: [...ADMIN_ROLES, 'MANAGER'],
     children: [
-      { name: 'Employee Directory', href: '/employees', icon: Users, roles: MANAGER_ROLES },
+      // Employee Directory: Admins + Manager
+      { name: 'Employee Directory', href: '/employees', icon: Users, roles: [...ADMIN_ROLES, 'MANAGER'] },
+      // Admin-only features below
       { name: 'Onboarding Checklist', href: '/onboarding-templates', icon: ClipboardList, roles: ADMIN_ROLES, emailAccess: ONBOARDING_ADMIN_EMAILS },
-      { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: MANAGER_ROLES },
-      { name: 'Territories', href: '/territories', icon: MapPin, roles: MANAGER_ROLES }
+      { name: 'Assignments', href: '/employee-assignments', icon: LinkIcon, roles: ADMIN_ROLES },
+      { name: 'Territories', href: '/territories', icon: MapPin, roles: ADMIN_ROLES }
     ]
   },
   {
     name: 'Facilities',
     href: '/meeting-rooms',
     icon: DoorOpen,
-    roles: MANAGER_ROLES,
+    // Admins only (Manager removed). Email-based access for Alex handled in filter.
+    roles: ADMIN_ROLES,
+    emailAccess: FACILITIES_ACCESS_EMAILS,
     children: [
-      { name: 'Attendance', href: '/attendance', icon: Clock, roles: MANAGER_ROLES },
-      { name: 'Meeting Rooms', href: '/meeting-rooms', icon: DoorOpen, roles: MANAGER_ROLES },
-      { name: 'Room Calendar', href: '/meeting-rooms?tab=calendar', icon: Calendar, roles: MANAGER_ROLES }
+      { name: 'Attendance', href: '/attendance', icon: Clock, roles: ADMIN_ROLES, emailAccess: FACILITIES_ACCESS_EMAILS },
+      { name: 'Meeting Rooms', href: '/meeting-rooms', icon: DoorOpen, roles: ADMIN_ROLES, emailAccess: FACILITIES_ACCESS_EMAILS },
+      { name: 'Room Calendar', href: '/meeting-rooms?tab=calendar', icon: Calendar, roles: ADMIN_ROLES, emailAccess: FACILITIES_ACCESS_EMAILS }
     ]
   },
   {
     name: 'Time Off',
     href: '/pto',
     icon: Calendar,
-    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
+    // Everyone except pure contractors
+    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE', 'SOURCER'],
     children: [
-      { name: 'PTO Requests', href: '/pto', icon: Calendar, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
+      { name: 'PTO Requests', href: '/pto', icon: Calendar, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE', 'SOURCER'] },
       { name: 'PTO Policies', href: '/pto-policies', icon: Settings, roles: ADMIN_ROLES }
     ]
   },
-  { name: 'Reviews', href: '/reviews', icon: Video, roles: MANAGER_ROLES },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: MANAGER_ROLES },
+  // Reviews & Settings: Admins only (Manager removed)
+  { name: 'Reviews', href: '/reviews', icon: Video, roles: ADMIN_ROLES },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ADMIN_ROLES },
 ];
 
 interface SidebarProps {
@@ -187,6 +208,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 if (item.name === 'Time Off' && !employeeGetsPto({ department: user?.department, employmentType: user?.employmentType })) return false;
                 // Special case: Show Recruiting if user has assigned candidates
                 if (item.name === 'Recruiting' && hasAssignedCandidates) return true;
+                // Check email-based access (e.g., Facilities for Alex Ortega)
+                if ((item as any).emailAccess && user?.email) {
+                  if ((item as any).emailAccess.includes(user.email.toLowerCase())) return true;
+                }
                 return !user?.role || item.roles.includes(user.role);
               })
               .map((item) => {
@@ -223,12 +248,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             .filter(child => {
                               // Ahmed always sees all child items (super admin email fallback)
                               if (user?.email === SUPER_ADMIN_EMAIL) return true;
-                              // Check email-based access if defined
+                              // Check email-based access if defined (e.g., Facilities for Alex, Onboarding for specific users)
                               if ((child as any).emailAccess && user?.email) {
                                 if ((child as any).emailAccess.includes(user.email.toLowerCase())) return true;
                               }
-                              // Special case: Show Recruiting children if user has assigned candidates
-                              if (item.name === 'Recruiting' && hasAssignedCandidates) return true;
+                              // Special case: Show Recruiting children if user has assigned candidates or is SOURCER
+                              if (item.name === 'Recruiting') {
+                                if (hasAssignedCandidates) return true;
+                                if (user?.role === 'SOURCER') return true;
+                              }
                               return !user?.role || child.roles.includes(user.role);
                             })
                             .map((child) => {
