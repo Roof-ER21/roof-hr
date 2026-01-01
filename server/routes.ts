@@ -6,7 +6,7 @@ import { storage } from './storage';
 import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { db } from './db';
-import { eq, and, ne, or, lte, gte } from 'drizzle-orm';
+import { eq, and, ne, or, lte, gte, inArray } from 'drizzle-orm';
 import {
   loginSchema, registerSchema, insertPtoRequestSchema,
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
@@ -2072,6 +2072,49 @@ router.delete('/api/candidates/:id', requireAuth, requireManager, async (req, re
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: 'Failed to delete candidate' });
+  }
+});
+
+// Bulk status update for group move
+router.post('/api/candidates/bulk-status', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const { candidateIds, newStatus } = req.body;
+
+    if (!candidateIds || !Array.isArray(candidateIds) || candidateIds.length === 0) {
+      return res.status(400).json({ error: 'candidateIds array is required' });
+    }
+
+    if (!newStatus) {
+      return res.status(400).json({ error: 'newStatus is required' });
+    }
+
+    // Valid statuses
+    const validStatuses = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'];
+    if (!validStatuses.includes(newStatus)) {
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
+
+    // Update all candidates in the list
+    await db.update(candidates)
+      .set({
+        status: newStatus,
+        updatedAt: new Date()
+      })
+      .where(inArray(candidates.id, candidateIds));
+
+    console.log(`[BULK-STATUS] User ${req.user.email} moved ${candidateIds.length} candidates to ${newStatus}`);
+
+    res.json({
+      success: true,
+      count: candidateIds.length,
+      newStatus
+    });
+  } catch (error: any) {
+    console.error('[POST /api/candidates/bulk-status] Error:', error);
+    res.status(400).json({
+      error: 'Failed to update candidates',
+      details: error.message || 'Unknown error'
+    });
   }
 });
 

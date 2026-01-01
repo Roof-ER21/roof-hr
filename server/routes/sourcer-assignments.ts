@@ -140,11 +140,14 @@ router.post('/api/candidates/:id/assign-sourcer', requireAuth, requireManagerOrL
     });
     console.log(`[Sourcer Assignment] Created assignment: ${assignment.id}`);
 
-    // Update candidate's assignedTo field for primary assignments
+    // Update candidate's assignedTo field and move to SCREENING for primary assignments
     if (role === 'PRIMARY') {
-      console.log(`[Sourcer Assignment] Updating candidate assignedTo field...`);
-      await storage.updateCandidate(candidateId, { assignedTo: hrMemberId });
-      console.log(`[Sourcer Assignment] SUCCESS: ${candidate.firstName} ${candidate.lastName} assigned to ${hrMember.firstName} ${hrMember.lastName}`);
+      console.log(`[Sourcer Assignment] Updating candidate assignedTo field and status...`);
+      await storage.updateCandidate(candidateId, {
+        assignedTo: hrMemberId,
+        status: 'SCREENING'  // Auto-move to Phone Screening when assigned
+      });
+      console.log(`[Sourcer Assignment] SUCCESS: ${candidate.firstName} ${candidate.lastName} assigned to ${hrMember.firstName} ${hrMember.lastName} and moved to SCREENING`);
     }
 
     // Send email notification to sourcer

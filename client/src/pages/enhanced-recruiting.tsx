@@ -1044,6 +1044,9 @@ export default function EnhancedRecruiting() {
   const [showEditCandidate, setShowEditCandidate] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
 
+  // Bulk selection state for group move
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
+
   const location = useLocation();
   
   // Form schemas
@@ -1279,6 +1282,61 @@ export default function EnhancedRecruiting() {
       });
     },
   });
+
+  // Bulk status update mutation for group move
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ candidateIds, newStatus }: { candidateIds: string[]; newStatus: string }) =>
+      apiRequest('/api/candidates/bulk-status', 'POST', { candidateIds, newStatus }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      setSelectedCandidates(new Set());
+      toast({
+        title: 'Candidates Moved',
+        description: `${variables.candidateIds.length} candidate(s) moved to ${stages[variables.newStatus as keyof typeof stages]?.name || variables.newStatus}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Move Failed',
+        description: error.message || 'Failed to move candidates',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Selection handlers for bulk operations
+  const handleSelectCandidate = (candidateId: string, selected: boolean) => {
+    setSelectedCandidates(prev => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(candidateId);
+      } else {
+        newSet.delete(candidateId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllInStage = (status: string) => {
+    const candidatesInStage = candidatesByStatus[status as keyof typeof candidatesByStatus] || [];
+    setSelectedCandidates(prev => {
+      const newSet = new Set(prev);
+      candidatesInStage.forEach(c => newSet.add(c.id));
+      return newSet;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedCandidates(new Set());
+  };
+
+  const handleBulkMove = (newStatus: string) => {
+    if (selectedCandidates.size === 0) return;
+    bulkStatusMutation.mutate({
+      candidateIds: Array.from(selectedCandidates),
+      newStatus
+    });
+  };
 
   // Hire candidate mutation (full onboarding)
   const hireCandidateMutation = useMutation({
@@ -1776,12 +1834,24 @@ export default function EnhancedRecruiting() {
                 {kanbanStages.map(status => (
                   <DroppableColumn key={status} status={status}>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                      <h3 className="font-medium mb-3 flex items-center justify-between text-gray-900 dark:text-white">
-                        {stages[status].name}
-                        <Badge className={stages[status].color}>
-                          {candidatesByStatus[status as keyof typeof candidatesByStatus]?.length || 0}
-                        </Badge>
-                      </h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-gray-900 dark:text-white">
+                          {stages[status].name}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => handleSelectAllInStage(status)}
+                          >
+                            Select All
+                          </Button>
+                          <Badge className={stages[status].color}>
+                            {candidatesByStatus[status as keyof typeof candidatesByStatus]?.length || 0}
+                          </Badge>
+                        </div>
+                      </div>
                     <div className="space-y-3">
                       {(candidatesByStatus[status as keyof typeof candidatesByStatus] || []).map(candidate => (
                         <DraggableCandidateCard
@@ -1794,6 +1864,9 @@ export default function EnhancedRecruiting() {
                             source: candidate.stage || 'APPLIED',
                             notes: candidate.notes ?? undefined
                           }}
+                          showCheckbox={true}
+                          isSelected={selectedCandidates.has(candidate.id)}
+                          onSelect={handleSelectCandidate}
                           onClick={(clickedCandidate) => {
                             const originalCandidate = candidates.find(c => c.id === clickedCandidate.id);
                             if (originalCandidate) {
@@ -3188,6 +3261,35 @@ export default function EnhancedRecruiting() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Floating action bar for bulk selection */}
+      {selectedCandidates.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-800 shadow-xl rounded-lg px-4 py-3 flex items-center gap-4 z-50 border dark:border-gray-700">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            {selectedCandidates.size} candidate{selectedCandidates.size !== 1 ? 's' : ''} selected
+          </span>
+          <Select onValueChange={handleBulkMove} disabled={bulkStatusMutation.isPending}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Move to..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="APPLIED">Application Review</SelectItem>
+              <SelectItem value="SCREENING">Phone Screening</SelectItem>
+              <SelectItem value="INTERVIEW">Interview</SelectItem>
+              <SelectItem value="OFFER">Offer</SelectItem>
+              <SelectItem value="HIRED">Hired</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearSelection}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
     </DndContext>
   );
 }

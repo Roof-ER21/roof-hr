@@ -1,6 +1,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Mail,
   Calendar,
@@ -93,6 +94,9 @@ interface DraggableCandidateCardProps {
   onNotes?: (candidate: Candidate) => void;
   onClick?: (candidate: Candidate) => void;
   isDragDisabled?: boolean;
+  isSelected?: boolean;
+  onSelect?: (candidateId: string, selected: boolean) => void;
+  showCheckbox?: boolean;
 }
 
 export function DraggableCandidateCard({
@@ -104,7 +108,10 @@ export function DraggableCandidateCard({
   onEmail,
   onNotes,
   onClick,
-  isDragDisabled = false
+  isDragDisabled = false,
+  isSelected = false,
+  onSelect,
+  showCheckbox = false
 }: DraggableCandidateCardProps) {
   const {
     attributes,
@@ -144,6 +151,22 @@ export function DraggableCandidateCard({
       onClick={handleCardClick}
       {...attributes}
     >
+      {/* Checkbox for bulk selection */}
+      {showCheckbox && (
+        <div
+          className="flex-shrink-0 mr-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => {
+              onSelect?.(candidate.id, checked === true);
+            }}
+            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+          />
+        </div>
+      )}
+
       {/* Name, sourcer dot, and dead type badge */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
