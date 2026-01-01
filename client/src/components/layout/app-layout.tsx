@@ -10,13 +10,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-[#121212] transition-colors">
+    <div className="flex min-h-screen bg-gray-50 dark:bg-[#121212] transition-colors">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#121212]">
+        <main className="flex-1 bg-gray-50 dark:bg-[#121212]">
           {children}
         </main>
       </div>
