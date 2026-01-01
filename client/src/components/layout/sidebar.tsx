@@ -170,12 +170,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-center p-6 border-b dark:border-[#2E2E2E]">
+          <div className="flex-shrink-0 flex items-center justify-center p-6 border-b dark:border-[#2E2E2E]">
             <Logo size="md" />
           </div>
-          
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2">
+
+          {/* Navigation - scrollable */}
+          <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
             {navigation
               .filter(item => {
                 // Ahmed always sees all menu items (super admin email fallback)
