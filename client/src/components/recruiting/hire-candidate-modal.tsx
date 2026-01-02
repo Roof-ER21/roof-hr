@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
@@ -33,9 +33,7 @@ import {
   Calendar,
   Building,
   Shirt,
-  Wrench,
   Package,
-  Clock,
   ChevronDown,
   ChevronUp,
   Loader2,
@@ -55,13 +53,6 @@ interface Candidate {
   aiPotentialScore?: number;
 }
 
-interface Tool {
-  id: string;
-  name: string;
-  category: string;
-  availableQuantity: number;
-}
-
 interface Bundle {
   id: string;
   name: string;
@@ -74,11 +65,7 @@ export interface HireData {
   role: string;
   employmentType: string;
   shirtSize: string;
-  toolIds: string[];
   welcomePackageId?: string;
-  vacationDays: number;
-  sickDays: number;
-  personalDays: number;
   sendWelcomeEmail: boolean;
 }
 
@@ -111,28 +98,11 @@ export function HireCandidateModal({
   const [role, setRole] = useState('REP');
   const [employmentType, setEmploymentType] = useState('W2');
   const [shirtSize, setShirtSize] = useState('L');
-  const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [welcomePackageId, setWelcomePackageId] = useState<string>('');
-  const [vacationDays, setVacationDays] = useState(10);
-  const [sickDays, setSickDays] = useState(5);
-  const [personalDays, setPersonalDays] = useState(3);
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
-  // Fetch tools
-  const { data: tools = [] } = useQuery<Tool[]>({
-    queryKey: ['/api/tool-inventory'],
-    queryFn: async () => {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch('/api/tool-inventory', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch tools');
-      return response.json();
-    },
-  });
-
-  // Fetch bundles
+  // Fetch bundles for welcome packages
   const { data: bundles = [] } = useQuery<Bundle[]>({
     queryKey: ['/api/bundles'],
     queryFn: async () => {
@@ -145,21 +115,6 @@ export function HireCandidateModal({
     },
   });
 
-  // Auto-select first welcome package
-  useEffect(() => {
-    if (bundles.length > 0 && !welcomePackageId) {
-      setWelcomePackageId(bundles[0].id);
-    }
-  }, [bundles, welcomePackageId]);
-
-  const handleToolToggle = (toolId: string) => {
-    setSelectedTools((prev) =>
-      prev.includes(toolId)
-        ? prev.filter((id) => id !== toolId)
-        : [...prev, toolId]
-    );
-  };
-
   const handleSubmit = () => {
     onConfirm({
       startDate,
@@ -167,25 +122,15 @@ export function HireCandidateModal({
       role,
       employmentType,
       shirtSize,
-      toolIds: selectedTools,
       welcomePackageId: welcomePackageId || undefined,
-      vacationDays,
-      sickDays,
-      personalDays,
       sendWelcomeEmail,
     });
   };
 
-  const totalPto = vacationDays + sickDays + personalDays;
-  const availableTools = tools.filter((t) => t.availableQuantity > 0);
-
-  // Group tools by category
-  const toolsByCategory = availableTools.reduce((acc, tool) => {
-    const category = tool.category || 'Other';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(tool);
-    return acc;
-  }, {} as Record<string, Tool[]>);
+  // Display PTO info based on employment type (auto-calculated on backend)
+  const ptoInfo = employmentType === '1099' || department.toLowerCase().includes('sales')
+    ? { total: 0, note: '1099 contractors and Sales employees do not receive PTO' }
+    : { total: 17, note: 'W2 employees receive 10 vacation, 5 sick, 2 personal days' };
 
   return (
     <Dialog open={true} onOpenChange={() => onCancel()}>
@@ -321,57 +266,14 @@ export function HireCandidateModal({
                   </Select>
                 </div>
               </div>
-            </div>
 
-            <Separator />
-
-            {/* Tool Assignment Section */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-wide flex items-center gap-2">
-                <Wrench className="w-4 h-4" />
-                Tool Assignment
-                {selectedTools.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {selectedTools.length} selected
-                  </Badge>
-                )}
-              </h3>
-              <div className="bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
-                {Object.entries(toolsByCategory).map(([category, categoryTools]) => (
-                  <div key={category} className="mb-3">
-                    <div className="text-xs font-medium text-gray-500 mb-1">{category}</div>
-                    <div className="space-y-1">
-                      {categoryTools.map((tool) => (
-                        <div
-                          key={tool.id}
-                          className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-100"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              id={tool.id}
-                              checked={selectedTools.includes(tool.id)}
-                              onCheckedChange={() => handleToolToggle(tool.id)}
-                            />
-                            <label
-                              htmlFor={tool.id}
-                              className="text-sm cursor-pointer"
-                            >
-                              {tool.name}
-                            </label>
-                          </div>
-                          <span className="text-xs text-gray-500">
-                            ({tool.availableQuantity} available)
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {availableTools.length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-2">
-                    No tools available in inventory
-                  </p>
-                )}
+              {/* PTO Info Display */}
+              <div className="bg-blue-50 rounded-lg p-3 mt-4">
+                <div className="text-sm text-blue-800">
+                  <span className="font-medium">PTO Allocation: </span>
+                  <span className="font-bold">{ptoInfo.total} days</span>
+                  <span className="text-blue-600 ml-2">({ptoInfo.note})</span>
+                </div>
               </div>
             </div>
 
@@ -381,14 +283,14 @@ export function HireCandidateModal({
             <div className="space-y-4">
               <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-wide flex items-center gap-2">
                 <Package className="w-4 h-4" />
-                Welcome Package
+                Welcome Package (Optional)
               </h3>
               <Select value={welcomePackageId || 'none'} onValueChange={(val) => setWelcomePackageId(val === 'none' ? '' : val)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select welcome package..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No package</SelectItem>
+                  <SelectItem value="none">No Welcome Package</SelectItem>
                   {bundles.map((bundle) => (
                     <SelectItem key={bundle.id} value={bundle.id}>
                       {bundle.name}
@@ -397,55 +299,9 @@ export function HireCandidateModal({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            <Separator />
-
-            {/* PTO Allocation Section */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-sm text-gray-700 uppercase tracking-wide flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                PTO Allocation
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="vacationDays">Vacation Days</Label>
-                  <Input
-                    id="vacationDays"
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={vacationDays}
-                    onChange={(e) => setVacationDays(parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sickDays">Sick Days</Label>
-                  <Input
-                    id="sickDays"
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={sickDays}
-                    onChange={(e) => setSickDays(parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="personalDays">Personal Days</Label>
-                  <Input
-                    id="personalDays"
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={personalDays}
-                    onChange={(e) => setPersonalDays(parseInt(e.target.value) || 0)}
-                  />
-                </div>
-              </div>
-              <div className="text-sm text-gray-600">
-                Total PTO:{' '}
-                <span className="font-semibold text-gray-900">{totalPto} days</span>
-              </div>
+              <p className="text-xs text-gray-500">
+                Tools can be assigned separately from the Tools page after hiring.
+              </p>
             </div>
 
             <Separator />

@@ -2380,11 +2380,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       role,
       employmentType,
       shirtSize,
-      toolIds = [],
       welcomePackageId,
-      vacationDays = 10,
-      sickDays = 5,
-      personalDays = 3,
       sendWelcomeEmail = true
     } = req.body;
 
@@ -2424,71 +2420,31 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     console.log(`[HIRE] Created employee ${newEmployee.id} for ${candidate.firstName} ${candidate.lastName}`);
 
     // Create PTO policy based on employment type and department
+    // W2 employees get 17 days (10 vacation, 5 sick, 2 personal)
     // 1099 employees and Sales department get 0 PTO
     try {
       const ptoAllocation = getPtoAllocation(newEmployee.employmentType, newEmployee.department);
-      const finalVacationDays = ptoAllocation.totalDays === 0 ? 0 : vacationDays;
-      const finalSickDays = ptoAllocation.totalDays === 0 ? 0 : sickDays;
-      const finalPersonalDays = ptoAllocation.totalDays === 0 ? 0 : personalDays;
-      const totalDays = finalVacationDays + finalSickDays + finalPersonalDays;
 
       await storage.createPtoPolicy({
         employeeId: newEmployee.id,
         policyLevel: 'INDIVIDUAL',
-        totalDays,
-        baseDays: totalDays,
-        vacationDays: finalVacationDays,
-        sickDays: finalSickDays,
-        personalDays: finalPersonalDays,
+        totalDays: ptoAllocation.totalDays,
+        baseDays: ptoAllocation.totalDays,
+        vacationDays: ptoAllocation.vacationDays,
+        sickDays: ptoAllocation.sickDays,
+        personalDays: ptoAllocation.personalDays,
         additionalDays: 0,
         usedDays: 0,
-        remainingDays: totalDays,
-        notes: totalDays === 0 ? 'No PTO (1099/Sales)' : 'Initial PTO allocation from hiring'
+        remainingDays: ptoAllocation.totalDays,
+        notes: ptoAllocation.totalDays === 0 ? 'No PTO (1099/Sales)' : 'Initial PTO allocation from hiring'
       });
-      console.log(`[HIRE] Created PTO policy for ${newEmployee.id} (${totalDays} total days)`);
+      console.log(`[HIRE] Created PTO policy for ${newEmployee.id} (${ptoAllocation.totalDays} total days - auto-calculated based on ${newEmployee.employmentType}/${newEmployee.department})`);
     } catch (ptoError) {
       console.error('[HIRE] Failed to create PTO policy:', ptoError);
     }
 
-    // Assign tools
-    let toolsAssigned = 0;
-    if (toolIds && toolIds.length > 0) {
-      try {
-        for (const toolId of toolIds) {
-          const tools = await db
-            .select()
-            .from(toolInventory)
-            .where(eq(toolInventory.id, toolId));
-
-          const tool = tools[0];
-          if (tool && tool.availableQuantity > 0) {
-            await db.insert(toolAssignments).values({
-              id: uuidv4(),
-              toolId: tool.id,
-              employeeId: newEmployee.id,
-              assignedBy: user.id,
-              assignedDate: new Date(),
-              status: 'ASSIGNED',
-              condition: tool.condition,
-              notes: `Assigned during hiring for ${candidate.position} position`
-            });
-
-            await db
-              .update(toolInventory)
-              .set({
-                availableQuantity: tool.availableQuantity - 1,
-                updatedAt: new Date()
-              })
-              .where(eq(toolInventory.id, tool.id));
-
-            toolsAssigned++;
-          }
-        }
-        console.log(`[HIRE] Assigned ${toolsAssigned} tools to ${newEmployee.id}`);
-      } catch (toolError) {
-        console.error('[HIRE] Failed to assign tools:', toolError);
-      }
-    }
+    // Note: Tools are now assigned separately from the Tools page after hiring
+    // This removes the performance bottleneck of sequential tool assignments
 
     // Assign welcome package
     if (welcomePackageId) {
@@ -2556,9 +2512,9 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       {
         employeeId: newEmployee.id,
         title: 'Tools & Equipment Assignment',
-        description: 'Receive and acknowledge assigned tools and equipment',
+        description: 'Receive and acknowledge assigned tools and equipment from the Tools page',
         dueDate: new Date(startDate),
-        status: (toolsAssigned > 0 ? 'COMPLETED' : 'PENDING') as 'COMPLETED' | 'PENDING'
+        status: 'PENDING' as const
       },
       {
         employeeId: newEmployee.id,
@@ -2644,7 +2600,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
         department: newEmployee.department,
         hireDate: startDate
       },
-      toolsAssigned,
+      toolsNote: 'Tools can be assigned from the Tools page after hiring',
       emailSent: emailTriggered, // Boolean: true if email was requested (sending in background)
       emailNote: emailTriggered ? 'Welcome email is being sent in the background' : 'No email requested',
       onboardingTasksCreated: onboardingTasks.length
