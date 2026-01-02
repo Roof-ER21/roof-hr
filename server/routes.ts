@@ -690,6 +690,129 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
   }
 });
 
+// Admin can create PTO on behalf of employees
+router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    const adminUser = req.user!;
+    const { employeeId, startDate, endDate, type, reason, autoApprove } = req.body;
+
+    // Validate required fields
+    if (!employeeId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'employeeId, startDate, and endDate are required' });
+    }
+
+    // Get the employee
+    const employee = await storage.getUserById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Calculate days
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = end.getTime() - start.getTime();
+    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    // Create the PTO request
+    const ptoRequest = await storage.createPtoRequest({
+      employeeId,
+      startDate,
+      endDate,
+      type: type || 'VACATION',
+      reason: reason || `Created by admin: ${adminUser.firstName} ${adminUser.lastName}`,
+      days,
+      status: autoApprove ? 'APPROVED' : 'PENDING',
+    });
+
+    console.log(`[ADMIN-PTO] ${adminUser.email} created PTO for ${employee.firstName} ${employee.lastName}: ${startDate} to ${endDate} (${days} days, autoApprove=${autoApprove})`);
+
+    // If auto-approved, update the employee's PTO policy and create calendar events
+    if (autoApprove) {
+      // Update employee's PTO policy
+      const policy = await storage.getPtoPolicyByEmployeeId(employeeId);
+      if (policy) {
+        const usedDays = (policy.usedDays || 0) + days;
+        const remainingDays = Math.max(0, (policy.totalDays || 0) - usedDays);
+
+        await db.update(ptoPolicies).set({
+          usedDays,
+          remainingDays,
+          updatedAt: new Date()
+        }).where(eq(ptoPolicies.id, policy.id));
+      }
+
+      // Create Google Calendar events asynchronously
+      (async () => {
+        try {
+          if (googleCalendarService.isConfigured()) {
+            // Create event on employee's calendar
+            await googleCalendarService.createEvent({
+              summary: `PTO - ${employee.firstName} ${employee.lastName}`,
+              description: `PTO approved by admin: ${adminUser.firstName} ${adminUser.lastName}\nReason: ${reason || 'Not specified'}`,
+              startDate,
+              endDate,
+              attendees: [employee.email],
+              isAllDay: true
+            }, employee.email);
+
+            // Create event on shared HR calendar
+            const hrCalendarId = process.env.GOOGLE_HR_CALENDAR_ID || 'primary';
+            await googleCalendarService.createEvent({
+              summary: `PTO - ${employee.firstName} ${employee.lastName}`,
+              description: `${days} day(s) PTO\nCreated by: ${adminUser.firstName} ${adminUser.lastName}`,
+              startDate,
+              endDate,
+              attendees: [],
+              isAllDay: true
+            }, hrCalendarId);
+          }
+        } catch (calErr) {
+          console.error('[ADMIN-PTO] Failed to create calendar events:', calErr);
+        }
+      })();
+
+      // Send notification to employee
+      (async () => {
+        try {
+          const emailService = new EmailService();
+          await emailService.initialize();
+          await emailService.sendEmail({
+            to: employee.email,
+            subject: `PTO Approved: ${startDate} to ${endDate}`,
+            html: `
+              <h2>Your PTO Has Been Approved</h2>
+              <p>Hi ${employee.firstName},</p>
+              <p>PTO has been scheduled for you by ${adminUser.firstName} ${adminUser.lastName}:</p>
+              <ul>
+                <li><strong>Start Date:</strong> ${new Date(startDate).toLocaleDateString()}</li>
+                <li><strong>End Date:</strong> ${new Date(endDate).toLocaleDateString()}</li>
+                <li><strong>Days:</strong> ${days}</li>
+                <li><strong>Type:</strong> ${type || 'VACATION'}</li>
+              </ul>
+              <p>Calendar events have been created automatically.</p>
+              <p>Best regards,<br>HR Team</p>
+            `,
+            fromUserEmail: adminUser.email.endsWith('@theroofdocs.com') ? adminUser.email : 'info@theroofdocs.com'
+          });
+        } catch (emailErr) {
+          console.error('[ADMIN-PTO] Failed to send notification email:', emailErr);
+        }
+      })();
+    }
+
+    res.json({
+      success: true,
+      ptoRequest,
+      message: autoApprove
+        ? `PTO created and auto-approved for ${employee.firstName} ${employee.lastName}`
+        : `PTO created for ${employee.firstName} ${employee.lastName} (pending approval)`
+    });
+  } catch (error: any) {
+    console.error('[ADMIN-PTO] Error creating PTO for employee:', error);
+    res.status(500).json({ error: 'Failed to create PTO', details: error.message });
+  }
+});
+
 // Reset Sales Reps and 1099 employees to 0 PTO (Admin only)
 router.post('/api/admin/reset-sales-1099-pto', requireAuth, requireAdmin, async (req: any, res) => {
   try {

@@ -31,6 +31,16 @@ const ptoSchema = z.object({
 
 type PTOFormData = z.infer<typeof ptoSchema>;
 
+const adminPtoSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  type: z.enum(['VACATION', 'SICK', 'PERSONAL']).default('VACATION'),
+  reason: z.string().optional(),
+});
+
+type AdminPTOFormData = z.infer<typeof adminPtoSchema>;
+
 function PTO() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState('requests');
@@ -44,6 +54,10 @@ function PTO() {
   const [denyNotes, setDenyNotes] = useState('');
   // Status filter for PTO requests
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('ALL');
+  // Admin PTO creation dialog
+  const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+  const [adminPtoAutoApprove, setAdminPtoAutoApprove] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -175,6 +189,59 @@ function PTO() {
       reason: '',
     }
   });
+
+  // Admin form for creating PTO on behalf of employees
+  const adminForm = useForm<AdminPTOFormData>({
+    resolver: zodResolver(adminPtoSchema),
+    defaultValues: {
+      employeeId: '',
+      startDate: '',
+      endDate: '',
+      type: 'VACATION',
+      reason: '',
+    }
+  });
+
+  // Admin mutation for creating PTO on behalf of employees
+  const adminCreatePTOMutation = useMutation({
+    mutationFn: async (data: AdminPTOFormData & { autoApprove: boolean }) => {
+      const response = await fetch('/api/admin/create-pto-for-employee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create PTO for employee');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
+      setAdminPtoDialogOpen(false);
+      adminForm.reset();
+      setAdminPtoAutoApprove(true);
+      toast({
+        title: 'Success',
+        description: data.message || 'PTO created successfully'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create PTO',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const onAdminSubmit = (data: AdminPTOFormData) => {
+    adminCreatePTOMutation.mutate({ ...data, autoApprove: adminPtoAutoApprove });
+  };
 
   const createPTOMutation = useMutation({
     mutationFn: async (data: PTOFormData) => {
@@ -753,6 +820,108 @@ function PTO() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
+
+          {/* Admin: Create PTO for Employee */}
+          {isAdmin && (
+            <Dialog open={adminPtoDialogOpen} onOpenChange={setAdminPtoDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="ml-2">
+                  <Users className="w-4 h-4 mr-2" />
+                  Add PTO for Employee
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create PTO for Employee</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={adminForm.handleSubmit(onAdminSubmit)} className="space-y-4">
+                  <div>
+                    <Label htmlFor="admin-employee">Employee</Label>
+                    <Select
+                      value={adminForm.watch('employeeId')}
+                      onValueChange={(value) => adminForm.setValue('employeeId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users?.filter((u: any) => u.isActive).map((u: any) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.firstName} {u.lastName} ({u.department || 'No Dept'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="admin-startDate">Start Date</Label>
+                      <Input
+                        id="admin-startDate"
+                        type="date"
+                        {...adminForm.register('startDate')}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="admin-endDate">End Date</Label>
+                      <Input
+                        id="admin-endDate"
+                        type="date"
+                        {...adminForm.register('endDate')}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="admin-type">Type of Time Off</Label>
+                    <Select
+                      value={adminForm.watch('type')}
+                      onValueChange={(value: 'VACATION' | 'SICK' | 'PERSONAL') => adminForm.setValue('type', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="VACATION">Vacation</SelectItem>
+                        <SelectItem value="SICK">Sick</SelectItem>
+                        <SelectItem value="PERSONAL">Personal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="admin-reason">Reason (Optional)</Label>
+                    <Textarea
+                      id="admin-reason"
+                      {...adminForm.register('reason')}
+                      placeholder="Reason for PTO"
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="auto-approve"
+                      checked={adminPtoAutoApprove}
+                      onCheckedChange={setAdminPtoAutoApprove}
+                    />
+                    <Label htmlFor="auto-approve" className="cursor-pointer">
+                      Auto-approve (creates calendar events immediately)
+                    </Label>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setAdminPtoDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={adminCreatePTOMutation.isPending}>
+                      {adminCreatePTOMutation.isPending ? 'Creating...' : 'Create PTO'}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
       </div>

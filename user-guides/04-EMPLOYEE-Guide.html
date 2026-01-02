@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Roof HR Employee User Guide</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; }
+    h1 { color: #1a365d; border-bottom: 3px solid #48bb78; padding-bottom: 10px; }
+    h2 { color: #2d3748; margin-top: 30px; }
+    h3 { color: #4a5568; }
+    .header { background: linear-gradient(135deg, #276749 0%, #48bb78 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; }
+    .header h1 { color: white; border: none; margin: 0; }
+    .section { background: #f0fff4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #48bb78; }
+    .step { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .step-number { background: #48bb78; color: white; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; }
+    .screenshot-placeholder { background: #e2e8f0; border: 2px dashed #a0aec0; padding: 40px; text-align: center; margin: 15px 0; border-radius: 8px; color: #718096; }
+    .screenshot { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; margin: 15px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .screenshot-caption { text-align: center; color: #718096; font-size: 14px; margin-top: -10px; margin-bottom: 15px; }
+    .menu-item { background: #edf2f7; padding: 10px 15px; margin: 5px 0; border-radius: 5px; display: flex; align-items: center; }
+    .menu-icon { width: 24px; height: 24px; margin-right: 10px; background: #9ae6b4; border-radius: 4px; }
+    .tip { background: #c6f6d5; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #38a169; }
+    .note { background: #fefcbf; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #d69e2e; }
+    .quick-action { background: white; padding: 20px; border-radius: 8px; margin: 10px 0; border: 2px solid #48bb78; text-align: center; }
+    .quick-action h4 { color: #276749; margin: 0 0 10px 0; }
+    .access-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .access-table th, .access-table td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    .access-table th { background: #276749; color: white; }
+    .access-table tr:hover { background: #f7fafc; }
+    .check { color: #38a169; font-weight: bold; }
+    .no { color: #e53e3e; }
+    .footer { text-align: center; margin-top: 40px; padding: 20px; background: #f0fff4; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Roof HR - Employee User Guide</h1>
+    <p>Your simple guide to the HR system</p>
+  </div>
+
+  <div class="section">
+    <h2>Welcome!</h2>
+    <p>Roof HR is your one-stop shop for HR tasks. As an employee, you have access to the essentials: your personal portal, time off requests, and our AI assistant Susan. This guide will show you exactly where to click!</p>
+  </div>
+
+  <h2>Quick Actions - What You'll Use Most</h2>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+    <div class="quick-action">
+      <h4>Request Time Off</h4>
+      <p>Time Off > PTO Requests</p>
+    </div>
+    <div class="quick-action">
+      <h4>Ask Susan a Question</h4>
+      <p>Susan AI > AI Assistant</p>
+    </div>
+    <div class="quick-action">
+      <h4>View Your Info</h4>
+      <p>My Portal</p>
+    </div>
+    <div class="quick-action">
+      <h4>Sign a Contract</h4>
+      <p>My Portal > Contracts</p>
+    </div>
+  </div>
+
+  <h2>1. How to Log In</h2>
+  <div class="step">
+    <span class="step-number">1</span>
+    Open your web browser (Chrome, Safari, etc.)
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Type <strong>roofhr.up.railway.app</strong> in the address bar
+  </div>
+  <div class="step">
+    <span class="step-number">3</span>
+    Enter your <strong>@theroofdocs.com email</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">4</span>
+    Enter your <strong>password</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">5</span>
+    Click the blue <strong>"Sign In"</strong> button
+  </div>
+
+  <img src="screenshots/login-page.png" alt="Login Page" class="screenshot">
+  <p class="screenshot-caption">Login page - enter your email and password, then click Sign In</p>
+
+  <div class="tip">
+    <strong>Forgot your password?</strong> Contact ahmed.mahmoud@theroofdocs.com to reset it.
+  </div>
+
+  <h2>2. Your Menu (Left Sidebar)</h2>
+  <p>After logging in, you'll see a menu on the left side. Here's what you have access to:</p>
+
+  <div class="menu-item"><div class="menu-icon"></div><strong>My Portal</strong> - Your personal dashboard and info</div>
+  <div class="menu-item"><div class="menu-icon"></div><strong>Susan AI</strong> - AI assistant to answer your questions</div>
+  <div class="menu-item"><div class="menu-icon"></div><strong>Time Off</strong> - Request PTO</div>
+
+  <img src="screenshots/employee-sidebar.png" alt="Employee Sidebar" class="screenshot" style="max-width: 300px;">
+  <p class="screenshot-caption">Your sidebar: My Portal, Susan AI, and Time Off</p>
+
+  <h2>3. My Portal - Your Personal Hub</h2>
+
+  <h3>How to Get There:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Click <strong>"My Portal"</strong> in the left sidebar
+  </div>
+
+  <h3>What You'll See:</h3>
+  <div class="step">
+    <span class="step-number">*</span>
+    <strong>Your Profile</strong> - Name, email, department, position
+  </div>
+  <div class="step">
+    <span class="step-number">*</span>
+    <strong>Your Documents</strong> - Any documents assigned to you
+  </div>
+  <div class="step">
+    <span class="step-number">*</span>
+    <strong>Your Contracts</strong> - Employment contracts to sign
+  </div>
+  <div class="step">
+    <span class="step-number">*</span>
+    <strong>Your Equipment</strong> - Tools and equipment assigned to you
+  </div>
+
+  <img src="screenshots/my-portal.png" alt="My Portal" class="screenshot">
+  <p class="screenshot-caption">My Portal with your profile, PTO balance, calendar, and quick actions</p>
+
+  <h3>How to Sign a Contract:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Go to <strong>My Portal</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Scroll down to <strong>"My Contracts"</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">3</span>
+    Click on the contract that says <strong>"Pending Signature"</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">4</span>
+    Read the contract carefully
+  </div>
+  <div class="step">
+    <span class="step-number">5</span>
+    Type your name in the signature box
+  </div>
+  <div class="step">
+    <span class="step-number">6</span>
+    Click <strong>"Sign Contract"</strong>
+  </div>
+
+  <div class="tip">
+    <strong>Important:</strong> Make sure you read the entire contract before signing!
+  </div>
+
+  <h2>4. Susan AI - Your HR Assistant</h2>
+
+  <h3>How to Get There:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Click <strong>"Susan AI"</strong> in the left sidebar
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Click <strong>"AI Assistant"</strong>
+  </div>
+
+  <h3>How to Ask a Question:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Type your question in the chat box at the bottom
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Press <strong>Enter</strong> or click the send button
+  </div>
+  <div class="step">
+    <span class="step-number">3</span>
+    Susan will respond with an answer!
+  </div>
+
+  <img src="screenshots/susan-ai.png" alt="Susan AI Chat" class="screenshot">
+  <p class="screenshot-caption">Susan AI chat interface - type your questions here</p>
+
+  <h3>Things You Can Ask Susan:</h3>
+  <ul>
+    <li>"What is our PTO policy?"</li>
+    <li>"How do I submit an expense report?"</li>
+    <li>"What are the company holidays?"</li>
+    <li>"How do I request time off?"</li>
+    <li>"What's the dress code?"</li>
+    <li>"Who do I contact for IT help?"</li>
+  </ul>
+
+  <div class="tip">
+    <strong>Pro Tip:</strong> Susan is available 24/7! No need to wait for HR to respond - get instant answers!
+  </div>
+
+  <h2>5. Requesting Time Off (PTO)</h2>
+
+  <h3>How to Get There:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Click <strong>"Time Off"</strong> in the left sidebar
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Click <strong>"PTO Requests"</strong>
+  </div>
+
+  <img src="screenshots/pto-balance.png" alt="PTO Balance" class="screenshot">
+  <p class="screenshot-caption">Your PTO Balance showing vacation, sick, and personal days remaining</p>
+
+  <h3>How to Submit a Request:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Click the <strong>"Request Time Off"</strong> button (usually top right)
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Select your <strong>Start Date</strong> (click the calendar)
+  </div>
+  <div class="step">
+    <span class="step-number">3</span>
+    Select your <strong>End Date</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">4</span>
+    Choose the <strong>Type</strong> (Vacation, Sick, Personal, etc.)
+  </div>
+  <div class="step">
+    <span class="step-number">5</span>
+    Add any <strong>Notes</strong> if needed (e.g., "Family vacation")
+  </div>
+  <div class="step">
+    <span class="step-number">6</span>
+    Click <strong>"Submit Request"</strong>
+  </div>
+
+  <img src="screenshots/pto-calendar.png" alt="PTO Calendar" class="screenshot">
+  <p class="screenshot-caption">PTO Calendar showing scheduled time off and company holidays</p>
+
+  <h3>Checking Your Request Status:</h3>
+  <div class="step">
+    <span class="step-number">1</span>
+    Go to <strong>Time Off</strong> > <strong>PTO Requests</strong>
+  </div>
+  <div class="step">
+    <span class="step-number">2</span>
+    Find your request in the list
+  </div>
+  <div class="step">
+    <span class="step-number">3</span>
+    Check the <strong>Status</strong> column:
+    <ul>
+      <li><strong style="color: #d69e2e;">Pending</strong> - Waiting for approval</li>
+      <li><strong style="color: #38a169;">Approved</strong> - You're good to go!</li>
+      <li><strong style="color: #e53e3e;">Denied</strong> - Contact HR for details</li>
+    </ul>
+  </div>
+
+  <div class="note">
+    <strong>Note:</strong> PTO requests are reviewed by management. Please submit at least 2 weeks in advance when possible!
+  </div>
+
+  <h2>6. Summary - What You Can Access</h2>
+  <table class="access-table">
+    <tr><th>Feature</th><th>Can You Use It?</th></tr>
+    <tr><td>My Portal</td><td class="check">YES - View your info, docs, contracts</td></tr>
+    <tr><td>Susan AI</td><td class="check">YES - Ask questions anytime</td></tr>
+    <tr><td>Time Off / PTO</td><td class="check">YES - Submit and track requests</td></tr>
+    <tr><td>Dashboard</td><td class="no">No</td></tr>
+    <tr><td>Recruiting</td><td class="no">No</td></tr>
+    <tr><td>Documents</td><td class="no">No (use My Portal instead)</td></tr>
+    <tr><td>Employees</td><td class="no">No</td></tr>
+    <tr><td>Facilities</td><td class="no">No</td></tr>
+    <tr><td>Reviews</td><td class="no">No</td></tr>
+    <tr><td>Settings</td><td class="no">No</td></tr>
+  </table>
+
+  <h2>Need Help?</h2>
+  <div class="section">
+    <p><strong>HR Questions:</strong> Ask Susan AI first - she's instant!</p>
+    <p><strong>Can't Log In:</strong> Contact ahmed.mahmoud@theroofdocs.com</p>
+    <p><strong>Technical Issues:</strong> Contact support@theroofdocs.com</p>
+  </div>
+
+  <div class="footer">
+    <p>Welcome to the team!</p>
+    <p><small>Roof HR v2.2.0 | The Roof Docs</small></p>
+  </div>
+</body>
+</html>
