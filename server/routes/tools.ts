@@ -234,6 +234,24 @@ router.post('/inventory', checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
     const user = req.user!;
 
+    // Check for duplicate name
+    const existingTool = await db
+      .select()
+      .from(toolInventory)
+      .where(and(
+        eq(toolInventory.name, req.body.name),
+        eq(toolInventory.isActive, true)
+      ))
+      .limit(1);
+
+    if (existingTool.length > 0) {
+      return res.status(400).json({
+        error: 'A tool with this name already exists',
+        existingId: existingTool[0].id,
+        existingName: existingTool[0].name
+      });
+    }
+
     // Valid categories for tool inventory
     const validCategories = ['LAPTOP', 'LADDER', 'IPAD', 'BOOTS', 'POLO', 'CAR', 'OTHER'] as const;
     type ValidCategory = typeof validCategories[number];
@@ -279,6 +297,27 @@ router.patch('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res)
   try {
     const { id } = req.params;
     const updates = req.body;
+
+    // If name is being changed, check for duplicates
+    if (updates.name) {
+      const existingTool = await db
+        .select()
+        .from(toolInventory)
+        .where(and(
+          eq(toolInventory.name, updates.name),
+          eq(toolInventory.isActive, true)
+        ))
+        .limit(1);
+
+      // Check if there's another tool with this name (not the current one)
+      if (existingTool.length > 0 && existingTool[0].id !== id) {
+        return res.status(400).json({
+          error: 'Another tool with this name already exists',
+          existingId: existingTool[0].id,
+          existingName: existingTool[0].name
+        });
+      }
+    }
 
     const updatedTool = await db
       .update(toolInventory)
@@ -1277,6 +1316,84 @@ router.get('/bundles/assignments', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching bundle assignments:', error);
     res.status(500).json({ error: 'Failed to fetch bundle assignments' });
+  }
+});
+
+// ============================================================================
+// ADMIN: Deduplicate Tools (cleanup massive duplicates)
+// ============================================================================
+router.post('/admin/deduplicate', checkRole(['ADMIN']), async (req, res) => {
+  try {
+    const { dryRun = true } = req.body;
+    const user = req.user!;
+
+    console.log(`[TOOL DEDUP] Starting deduplication (dryRun: ${dryRun}) by ${user.email}`);
+
+    // Get all active tools
+    const allTools = await db
+      .select()
+      .from(toolInventory)
+      .where(eq(toolInventory.isActive, true))
+      .orderBy(toolInventory.createdAt);
+
+    // Group by name
+    const toolsByName = new Map<string, typeof allTools>();
+    for (const tool of allTools) {
+      const existing = toolsByName.get(tool.name) || [];
+      existing.push(tool);
+      toolsByName.set(tool.name, existing);
+    }
+
+    // Find duplicates (keep oldest, delete rest)
+    const toDelete: string[] = [];
+    const kept: { name: string; id: string; count: number }[] = [];
+
+    for (const [name, tools] of toolsByName) {
+      if (tools.length > 1) {
+        // Sort by createdAt ascending, keep first (oldest)
+        tools.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const keepId = tools[0].id;
+        const deleteIds = tools.slice(1).map(t => t.id);
+        toDelete.push(...deleteIds);
+        kept.push({ name, id: keepId, count: tools.length });
+      }
+    }
+
+    const stats = {
+      totalTools: allTools.length,
+      uniqueNames: toolsByName.size,
+      duplicatesToDelete: toDelete.length,
+      willKeep: toolsByName.size,
+      dryRun
+    };
+
+    console.log(`[TOOL DEDUP] Stats: ${JSON.stringify(stats)}`);
+
+    if (!dryRun && toDelete.length > 0) {
+      // Delete in batches of 1000 to avoid query size limits
+      const batchSize = 1000;
+      let deleted = 0;
+      for (let i = 0; i < toDelete.length; i += batchSize) {
+        const batch = toDelete.slice(i, i + batchSize);
+        await db.delete(toolInventory).where(inArray(toolInventory.id, batch));
+        deleted += batch.length;
+        console.log(`[TOOL DEDUP] Deleted batch ${Math.floor(i/batchSize) + 1}: ${deleted}/${toDelete.length}`);
+      }
+      console.log(`[TOOL DEDUP] Completed: Deleted ${deleted} duplicate tools`);
+    }
+
+    res.json({
+      success: true,
+      message: dryRun
+        ? `Dry run: Would delete ${toDelete.length} duplicates, keeping ${toolsByName.size} unique tools`
+        : `Deleted ${toDelete.length} duplicates, kept ${toolsByName.size} unique tools`,
+      stats,
+      kept: kept.slice(0, 20), // Show first 20 for preview
+      deletedBy: user.email
+    });
+  } catch (error) {
+    console.error('[TOOL DEDUP] Error:', error);
+    res.status(500).json({ error: 'Failed to deduplicate tools', details: (error as Error).message });
   }
 });
 
