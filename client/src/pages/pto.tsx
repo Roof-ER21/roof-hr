@@ -822,8 +822,8 @@ function PTO() {
           </Dialog>
           )}
 
-          {/* Admin: Create PTO for Employee */}
-          {isAdmin && (
+          {/* Admin: Create PTO for Employee - Only Oliver, Ford, Reese, Ahmed */}
+          {canApprovePto && (
             <Dialog open={adminPtoDialogOpen} onOpenChange={setAdminPtoDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="ml-2">

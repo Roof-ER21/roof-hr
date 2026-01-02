@@ -107,6 +107,14 @@ export function PtoCalendar() {
             </div>
           ))}
           
+          {/* Empty cells for days before the first of the month */}
+          {Array.from({ length: monthStart.getDay() }).map((_, index) => (
+            <div
+              key={`empty-${index}`}
+              className="min-h-[100px] p-2 border rounded-lg bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700"
+            />
+          ))}
+
           {/* Calendar days */}
           {days.map((day, index) => {
             const dayPtos = getPtosForDay(day);
@@ -118,7 +126,7 @@ export function PtoCalendar() {
 
             return (
               <div
-                key={index}
+                key={`day-${index}`}
                 className={`
                   min-h-[100px] p-2 border rounded-lg transition-colors
                   ${!isCurrentMonth ? 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500' : 'bg-white dark:bg-gray-800'}
