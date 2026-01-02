@@ -2,6 +2,7 @@ import express from 'express';
 import { storage } from '../storage';
 import { insertPtoPolicySchema, insertDepartmentPtoSettingSchema } from '../../shared/schema';
 import { v4 as uuidv4 } from 'uuid';
+import { getPtoAllocation } from '../../shared/constants/pto-policy';
 
 const router = express.Router();
 
@@ -593,13 +594,107 @@ router.post('/api/pto-policies/check-overlap', requireAuth, async (req, res) => 
     res.json({
       hasOverlap,
       overlappingEmployees,
-      warning: hasOverlap ? 
-        `Warning: ${overlappingEmployees.length} other employees from ${user.department} department have overlapping PTO` : 
+      warning: hasOverlap ?
+        `Warning: ${overlappingEmployees.length} other employees from ${user.department} department have overlapping PTO` :
         null
     });
   } catch (error) {
     console.error('Error checking PTO overlap:', error);
     res.status(500).json({ error: 'Failed to check PTO overlap' });
+  }
+});
+
+// Reset all PTO balances based on employment type and department
+// Admin-only endpoint to reset all employees to their correct PTO values
+router.post('/api/pto/admin/reset-all', requireAuth, requireManager, async (req, res) => {
+  try {
+    const user = req.user!;
+
+    // Only Ford Barsi, Ahmed Admin, or Support Admin can reset all PTO
+    if (user.email !== 'ford.barsi@theroofdocs.com' &&
+        user.email !== 'ahmed.mahmoud@theroofdocs.com' &&
+        user.email !== 'support@theroofdocs.com' &&
+        user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only Ford Barsi, Ahmed Admin, or Support Admin can reset all PTO' });
+    }
+
+    // Get all active users
+    const allUsers = await storage.getAllUsers();
+    const activeUsers = allUsers.filter(u => u.isActive !== false);
+
+    const results = {
+      updated: 0,
+      created: 0,
+      skipped: 0,
+      errors: [] as string[],
+      details: [] as { name: string; days: number; action: string }[]
+    };
+
+    for (const employee of activeUsers) {
+      try {
+        // Get proper PTO allocation based on employment type and department
+        const ptoAllocation = getPtoAllocation(employee.employmentType, employee.department);
+
+        // Check if policy exists
+        const existingPolicy = await storage.getPtoPolicyByEmployeeId(employee.id);
+
+        if (existingPolicy) {
+          // Update existing policy
+          await storage.updatePtoPolicy(existingPolicy.id, {
+            vacationDays: ptoAllocation.vacationDays,
+            sickDays: ptoAllocation.sickDays,
+            personalDays: ptoAllocation.personalDays,
+            totalDays: ptoAllocation.totalDays,
+            baseDays: ptoAllocation.totalDays,
+            remainingDays: ptoAllocation.totalDays - (existingPolicy.usedDays || 0),
+            customizedBy: user.id,
+            customizationDate: new Date(),
+            notes: ptoAllocation.totalDays === 0 ? 'Reset: No PTO (1099/Sales)' : 'Reset by admin'
+          });
+          results.updated++;
+          results.details.push({
+            name: `${employee.firstName} ${employee.lastName}`,
+            days: ptoAllocation.totalDays,
+            action: 'updated'
+          });
+        } else {
+          // Create new policy
+          await storage.createPtoPolicy({
+            employeeId: employee.id,
+            policyLevel: 'INDIVIDUAL',
+            vacationDays: ptoAllocation.vacationDays,
+            sickDays: ptoAllocation.sickDays,
+            personalDays: ptoAllocation.personalDays,
+            totalDays: ptoAllocation.totalDays,
+            baseDays: ptoAllocation.totalDays,
+            additionalDays: 0,
+            usedDays: 0,
+            remainingDays: ptoAllocation.totalDays,
+            notes: ptoAllocation.totalDays === 0 ? 'Reset: No PTO (1099/Sales)' : 'Reset by admin'
+          });
+          results.created++;
+          results.details.push({
+            name: `${employee.firstName} ${employee.lastName}`,
+            days: ptoAllocation.totalDays,
+            action: 'created'
+          });
+        }
+      } catch (error: any) {
+        results.skipped++;
+        results.errors.push(`${employee.firstName} ${employee.lastName}: ${error.message}`);
+      }
+    }
+
+    console.log(`[PTO Reset] Admin ${user.email} reset all PTO: ${results.updated} updated, ${results.created} created, ${results.skipped} skipped`);
+
+    res.json({
+      success: true,
+      message: `PTO reset complete. Updated: ${results.updated}, Created: ${results.created}, Skipped: ${results.skipped}`,
+      results
+    });
+  } catch (error) {
+    console.error('Error resetting all PTO:', error);
+    res.status(500).json({ error: 'Failed to reset all PTO' });
   }
 });
 

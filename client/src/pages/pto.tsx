@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Calendar, Plus, Check, X, Info, AlertCircle, Building, Users, User, Edit } from 'lucide-react';
+import { Calendar, Plus, Check, X, Info, AlertCircle, Building, Users, User, Edit, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -497,6 +497,41 @@ function PTO() {
       toast({
         title: 'Success',
         description: 'Individual PTO policy created successfully'
+      });
+    }
+  });
+
+  // Reset all PTO balances mutation
+  const [resetResults, setResetResults] = useState<any>(null);
+  const resetAllPTOMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/pto/admin/reset-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to reset PTO');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setResetResults(data.results);
+      queryClient.invalidateQueries({ queryKey: ['/api/pto/individual-policies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto-policies'] });
+      toast({
+        title: 'PTO Reset Complete',
+        description: data.message
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reset PTO',
+        variant: 'destructive'
       });
     }
   });
@@ -1227,6 +1262,77 @@ function PTO() {
           )}
         </CardContent>
       </Card>
+
+      {/* Admin Reset PTO Card */}
+      {canEditPolicies && (
+        <Card className="border-orange-200 dark:border-orange-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+              <RefreshCw className="h-5 w-5" />
+              Reset All PTO Balances
+            </CardTitle>
+            <CardDescription>
+              Reset all employees to their default PTO based on employment type and department.
+              W2 employees get 17 days (10 vacation + 5 sick + 2 personal).
+              1099/Sales get 0 days.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Alert className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
+                <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                <AlertDescription className="text-orange-800 dark:text-orange-200">
+                  This will reset all employee PTO balances to their default values. Used days will be preserved.
+                </AlertDescription>
+              </Alert>
+
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to reset all PTO balances? This cannot be undone.')) {
+                    resetAllPTOMutation.mutate();
+                  }
+                }}
+                disabled={resetAllPTOMutation.isPending}
+              >
+                {resetAllPTOMutation.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reset All PTO
+                  </>
+                )}
+              </Button>
+
+              {resetResults && (
+                <div className="mt-4 p-4 bg-muted rounded-lg">
+                  <h4 className="font-medium mb-2">Reset Results:</h4>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-green-600 dark:text-green-400 font-bold">{resetResults.updated}</span> updated
+                    </div>
+                    <div>
+                      <span className="text-blue-600 dark:text-blue-400 font-bold">{resetResults.created}</span> created
+                    </div>
+                    <div>
+                      <span className="text-orange-600 dark:text-orange-400 font-bold">{resetResults.skipped}</span> skipped
+                    </div>
+                  </div>
+                  {resetResults.errors?.length > 0 && (
+                    <div className="mt-2 text-red-600 dark:text-red-400 text-sm">
+                      Errors: {resetResults.errors.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </TabsContent>
 
     {/* Department Policies Tab */}
