@@ -15,7 +15,7 @@ import {
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isLeadSourcer } from '../shared/constants/roles';
-import { PTO_POLICY } from '../shared/constants/pto-policy';
+import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
 import googleAuthRoutes from './routes/google-auth';
@@ -1280,21 +1280,22 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
           }
         }
 
-        // Create PTO policy
+        // Create PTO policy based on employment type and department
         if (createPtoPolicies) {
           try {
+            const ptoAllocation = getPtoAllocation(newUser.employmentType, newUser.department);
             await storage.createPtoPolicy({
               employeeId: newUser.id,
               policyLevel: 'COMPANY',
-              vacationDays: 10,
-              sickDays: 5,
-              personalDays: 3,
-              baseDays: 18,
+              vacationDays: ptoAllocation.vacationDays,
+              sickDays: ptoAllocation.sickDays,
+              personalDays: ptoAllocation.personalDays,
+              baseDays: ptoAllocation.totalDays,
               additionalDays: 0,
-              totalDays: 18,
+              totalDays: ptoAllocation.totalDays,
               usedDays: 0,
-              remainingDays: 18,
-              notes: 'Initial PTO allocation'
+              remainingDays: ptoAllocation.totalDays,
+              notes: ptoAllocation.totalDays === 0 ? 'No PTO (1099/Sales)' : 'Initial PTO allocation'
             });
           } catch (ptoError: any) {
             console.error(`PTO policy creation failed for ${emp.email}:`, ptoError.message);
@@ -2359,23 +2360,29 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
 
     console.log(`[HIRE] Created employee ${newEmployee.id} for ${candidate.firstName} ${candidate.lastName}`);
 
-    // Create PTO policy
+    // Create PTO policy based on employment type and department
+    // 1099 employees and Sales department get 0 PTO
     try {
-      const totalDays = vacationDays + sickDays + personalDays;
+      const ptoAllocation = getPtoAllocation(newEmployee.employmentType, newEmployee.department);
+      const finalVacationDays = ptoAllocation.totalDays === 0 ? 0 : vacationDays;
+      const finalSickDays = ptoAllocation.totalDays === 0 ? 0 : sickDays;
+      const finalPersonalDays = ptoAllocation.totalDays === 0 ? 0 : personalDays;
+      const totalDays = finalVacationDays + finalSickDays + finalPersonalDays;
+
       await storage.createPtoPolicy({
         employeeId: newEmployee.id,
         policyLevel: 'INDIVIDUAL',
         totalDays,
         baseDays: totalDays,
-        vacationDays,
-        sickDays,
-        personalDays,
+        vacationDays: finalVacationDays,
+        sickDays: finalSickDays,
+        personalDays: finalPersonalDays,
         additionalDays: 0,
         usedDays: 0,
         remainingDays: totalDays,
-        notes: 'Initial PTO allocation from hiring'
+        notes: totalDays === 0 ? 'No PTO (1099/Sales)' : 'Initial PTO allocation from hiring'
       });
-      console.log(`[HIRE] Created PTO policy for ${newEmployee.id}`);
+      console.log(`[HIRE] Created PTO policy for ${newEmployee.id} (${totalDays} total days)`);
     } catch (ptoError) {
       console.error('[HIRE] Failed to create PTO policy:', ptoError);
     }
@@ -2519,37 +2526,46 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     await storage.updateCandidate(candidateId, { status: 'HIRED' });
     console.log(`[HIRE] Updated candidate ${candidateId} status to HIRED`);
 
-    // Send welcome email
-    let emailSent = false;
+    // Send welcome email (async/non-blocking to prevent UI freeze)
+    const emailTriggered = sendWelcomeEmail;
     if (sendWelcomeEmail) {
-      try {
-        const { EmailService } = await import('./email-service');
-        const emailService = new EmailService();
-        await emailService.initialize();
+      // Fire-and-forget: Send email in background, don't block response
+      const candidateEmail = candidate.email;
+      const candidateFirstName = candidate.firstName;
+      const candidateLastName = candidate.lastName;
+      const candidatePosition = candidate.position || 'Sales Representative';
+      const senderEmail = user.email;
 
-        emailSent = await emailService.sendWelcomeEmail(
-          {
-            firstName: candidate.firstName,
-            lastName: candidate.lastName,
-            email: candidate.email,
-            position: candidate.position || 'Sales Representative',
-          },
-          tempPassword,
-          user.email,
-          {
-            includeAttachments: true,
-            includeEquipmentChecklist: true,
+      (async () => {
+        try {
+          const { EmailService } = await import('./email-service');
+          const emailService = new EmailService();
+          await emailService.initialize();
+
+          const emailSent = await emailService.sendWelcomeEmail(
+            {
+              firstName: candidateFirstName,
+              lastName: candidateLastName,
+              email: candidateEmail,
+              position: candidatePosition,
+            },
+            tempPassword,
+            senderEmail,
+            {
+              includeAttachments: true,
+              includeEquipmentChecklist: true,
+            }
+          );
+
+          if (emailSent) {
+            console.log(`[HIRE] Welcome email sent to ${candidateEmail}`);
+          } else {
+            console.error(`[HIRE] Failed to send welcome email to ${candidateEmail}`);
           }
-        );
-
-        if (emailSent) {
-          console.log(`[HIRE] Welcome email sent to ${candidate.email}`);
-        } else {
-          console.error(`[HIRE] Failed to send welcome email to ${candidate.email}`);
+        } catch (emailError) {
+          console.error('[HIRE] Email service error:', emailError);
         }
-      } catch (emailError) {
-        console.error('[HIRE] Email service error:', emailError);
-      }
+      })();
     }
 
     res.json({
@@ -2564,7 +2580,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
         hireDate: startDate
       },
       toolsAssigned,
-      emailSent,
+      emailSent: emailTriggered, // Email is sent async in background
       onboardingTasksCreated: onboardingTasks.length
     });
 
@@ -3008,22 +3024,23 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
       // Continue with onboarding - Google Drive is optional
     }
     
-    // Create default PTO policy
+    // Create PTO policy based on employment type and department
     try {
+      const ptoAllocation = getPtoAllocation(newEmployee.employmentType, newEmployee.department);
       await storage.createPtoPolicy({
         employeeId: newEmployee.id,
         policyLevel: 'INDIVIDUAL',
-        totalDays: 18,
-        baseDays: 18,
-        vacationDays: 10,
-        sickDays: 5,
-        personalDays: 3,
+        totalDays: ptoAllocation.totalDays,
+        baseDays: ptoAllocation.totalDays,
+        vacationDays: ptoAllocation.vacationDays,
+        sickDays: ptoAllocation.sickDays,
+        personalDays: ptoAllocation.personalDays,
         additionalDays: 0,
         usedDays: 0,
-        remainingDays: 18,
-        notes: 'Initial PTO allocation'
+        remainingDays: ptoAllocation.totalDays,
+        notes: ptoAllocation.totalDays === 0 ? 'No PTO (1099/Sales)' : 'Initial PTO allocation'
       });
-      console.log(`[Direct Hire] PTO balance created for ${firstName} ${lastName}`);
+      console.log(`[Direct Hire] PTO balance created for ${firstName} ${lastName} (${ptoAllocation.totalDays} days)`);
     } catch (error) {
       console.error('Failed to create PTO policy:', error);
     }
