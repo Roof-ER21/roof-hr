@@ -2051,21 +2051,32 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
       candidates = candidates.filter((c: any) => c.assignedTo === user.id);
     }
 
-    // Enrich with sourcer info for color display
-    const enriched = await Promise.all(candidates.map(async (c: any) => {
-      let sourcer = null;
-      if (c.assignedTo) {
-        const sourcerUser = await storage.getUserById(c.assignedTo);
+    // Batch fetch sourcer info instead of N individual queries
+    // Get unique assignedTo IDs
+    const assignedToIds = [...new Set(candidates.map((c: any) => c.assignedTo).filter(Boolean))];
+
+    // Build a map of sourcer info (one query for all)
+    const sourcerMap = new Map<string, any>();
+    if (assignedToIds.length > 0) {
+      // Fetch all users in one query
+      const allUsers = await storage.getAllUsers();
+      for (const userId of assignedToIds) {
+        const sourcerUser = allUsers.find((u: any) => u.id === userId);
         if (sourcerUser) {
-          sourcer = {
+          sourcerMap.set(userId, {
             id: sourcerUser.id,
             firstName: sourcerUser.firstName,
             lastName: sourcerUser.lastName,
             screenerColor: (sourcerUser as any).screenerColor || '#6B7280'
-          };
+          });
         }
       }
-      return { ...c, sourcer };
+    }
+
+    // Enrich candidates with cached sourcer data (no additional DB calls)
+    const enriched = candidates.map((c: any) => ({
+      ...c,
+      sourcer: c.assignedTo ? sourcerMap.get(c.assignedTo) || null : null
     }));
 
     res.json(enriched);
