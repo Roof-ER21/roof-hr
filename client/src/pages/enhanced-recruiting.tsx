@@ -1360,6 +1360,9 @@ export default function EnhancedRecruiting() {
       });
     },
     onError: (error: any) => {
+      // Close the modal on error so user can try again
+      setShowHireModal(false);
+      setCandidateToHire(null);
       toast({
         title: 'Hire Failed',
         description: error.message || 'Failed to hire candidate',

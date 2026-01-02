@@ -2568,6 +2568,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       })();
     }
 
+    console.log(`[HIRE] Hire complete for ${newEmployee.firstName} ${newEmployee.lastName} - sending response`);
+
     res.json({
       success: true,
       employee: {
@@ -2580,7 +2582,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
         hireDate: startDate
       },
       toolsAssigned,
-      emailSent: emailTriggered, // Email is sent async in background
+      emailSent: emailTriggered, // Boolean: true if email was requested (sending in background)
+      emailNote: emailTriggered ? 'Welcome email is being sent in the background' : 'No email requested',
       onboardingTasksCreated: onboardingTasks.length
     });
 

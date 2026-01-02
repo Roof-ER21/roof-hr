@@ -34,14 +34,15 @@ export function ProtectedRoute({ children, requiredRoles, requiredEmails }: Prot
   // Check role-based access
   if (requiredRoles && requiredRoles.length > 0) {
     if (!user.role || !requiredRoles.includes(user.role)) {
-      return <Navigate to="/dashboard" replace />;
+      // Redirect non-authorized users to my-portal (not dashboard which may also be restricted)
+      return <Navigate to="/my-portal" replace />;
     }
   }
 
   // Check email-based access
   if (requiredEmails && requiredEmails.length > 0) {
     if (!user.email || !requiredEmails.map(e => e.toLowerCase()).includes(user.email.toLowerCase())) {
-      return <Navigate to="/dashboard" replace />;
+      return <Navigate to="/my-portal" replace />;
     }
   }
 

@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/queryClient';
 import { AppLayout } from '@/components/layout/app-layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { ADMIN_ROLES, ONBOARDING_ADMIN_EMAILS } from '@shared/constants/roles';
+import { ADMIN_ROLES, MANAGER_ROLES, ONBOARDING_ADMIN_EMAILS } from '@shared/constants/roles';
 import Dashboard from '@/pages/dashboard';
 import EnhancedEmployees from '@/pages/enhanced-employees';
 import PTO from '@/pages/pto';
@@ -76,58 +76,162 @@ function AuthenticatedRoutes() {
   return (
     <AppLayout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/employees" element={<EnhancedEmployees />} />
+        {/* Dashboard: Admin/Manager only */}
+        <Route path="/" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+
+        {/* Employees: Admin/Manager only */}
+        <Route path="/employees" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <EnhancedEmployees />
+          </ProtectedRoute>
+        } />
+
+        {/* PTO: Everyone can access */}
         <Route path="/pto" element={<PTO />} />
+
+        {/* Recruiting: Everyone can access (SOURCER sees their assigned candidates) */}
         <Route path="/recruiting" element={<EnhancedRecruiting />} />
         <Route path="/recruiting-analytics" element={<RecruitingAnalytics />} />
-        <Route path="/documents" element={<Documents />} />
-        <Route path="/reviews" element={<Reviews />} />
-        <Route path="/settings" element={<Settings />} />
+
+        {/* Documents: Admin/Manager only */}
+        <Route path="/documents" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <Documents />
+          </ProtectedRoute>
+        } />
+
+        {/* Reviews: Admin only */}
+        <Route path="/reviews" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <Reviews />
+          </ProtectedRoute>
+        } />
+
+        {/* Settings: Admin only */}
+        <Route path="/settings" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <Settings />
+          </ProtectedRoute>
+        } />
+
         <Route path="/change-password" element={<ChangePassword />} />
         <Route path="/api-test" element={<ApiTest />} />
-        {/* Resume uploader is now integrated into the recruiting page */}
-        <Route path="/tools" element={<Tools />} />
-        <Route path="/email-templates" element={<EmailTemplates />} />
-        <Route path="/workflow-builder" element={<WorkflowBuilder />} />
-        <Route path="/territories" element={<Territories />} />
-        <Route
-          path="/pto-policies"
-          element={
-            <ProtectedRoute requiredRoles={ADMIN_ROLES}>
-              <PtoPolicies />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/coi-documents" element={<CoiDocuments />} />
-        <Route path="/employee-assignments" element={<EmployeeAssignments />} />
-        <Route path="/contracts" element={<Contracts />} />
+
+        {/* Tools: Admin/Manager only */}
+        <Route path="/tools" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <Tools />
+          </ProtectedRoute>
+        } />
+
+        {/* Email Templates: Admin/Manager only */}
+        <Route path="/email-templates" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <EmailTemplates />
+          </ProtectedRoute>
+        } />
+
+        {/* Workflow Builder: Admin/Manager only */}
+        <Route path="/workflow-builder" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <WorkflowBuilder />
+          </ProtectedRoute>
+        } />
+
+        {/* Territories: Admin only */}
+        <Route path="/territories" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <Territories />
+          </ProtectedRoute>
+        } />
+
+        {/* PTO Policies: Admin only */}
+        <Route path="/pto-policies" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <PtoPolicies />
+          </ProtectedRoute>
+        } />
+
+        {/* COI Documents: Admin only */}
+        <Route path="/coi-documents" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <CoiDocuments />
+          </ProtectedRoute>
+        } />
+
+        {/* Employee Assignments: Admin only */}
+        <Route path="/employee-assignments" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <EmployeeAssignments />
+          </ProtectedRoute>
+        } />
+
+        {/* Contracts: Admin/Manager only */}
+        <Route path="/contracts" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <Contracts />
+          </ProtectedRoute>
+        } />
+
+        {/* Susan AI: Everyone can access */}
         <Route path="/susan-ai" element={<SusanAI />} />
-        <Route
-          path="/susan-ai-admin"
-          element={
-            <ProtectedRoute requiredRoles={ADMIN_ROLES}>
-              <SusanAIAdmin />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/susan-ai-admin" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <SusanAIAdmin />
+          </ProtectedRoute>
+        } />
+
         <Route path="/google-integration" element={<Navigate to="/settings?tab=google" replace />} />
-        <Route path="/attendance" element={<AttendanceDashboard />} />
-        <Route path="/attendance/admin" element={<AttendanceAdminDashboard />} />
+
+        {/* Attendance: Admin only */}
+        <Route path="/attendance" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <AttendanceDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/attendance/admin" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <AttendanceAdminDashboard />
+          </ProtectedRoute>
+        } />
+
+        {/* My Portal: Everyone can access */}
         <Route path="/my-portal" element={<EmployeeDashboard />} />
+
+        {/* Team Directory: Everyone can access (read-only) */}
         <Route path="/team-directory" element={<TeamDirectory />} />
         <Route path="/org-chart" element={<OrgChartPage />} />
-        <Route path="/team-dashboard" element={<TeamDashboard />} />
-        <Route path="/meeting-rooms" element={<MeetingRooms />} />
-        <Route
-          path="/onboarding-templates"
-          element={
-            <ProtectedRoute requiredEmails={ONBOARDING_ADMIN_EMAILS}>
-              <OnboardingTemplates />
-            </ProtectedRoute>
-          }
-        />
+
+        {/* Team Dashboard: Admin/Manager only */}
+        <Route path="/team-dashboard" element={
+          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+            <TeamDashboard />
+          </ProtectedRoute>
+        } />
+
+        {/* Meeting Rooms: Admin only */}
+        <Route path="/meeting-rooms" element={
+          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
+            <MeetingRooms />
+          </ProtectedRoute>
+        } />
+
+        {/* Onboarding Templates: Specific emails only */}
+        <Route path="/onboarding-templates" element={
+          <ProtectedRoute requiredEmails={ONBOARDING_ADMIN_EMAILS}>
+            <OnboardingTemplates />
+          </ProtectedRoute>
+        } />
+
         <Route path="/scheduled-reports" element={<Navigate to="/settings?tab=reports" replace />} />
         <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
       </Routes>
