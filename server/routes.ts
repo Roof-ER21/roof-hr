@@ -707,9 +707,13 @@ router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, asy
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Calculate days
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    // Calculate days - parse as local date (not UTC) to avoid off-by-one errors
+    const parseLocalDate = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    };
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
     const diffTime = end.getTime() - start.getTime();
     const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
@@ -810,6 +814,31 @@ router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, asy
   } catch (error: any) {
     console.error('[ADMIN-PTO] Error creating PTO for employee:', error);
     res.status(500).json({ error: 'Failed to create PTO', details: error.message });
+  }
+});
+
+// Clear all DENIED and APPROVED PTO requests (Admin only) - for fresh start
+router.delete('/api/admin/clear-pto', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    const adminUser = req.user!;
+    console.log(`[ADMIN-PTO] ${adminUser.email} is clearing all DENIED and APPROVED PTO requests`);
+
+    // Delete all PTO requests that are DENIED or APPROVED (keep PENDING)
+    const result = await db.delete(ptoRequests)
+      .where(or(
+        eq(ptoRequests.status, 'DENIED'),
+        eq(ptoRequests.status, 'APPROVED')
+      ));
+
+    console.log(`[ADMIN-PTO] Cleared PTO requests`);
+
+    res.json({
+      success: true,
+      message: 'All DENIED and APPROVED PTO requests have been cleared. PENDING requests were preserved.'
+    });
+  } catch (error: any) {
+    console.error('[ADMIN-PTO] Error clearing PTO:', error);
+    res.status(500).json({ error: 'Failed to clear PTO', details: error.message });
   }
 });
 
@@ -1465,11 +1494,17 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
 
 router.post('/api/pto', requireAuth, async (req: any, res) => {
   try {
+    // Helper to parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one errors
+    const parseLocalDate = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    };
+
     // Calculate days from startDate and endDate BEFORE validation
-    const startDate = new Date(req.body.startDate);
-    const endDate = new Date(req.body.endDate);
     const startDateStr = req.body.startDate; // YYYY-MM-DD string
     const endDateStr = req.body.endDate;     // YYYY-MM-DD string
+    const startDate = parseLocalDate(startDateStr);
+    const endDate = parseLocalDate(endDateStr);
 
     let days: number;
 

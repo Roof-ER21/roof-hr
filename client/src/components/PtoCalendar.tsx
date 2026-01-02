@@ -4,8 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Star } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isWithinInterval } from 'date-fns';
 import { isHoliday, getHolidayName, getHolidaysForYear } from '@shared/constants/holidays';
+
+// Parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one errors
+const parseLocalDate = (dateStr: string): Date => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
 
 // Calendar PTO data - minimal info for privacy
 interface CalendarPtoEntry {
@@ -31,8 +37,8 @@ export function PtoCalendar() {
   // Get PTOs for a specific day
   const getPtosForDay = (day: Date) => {
     return calendarPtos.filter(pto => {
-      const startDate = parseISO(pto.startDate);
-      const endDate = parseISO(pto.endDate);
+      const startDate = parseLocalDate(pto.startDate);
+      const endDate = parseLocalDate(pto.endDate);
       return isWithinInterval(day, { start: startDate, end: endDate });
     });
   };
@@ -202,7 +208,7 @@ export function PtoCalendar() {
               >
                 <div className="font-medium text-green-800 dark:text-green-200">{holiday.name}</div>
                 <div className="text-green-600 dark:text-green-400">
-                  {format(parseISO(holiday.date), 'MMM d, yyyy')}
+                  {format(parseLocalDate(holiday.date), 'MMM d, yyyy')}
                 </div>
               </div>
             ))}
@@ -224,7 +230,7 @@ export function PtoCalendar() {
                   </p>
                 </div>
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {format(parseISO(pto.startDate), 'MMM d')} - {format(parseISO(pto.endDate), 'MMM d')}
+                  {format(parseLocalDate(pto.startDate), 'MMM d')} - {format(parseLocalDate(pto.endDate), 'MMM d')}
                 </span>
               </div>
             ))}

@@ -243,17 +243,25 @@ function PTO() {
     adminCreatePTOMutation.mutate({ ...data, autoApprove: adminPtoAutoApprove });
   };
 
+  // Helper to parse YYYY-MM-DD as local date (not UTC)
+  const parseLocalDate = (dateStr: string): Date => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
   const createPTOMutation = useMutation({
     mutationFn: async (data: PTOFormData) => {
-      // Validate dates
-      const startDate = new Date(data.startDate);
-      const endDate = new Date(data.endDate);
-      
+      // Validate dates - parse as LOCAL time, not UTC
+      const startDate = parseLocalDate(data.startDate);
+      const endDate = parseLocalDate(data.endDate);
+
       if (startDate > endDate) {
         throw new Error('End date cannot be before start date');
       }
-      
-      if (startDate < new Date(new Date().setHours(0, 0, 0, 0))) {
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (startDate < today) {
         throw new Error('Start date cannot be in the past');
       }
 
@@ -262,16 +270,16 @@ function PTO() {
         const blackoutDates = settings.ptoPolicy.blackoutDates;
         const requestedDates: string[] = [];
         const currentDate = new Date(startDate);
-        
+
         while (currentDate <= endDate) {
           requestedDates.push(format(currentDate, 'yyyy-MM-dd'));
           currentDate.setDate(currentDate.getDate() + 1);
         }
-        
-        const conflictingDates = requestedDates.filter(date => 
+
+        const conflictingDates = requestedDates.filter(date =>
           blackoutDates.includes(date)
         );
-        
+
         if (conflictingDates.length > 0) {
           throw new Error(`Request includes blackout dates: ${conflictingDates.join(', ')}. Please choose different dates.`);
         }
