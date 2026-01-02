@@ -201,6 +201,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               .filter(item => {
                 // Ahmed always sees all menu items (super admin email fallback)
                 if (user?.email === SUPER_ADMIN_EMAIL) return true;
+
+                // SOURCER ROLE: Explicit whitelist of allowed pages
+                // Sourcers can ONLY see: My Portal, Susan AI, Recruiting, Time Off
+                if (user?.role === 'SOURCER') {
+                  const sourcerAllowedPages = ['My Portal', 'Susan AI', 'Recruiting', 'Time Off'];
+                  return sourcerAllowedPages.includes(item.name);
+                }
+
                 // Check for page restrictions (email-based hiding)
                 const restrictedPages = getRestrictedPages(user);
                 if (restrictedPages.includes(item.name)) return false;
