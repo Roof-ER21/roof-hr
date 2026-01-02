@@ -2032,6 +2032,7 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
   try {
     const user = req.user;
     let candidates = await storage.getAllCandidates();
+    const totalCandidates = candidates.length;
 
     // Manager-level roles see all candidates
     const managerRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER',
@@ -2046,9 +2047,13 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
     // - Everyone else (including assigned sourcers) only see their assigned candidates
     const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user);
 
+    // Log filtering decision for debugging
+    console.log(`[Candidates API] User ${user.email} (role: ${user.role}, id: ${user.id}) - canSeeAll: ${canSeeAllCandidates}`);
+
     if (!canSeeAllCandidates) {
       // Non-managers only see their assigned candidates (assignment-based access)
       candidates = candidates.filter((c: any) => c.assignedTo === user.id);
+      console.log(`[Candidates API] Filtered from ${totalCandidates} to ${candidates.length} candidates for ${user.email}`);
     }
 
     // Batch fetch sourcer info instead of N individual queries
@@ -2271,6 +2276,53 @@ router.delete('/api/candidates/:id', requireAuth, requireManager, async (req, re
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: 'Failed to delete candidate' });
+  }
+});
+
+// SOURCER stage update - allows SOURCERs to move their assigned candidates (restricted stages)
+router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user!;
+    const { newStatus } = req.body;
+    const candidateId = req.params.id;
+
+    // Get the candidate
+    const candidate = await storage.getCandidateById(candidateId);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    // Verify the SOURCER is assigned to this candidate
+    if (candidate.assignedTo !== user.id) {
+      console.log(`[SOURCER-MOVE] Denied: ${user.email} tried to move candidate ${candidateId} but is not assigned (assigned to: ${candidate.assignedTo})`);
+      return res.status(403).json({ error: 'You can only move candidates assigned to you' });
+    }
+
+    // SOURCERs can only move to these stages
+    const allowedStages = ['APPLIED', 'SCREENING', 'INTERVIEW'];
+    if (!allowedStages.includes(newStatus)) {
+      console.log(`[SOURCER-MOVE] Denied: ${user.email} tried to move to ${newStatus} which is not allowed`);
+      return res.status(403).json({
+        error: 'SOURCERs can only move candidates to Application Review, Phone Screening, or Interview Process. Contact a manager to move to later stages.'
+      });
+    }
+
+    // Update the candidate
+    const previousStatus = candidate.status;
+    const updatedCandidate = await storage.updateCandidate(candidateId, { status: newStatus });
+
+    console.log(`[SOURCER-MOVE] ${user.email} moved candidate ${candidate.firstName} ${candidate.lastName} from ${previousStatus} to ${newStatus}`);
+
+    // Trigger workflows if status changed
+    if (newStatus !== previousStatus) {
+      const { workflowExecutor } = await import('./services/workflow-executor');
+      await workflowExecutor.onCandidateStageChange(candidateId, newStatus, previousStatus);
+    }
+
+    res.json(updatedCandidate);
+  } catch (error: any) {
+    console.error('[SOURCER-MOVE] Error:', error);
+    res.status(400).json({ error: 'Failed to update candidate', details: error.message });
   }
 });
 

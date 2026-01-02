@@ -51,17 +51,21 @@ import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 // Droppable Column Component
-function DroppableColumn({ status, children }: { status: string; children: React.ReactNode }) {
+function DroppableColumn({ status, children, disabled = false }: { status: string; children: React.ReactNode; disabled?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
+    disabled, // Prevents drops when disabled
   });
 
   return (
     <div
       ref={setNodeRef}
       className={`min-h-[200px] transition-colors ${
-        isOver ? 'bg-blue-50 border-2 border-blue-300 border-dashed rounded-lg' : ''
+        disabled ? 'opacity-50 cursor-not-allowed' : ''
+      } ${
+        isOver && !disabled ? 'bg-blue-50 border-2 border-blue-300 border-dashed rounded-lg' : ''
       }`}
+      title={disabled ? 'SOURCERs cannot move candidates to this stage. Contact a manager.' : undefined}
     >
       {children}
     </div>
@@ -1000,12 +1004,18 @@ export default function EnhancedRecruiting() {
     isLimitedSourcer,
     isLeadSourcer,
     isSourcer,
+    isSourcerRole,
+    isManager,
     canBulkManageCandidates,
     canAssignCandidates,
     canAccessEmailCampaigns,
     canAccessWorkflowManagement,
     canSeeAllRecruitmentStats,
   } = usePermissions();
+
+  // Stages that SOURCERs can move candidates to (not OFFER, HIRED, or DEAD)
+  const SOURCER_ALLOWED_STAGES = ['APPLIED', 'SCREENING', 'INTERVIEW'];
+  const userIsSourcerOnly = isSourcerRole() && !isManager();
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [filterSourcer, setFilterSourcer] = useState<string>('ALL');
@@ -1278,13 +1288,30 @@ export default function EnhancedRecruiting() {
   }, [location, candidates, toast]);
 
   const updateCandidateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest(`/api/candidates/${id}`, 'PATCH', data),
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      // If user is SOURCER (not manager) and updating status, use the sourcer-move endpoint
+      if (userIsSourcerOnly && data.status) {
+        // Check if the target status is allowed for SOURCERs
+        if (!SOURCER_ALLOWED_STAGES.includes(data.status)) {
+          throw new Error('SOURCERs can only move candidates to Application Review, Phone Screening, or Interview Process. Contact a manager to move to later stages.');
+        }
+        return apiRequest(`/api/candidates/${id}/sourcer-move`, 'PATCH', { newStatus: data.status });
+      }
+      // Managers and others use the regular endpoint
+      return apiRequest(`/api/candidates/${id}`, 'PATCH', data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
       toast({
         title: 'Success',
         description: 'Candidate updated successfully',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Update Failed',
+        description: error.message || 'Failed to update candidate',
+        variant: 'destructive',
       });
     },
   });
@@ -1971,8 +1998,11 @@ export default function EnhancedRecruiting() {
             {/* Content based on view mode */}
             {viewMode === 'kanban' ? (
               <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                {kanbanStages.map(status => (
-                  <DroppableColumn key={status} status={status}>
+                {kanbanStages.map(status => {
+                  // SOURCERs can only drop into allowed stages
+                  const isDropDisabled = userIsSourcerOnly && !SOURCER_ALLOWED_STAGES.includes(status);
+                  return (
+                  <DroppableColumn key={status} status={status} disabled={isDropDisabled}>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-medium text-gray-900 dark:text-white">
@@ -2092,7 +2122,8 @@ export default function EnhancedRecruiting() {
                     </div>
                   </div>
                   </DroppableColumn>
-                ))}
+                  );
+                })}
               </div>
             ) : viewMode === 'list' ? (
               // List View

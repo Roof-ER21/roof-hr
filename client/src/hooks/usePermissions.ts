@@ -12,6 +12,7 @@ import {
   isLimitedSourcer as isLimitedSourcerFn,
   isLeadSourcer as isLeadSourcerFn,
   isSourcer as isSourcerFn,
+  isSourcerRole as isSourcerRoleFn,
 } from '@shared/constants/roles';
 
 export interface Permission {
@@ -153,11 +154,19 @@ export const usePermissions = () => {
   };
 
   /**
-   * Check if user is any type of sourcer
+   * Check if user is any type of sourcer (email-based)
    */
   const isSourcer = (): boolean => {
     if (!user) return false;
     return isSourcerFn(user);
+  };
+
+  /**
+   * Check if user has the SOURCER role (role-based, for Sima/Jobs)
+   */
+  const isSourcerRole = (): boolean => {
+    if (!user) return false;
+    return isSourcerRoleFn(user);
   };
 
   // ============================================================================
@@ -243,6 +252,7 @@ export const usePermissions = () => {
     isLimitedSourcer,
     isLeadSourcer,
     isSourcer,
+    isSourcerRole, // Role-based check for Sima/Jobs
     // Sourcer permission helpers
     canSeeAllCandidates,
     canBulkManageCandidates,
