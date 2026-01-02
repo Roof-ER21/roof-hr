@@ -896,24 +896,46 @@ router.post('/api/admin/reset-sales-1099-pto', requireAuth, requireAdmin, async 
 });
 
 // User routes
-router.get('/api/users', requireAuth, async (req, res) => {
+router.get('/api/users', requireAuth, async (req: any, res) => {
   try {
+    const user = req.user;
     const users = await storage.getAllUsers();
-    const safeUsers = users.map(user => ({
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      employmentType: user.employmentType,
-      department: user.department,
-      position: user.position,
-      hireDate: user.hireDate,
-      isActive: user.isActive,
-      phone: user.phone,
-      createdAt: user.createdAt,
+
+    // Check if user can see all user details
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const { isLeadSourcer } = await import('../shared/constants/roles');
+    const canSeeAllUsers = isAdminOrManager || isLeadSourcer(user);
+
+    if (canSeeAllUsers) {
+      // Managers/admins/lead sourcers see full user details (minus password)
+      const safeUsers = users.map(u => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        role: u.role,
+        employmentType: u.employmentType,
+        department: u.department,
+        position: u.position,
+        hireDate: u.hireDate,
+        isActive: u.isActive,
+        phone: u.phone,
+        createdAt: u.createdAt,
+        screenerColor: (u as any).screenerColor,
+      }));
+      return res.json(safeUsers);
+    }
+
+    // SOURCER and other roles: Only return minimal info needed for recruiting UI
+    // (display names and screener colors for assignment UI, no sensitive data)
+    const limitedUsers = users.map(u => ({
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      screenerColor: (u as any).screenerColor,
+      // Exclude: email, role, department, phone, hireDate, etc.
     }));
-    res.json(safeUsers);
+    res.json(limitedUsers);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch users' });
   }
@@ -2616,9 +2638,24 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
 });
 
 // Candidate Notes routes
-router.get('/api/candidates/:candidateId/notes', requireAuth, async (req, res) => {
+router.get('/api/candidates/:candidateId/notes', requireAuth, async (req: any, res) => {
   try {
-    const notes = await storage.getCandidateNotesByCandidateId(req.params.candidateId);
+    const user = req.user;
+    const candidateId = req.params.candidateId;
+
+    // Check if user can access this candidate's notes
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const { isLeadSourcer } = await import('../shared/constants/roles');
+
+    if (!isAdminOrManager && !isLeadSourcer(user)) {
+      // For SOURCER/other roles: verify they're assigned to this candidate
+      const candidate = await storage.getCandidateById(candidateId);
+      if (!candidate || candidate.assignedTo !== user.id) {
+        return res.status(403).json({ error: 'Access denied - not assigned to this candidate' });
+      }
+    }
+
+    const notes = await storage.getCandidateNotesByCandidateId(candidateId);
     res.json(notes);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch candidate notes' });
@@ -2628,9 +2665,23 @@ router.get('/api/candidates/:candidateId/notes', requireAuth, async (req, res) =
 router.post('/api/candidates/:candidateId/notes', requireAuth, async (req: any, res) => {
   try {
     const user = req.user!;
+    const candidateId = req.params.candidateId;
     const { content, type = 'GENERAL' } = req.body;
+
+    // Check if user can access this candidate
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const { isLeadSourcer } = await import('../shared/constants/roles');
+
+    if (!isAdminOrManager && !isLeadSourcer(user)) {
+      // For SOURCER/other roles: verify they're assigned to this candidate
+      const candidate = await storage.getCandidateById(candidateId);
+      if (!candidate || candidate.assignedTo !== user.id) {
+        return res.status(403).json({ error: 'Access denied - not assigned to this candidate' });
+      }
+    }
+
     const note = await storage.createCandidateNote({
-      candidateId: req.params.candidateId,
+      candidateId,
       authorId: user.id,
       content,
       type
@@ -2726,9 +2777,19 @@ router.post('/api/candidates/:candidateId/analyze', requireAuth, async (req, res
 });
 
 // Employee Notes routes
-router.get('/api/employees/:employeeId/notes', requireAuth, async (req, res) => {
+router.get('/api/employees/:employeeId/notes', requireAuth, async (req: any, res) => {
   try {
-    const notes = await storage.getEmployeeNotesByEmployeeId(req.params.employeeId);
+    const user = req.user;
+    const employeeId = req.params.employeeId;
+
+    // Only allow managers/admins OR the employee themselves
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+
+    if (!isAdminOrManager && user.id !== employeeId) {
+      return res.status(403).json({ error: 'Access denied - cannot view other employee notes' });
+    }
+
+    const notes = await storage.getEmployeeNotesByEmployeeId(employeeId);
     res.json(notes);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch employee notes' });
@@ -2738,9 +2799,18 @@ router.get('/api/employees/:employeeId/notes', requireAuth, async (req, res) => 
 router.post('/api/employees/:employeeId/notes', requireAuth, async (req: any, res) => {
   try {
     const user = req.user!;
+    const employeeId = req.params.employeeId;
     const { content, type = 'GENERAL' } = req.body;
+
+    // Only allow managers/admins OR the employee themselves to create notes
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+
+    if (!isAdminOrManager && user.id !== employeeId) {
+      return res.status(403).json({ error: 'Access denied - cannot create notes for other employees' });
+    }
+
     const note = await storage.createEmployeeNote({
-      employeeId: req.params.employeeId,
+      employeeId,
       authorId: user.id,
       content,
       type
