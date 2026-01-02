@@ -1989,7 +1989,7 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
 
               await emailService.sendEmail({
                 to: employee.email,
-                subject: `${statusEmoji} Your PTO Request Has Been ${statusText}`,
+                subject: `Your PTO Request Has Been ${statusText}`,
                 html: emailHtml,
                 fromUserEmail: user.email  // Use Gmail API with service account impersonation
               });
