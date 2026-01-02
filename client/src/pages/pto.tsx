@@ -1010,7 +1010,7 @@ function PTO() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
+                        {parseLocalDate(request.startDate).toLocaleDateString()} - {parseLocalDate(request.endDate).toLocaleDateString()}
                       </td>
                       <td className="py-3 px-4">{request.days}</td>
                       <td className="py-3 px-4">
