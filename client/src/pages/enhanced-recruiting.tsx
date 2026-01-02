@@ -46,7 +46,8 @@ import { InPersonInterviewScreening, type ScreeningData } from '@/components/rec
 import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-candidate-modal';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
-import { format } from 'date-fns';
+import { format, isSameDay, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
 // Droppable Column Component
@@ -1009,6 +1010,11 @@ export default function EnhancedRecruiting() {
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [filterSourcer, setFilterSourcer] = useState<string>('ALL');
   const [filterReferral, setFilterReferral] = useState<string>('');
+  const [filterDateType, setFilterDateType] = useState<'all' | 'specific' | 'range'>('all');
+  const [filterDateSingle, setFilterDateSingle] = useState<Date | undefined>(undefined);
+  const [filterDateStart, setFilterDateStart] = useState<Date | undefined>(undefined);
+  const [filterDateEnd, setFilterDateEnd] = useState<Date | undefined>(undefined);
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'interviews' | 'campaigns' | 'workflows' | 'resume-uploads'>('kanban');
   const [showInterviewScheduler, setShowInterviewScheduler] = useState(false);
@@ -1528,7 +1534,21 @@ export default function EnhancedRecruiting() {
       `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.position.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesPosition && matchesSourcer && matchesReferral && matchesSearch;
+
+    // Date filter logic
+    let matchesDate = true;
+    if (filterDateType === 'specific' && filterDateSingle) {
+      const candidateDate = candidate.createdAt ? new Date(candidate.createdAt) : null;
+      matchesDate = candidateDate ? isSameDay(candidateDate, filterDateSingle) : false;
+    } else if (filterDateType === 'range' && filterDateStart && filterDateEnd) {
+      const candidateDate = candidate.createdAt ? new Date(candidate.createdAt) : null;
+      matchesDate = candidateDate ? isWithinInterval(candidateDate, {
+        start: startOfDay(filterDateStart),
+        end: endOfDay(filterDateEnd)
+      }) : false;
+    }
+
+    return matchesFilter && matchesPosition && matchesSourcer && matchesReferral && matchesSearch && matchesDate;
   });
 
   const candidatesByStatus = {
@@ -1826,6 +1846,123 @@ export default function EnhancedRecruiting() {
                 onChange={(e) => setFilterReferral(e.target.value)}
                 className="w-[180px]"
               />
+              {/* Date filter */}
+              <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {filterDateType === 'all' ? (
+                      'All Dates'
+                    ) : filterDateType === 'specific' && filterDateSingle ? (
+                      format(filterDateSingle, 'MMM d, yyyy')
+                    ) : filterDateType === 'range' && filterDateStart && filterDateEnd ? (
+                      `${format(filterDateStart, 'MMM d')} - ${format(filterDateEnd, 'MMM d')}`
+                    ) : (
+                      'Filter by date'
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-4" align="start">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Date Filter Type</Label>
+                      <Select value={filterDateType} onValueChange={(value: 'all' | 'specific' | 'range') => {
+                        setFilterDateType(value);
+                        if (value === 'all') {
+                          setFilterDateSingle(undefined);
+                          setFilterDateStart(undefined);
+                          setFilterDateEnd(undefined);
+                        }
+                      }}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Dates</SelectItem>
+                          <SelectItem value="specific">Specific Day</SelectItem>
+                          <SelectItem value="range">Date Range</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {filterDateType === 'specific' && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Select Date</Label>
+                        <CalendarUI
+                          mode="single"
+                          selected={filterDateSingle}
+                          onSelect={(date) => {
+                            setFilterDateSingle(date);
+                            if (date) setDateFilterOpen(false);
+                          }}
+                          className="rounded-md border"
+                        />
+                      </div>
+                    )}
+
+                    {filterDateType === 'range' && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Select Range</Label>
+                        <div className="flex gap-2 items-center mb-2">
+                          <Input
+                            type="date"
+                            value={filterDateStart ? format(filterDateStart, 'yyyy-MM-dd') : ''}
+                            onChange={(e) => setFilterDateStart(e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined)}
+                            className="w-[130px]"
+                          />
+                          <span className="text-muted-foreground">to</span>
+                          <Input
+                            type="date"
+                            value={filterDateEnd ? format(filterDateEnd, 'yyyy-MM-dd') : ''}
+                            onChange={(e) => setFilterDateEnd(e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined)}
+                            className="w-[130px]"
+                          />
+                        </div>
+                        <CalendarUI
+                          mode="range"
+                          selected={{
+                            from: filterDateStart,
+                            to: filterDateEnd
+                          }}
+                          onSelect={(range) => {
+                            setFilterDateStart(range?.from);
+                            setFilterDateEnd(range?.to);
+                          }}
+                          numberOfMonths={2}
+                          className="rounded-md border"
+                        />
+                        {filterDateStart && filterDateEnd && (
+                          <Button
+                            size="sm"
+                            className="w-full mt-2"
+                            onClick={() => setDateFilterOpen(false)}
+                          >
+                            Apply Range
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {filterDateType !== 'all' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setFilterDateType('all');
+                          setFilterDateSingle(undefined);
+                          setFilterDateStart(undefined);
+                          setFilterDateEnd(undefined);
+                          setDateFilterOpen(false);
+                        }}
+                      >
+                        <X className="mr-2 h-4 w-4" />
+                        Clear Date Filter
+                      </Button>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Content based on view mode */}
