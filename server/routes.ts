@@ -12,7 +12,7 @@ import {
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
   insertEmployeeReviewSchema, insertTaskSchema, insertCompanySettingsSchema,
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
-  ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies
+  ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isLeadSourcer } from '../shared/constants/roles';
 import { PTO_POLICY } from '../shared/constants/pto-policy';
