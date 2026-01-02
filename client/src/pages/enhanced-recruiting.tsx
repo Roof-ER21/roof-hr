@@ -3278,6 +3278,9 @@ export default function EnhancedRecruiting() {
               <SelectItem value="INTERVIEW">Interview</SelectItem>
               <SelectItem value="OFFER">Offer</SelectItem>
               <SelectItem value="HIRED">Hired</SelectItem>
+              <SelectItem value="DEAD_BY_US">Dead (By Us)</SelectItem>
+              <SelectItem value="DEAD_BY_CANDIDATE">Dead (By Candidate)</SelectItem>
+              <SelectItem value="NO_SHOW">No Show</SelectItem>
             </SelectContent>
           </Select>
           <Button

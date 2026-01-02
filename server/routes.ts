@@ -14,7 +14,7 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isLeadSourcer } from '../shared/constants/roles';
 import { PTO_POLICY } from '../shared/constants/pto-policy';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
@@ -106,6 +106,35 @@ function requireManager(req: any, res: any, next: any) {
 
   if (!managerRoles.includes(req.user.role)) {
     return res.status(403).json({ error: 'Manager access required' });
+  }
+
+  next();
+}
+
+// Middleware for bulk candidate operations - includes LEAD_SOURCER (Ryan)
+function requireManagerOrLeadSourcer(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  // Ahmed always has access
+  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
+    return next();
+  }
+
+  // Lead sourcers (Ryan) can perform bulk candidate actions
+  if (isLeadSourcer(req.user)) {
+    return next();
+  }
+
+  // Check manager roles
+  const managerRoles = [
+    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
+    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'
+  ];
+
+  if (!managerRoles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Manager or Lead Sourcer access required' });
   }
 
   next();
@@ -2009,7 +2038,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
               passwordHash: hashedPassword,
               firstName: candidate.firstName,
               lastName: candidate.lastName,
-              role: 'REP', // New hires start as REP
+              role: 'SALES_REP', // New hires start as Sales Representative
               employmentType: 'W2',
               department: 'Sales',
               position: candidate.position || 'Sales Representative',
@@ -2076,7 +2105,7 @@ router.delete('/api/candidates/:id', requireAuth, requireManager, async (req, re
 });
 
 // Bulk status update for group move
-router.post('/api/candidates/bulk-status', requireAuth, requireManager, async (req: any, res) => {
+router.post('/api/candidates/bulk-status', requireAuth, requireManagerOrLeadSourcer, async (req: any, res) => {
   try {
     const { candidateIds, newStatus } = req.body;
 
