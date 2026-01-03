@@ -152,8 +152,26 @@ async function syncToolsToGoogleSheets() {
 }
 
 // Get all tools inventory
+// Supports pagination and search to handle large datasets
 router.get('/inventory', async (req, res) => {
   try {
+    // Pagination params with defaults
+    const limit = Math.min(parseInt(req.query.limit as string) || 1000, 5000);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const search = (req.query.search as string)?.toLowerCase() || '';
+    const category = req.query.category as string;
+
+    // Build where conditions
+    const conditions = [eq(toolInventory.isActive, true)];
+    if (category) {
+      conditions.push(eq(toolInventory.category, category));
+    }
+    if (search) {
+      conditions.push(
+        sql`LOWER(${toolInventory.name}) LIKE ${'%' + search + '%'}`
+      );
+    }
+
     const tools = await db
       .select({
         id: toolInventory.id,
@@ -176,7 +194,9 @@ router.get('/inventory', async (req, res) => {
       })
       .from(toolInventory)
       .leftJoin(users, eq(toolInventory.createdBy, users.id))
-      .where(eq(toolInventory.isActive, true));
+      .where(and(...conditions))
+      .limit(limit)
+      .offset(offset);
 
     // Define the proper size order for clothing
     const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '3X', '4X'];
@@ -278,8 +298,8 @@ router.post('/inventory', checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
 
     const newTool = await db.insert(toolInventory).values(insertValues).returning();
 
-    // Sync with Google Sheets after creating
-    await syncToolsToGoogleSheets();
+    // Sync with Google Sheets after creating (non-blocking to prevent slowdowns)
+    syncToolsToGoogleSheets().catch(err => console.error('[TOOLS] Sheets sync failed:', err));
 
     res.json(newTool[0]);
   } catch (error) {
@@ -332,8 +352,8 @@ router.patch('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res)
       return res.status(404).json({ error: 'Tool not found' });
     }
 
-    // Sync with Google Sheets after updating
-    await syncToolsToGoogleSheets();
+    // Sync with Google Sheets after updating (non-blocking to prevent slowdowns)
+    syncToolsToGoogleSheets().catch(err => console.error('[TOOLS] Sheets sync failed:', err));
 
     res.json(updatedTool[0]);
   } catch (error) {
@@ -389,8 +409,8 @@ router.patch('/inventory/:id/adjust-quantity', checkRole(['ADMIN', 'MANAGER']), 
       .where(eq(toolInventory.id, id))
       .returning();
 
-    // Sync with Google Sheets after quantity adjustment
-    await syncToolsToGoogleSheets();
+    // Sync with Google Sheets after quantity adjustment (non-blocking to prevent slowdowns)
+    syncToolsToGoogleSheets().catch(err => console.error('[TOOLS] Sheets sync failed:', err));
 
     res.json(updatedTool);
   } catch (error) {
@@ -421,14 +441,14 @@ router.delete('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res
 
     await db
       .update(toolInventory)
-      .set({ 
+      .set({
         isActive: false,
         updatedAt: new Date()
       })
       .where(eq(toolInventory.id, id));
 
-    // Sync with Google Sheets after deletion
-    await syncToolsToGoogleSheets();
+    // Sync with Google Sheets after deletion (non-blocking to prevent slowdowns)
+    syncToolsToGoogleSheets().catch(err => console.error('[TOOLS] Sheets sync failed:', err));
 
     res.json({ message: 'Tool deleted successfully' });
   } catch (error) {
@@ -999,92 +1019,108 @@ router.post('/alerts/check', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_A
 // ============= WELCOME PACK BUNDLES =============
 
 // Get all bundles
+// OPTIMIZED: Fetches all data in 3 queries instead of N+1 pattern
 router.get('/bundles', requireAuth, async (req, res) => {
   try {
+    // Query 1: Fetch all active bundles
     const bundles = await db
       .select()
       .from(welcomePackBundles)
       .where(eq(welcomePackBundles.isActive, true))
       .orderBy(welcomePackBundles.name);
 
-    // Get all inventory items for availability checking
+    if (bundles.length === 0) {
+      return res.json([]);
+    }
+
+    // Query 2: Fetch ALL bundle items in ONE query (fixes N+1)
+    const bundleIds = bundles.map(b => b.id);
+    const allBundleItems = await db
+      .select()
+      .from(bundleItems)
+      .where(inArray(bundleItems.bundleId, bundleIds))
+      .orderBy(bundleItems.itemName);
+
+    // Group items by bundleId in memory
+    const itemsByBundleId = new Map<string, typeof allBundleItems>();
+    for (const item of allBundleItems) {
+      const existing = itemsByBundleId.get(item.bundleId) || [];
+      existing.push(item);
+      itemsByBundleId.set(item.bundleId, existing);
+    }
+
+    // Query 3: Fetch ONLY active inventory items (not all 650K duplicates!)
     const inventory = await db
       .select()
-      .from(toolInventory);
+      .from(toolInventory)
+      .where(eq(toolInventory.isActive, true));
 
-    // Get bundle items for each bundle
-    const bundlesWithItems = await Promise.all(
-      bundles.map(async (bundle) => {
-        const items = await db
-          .select()
-          .from(bundleItems)
-          .where(eq(bundleItems.bundleId, bundle.id))
-          .orderBy(bundleItems.itemName);
+    // Build bundles with enriched items (all in-memory, no more queries)
+    const bundlesWithItems = bundles.map(bundle => {
+      const items = itemsByBundleId.get(bundle.id) || [];
 
-        // Enrich items with availability info
-        const enrichedItems = items.map(item => {
-          let availableQuantity = 0;
-          let matchedInventoryItem = null;
-          let availableBySize: any = {};
+      const enrichedItems = items.map(item => {
+        let availableQuantity = 0;
+        let matchedInventoryItem = null;
+        let availableBySize: any = {};
 
-          // For clothing items, get availability per size
-          if (item.itemCategory === 'CLOTHING' || item.itemCategory === 'POLO') {
-            // Find all matching items by name pattern
-            const matchingItems = inventory.filter(inv => {
-              const invNameLower = inv.name.toLowerCase();
-              const itemNameLower = item.itemName.toLowerCase();
-              
-              // Handle "Light" vs "light" variations
-              const normalizedItemName = itemNameLower.replace(' light ', ' Light ');
-              
-              // Check if inventory name contains the item name
-              return invNameLower.includes(normalizedItemName) || 
-                     invNameLower.includes(itemNameLower);
-            });
-            
-            // Build size availability map
-            matchingItems.forEach(inv => {
-              // Extract size from name (e.g., "Black Polo (Size XL)" -> "XL")
-              const sizeMatch = inv.name.match(/\(Size ([^)]+)\)/);
-              if (sizeMatch) {
-                const size = sizeMatch[1];
-                availableBySize[size] = (availableBySize[size] || 0) + inv.availableQuantity;
-              }
-            });
-            
-            // For display: show minimum available across all sizes
-            const sizeCounts = Object.values(availableBySize) as number[];
-            availableQuantity = sizeCounts.length > 0 ? Math.min(...sizeCounts) : 0;
-            
-            // Item is available if at least one size has enough quantity
-            const hasAnySizeAvailable = Object.values(availableBySize).some((count: any) => count >= item.quantity);
-            
-            return {
-              ...item,
-              availableQuantity,
-              availableBySize,
-              isAvailable: hasAnySizeAvailable
-            };
-          } else {
-            // For non-clothing items, exact match or special cases
-            matchedInventoryItem = inventory.find(inv => 
-              inv.name === item.itemName || 
-              (item.itemName === 'Ladder' && inv.id === 'ladder-utility') ||
-              (item.itemName === 'iPad only (New)' && inv.id === 'ipad-new')
-            );
-            availableQuantity = matchedInventoryItem?.availableQuantity || 0;
-            
-            return {
-              ...item,
-              availableQuantity,
-              isAvailable: availableQuantity >= item.quantity
-            };
-          }
-        });
+        // For clothing items, get availability per size
+        if (item.itemCategory === 'CLOTHING' || item.itemCategory === 'POLO') {
+          // Find all matching items by name pattern
+          const matchingItems = inventory.filter(inv => {
+            const invNameLower = inv.name.toLowerCase();
+            const itemNameLower = item.itemName.toLowerCase();
 
-        return { ...bundle, items: enrichedItems };
-      })
-    );
+            // Handle "Light" vs "light" variations
+            const normalizedItemName = itemNameLower.replace(' light ', ' Light ');
+
+            // Check if inventory name contains the item name
+            return invNameLower.includes(normalizedItemName) ||
+                   invNameLower.includes(itemNameLower);
+          });
+
+          // Build size availability map
+          matchingItems.forEach(inv => {
+            // Extract size from name (e.g., "Black Polo (Size XL)" -> "XL")
+            const sizeMatch = inv.name.match(/\(Size ([^)]+)\)/);
+            if (sizeMatch) {
+              const size = sizeMatch[1];
+              availableBySize[size] = (availableBySize[size] || 0) + inv.availableQuantity;
+            }
+          });
+
+          // For display: show minimum available across all sizes
+          const sizeCounts = Object.values(availableBySize) as number[];
+          availableQuantity = sizeCounts.length > 0 ? Math.min(...sizeCounts) : 0;
+
+          // Item is available if at least one size has enough quantity
+          const hasAnySizeAvailable = Object.values(availableBySize).some((count: any) => count >= item.quantity);
+
+          return {
+            ...item,
+            availableQuantity,
+            availableBySize,
+            isAvailable: hasAnySizeAvailable
+          };
+        } else {
+          // For non-clothing items, exact match or special cases
+          matchedInventoryItem = inventory.find(inv =>
+            inv.name === item.itemName ||
+            (item.itemName === 'Ladder' && inv.id === 'ladder-utility') ||
+            (item.itemName === 'iPad only (New)' && inv.id === 'ipad-new')
+          );
+          availableQuantity = matchedInventoryItem?.availableQuantity || 0;
+
+          return {
+            ...item,
+            availableQuantity,
+            isAvailable: availableQuantity >= item.quantity
+          };
+        }
+      });
+
+      return { ...bundle, items: enrichedItems };
+    });
 
     res.json(bundlesWithItems);
   } catch (error) {
