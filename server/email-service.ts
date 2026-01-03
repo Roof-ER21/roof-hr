@@ -164,27 +164,73 @@ class EmailService {
     }
 
     // Try user impersonation via service account first (if configured and user email provided)
-    // Skip Gmail API if attachments are present (nodemailer handles attachments better)
+    // Now supports attachments via MIME multipart
     const hasAttachments = config.attachments && config.attachments.length > 0;
-    if (config.fromUserEmail && serviceAccountAuth.isConfigured() && !hasAttachments) {
+    if (config.fromUserEmail && serviceAccountAuth.isConfigured()) {
       try {
-        console.log(`[Email] Attempting to send as ${config.fromUserEmail} via service account impersonation`);
+        console.log(`[Email] Attempting to send as ${config.fromUserEmail} via service account impersonation${hasAttachments ? ' (with attachments)' : ''}`);
         const gmail = await serviceAccountAuth.getGmailForUser(config.fromUserEmail);
 
-        // Build CC header if present
-        const ccHeader = config.cc && config.cc.length > 0 ? `Cc: ${config.cc.join(', ')}\r\n` : '';
+        let emailContent: string;
+        const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // Create the email message in RFC 2822 format
-        const emailContent = [
-          `From: ${config.fromUserEmail}`,
-          `To: ${config.to}`,
-          ...(config.cc && config.cc.length > 0 ? [`Cc: ${config.cc.join(', ')}`] : []),
-          `Subject: ${config.subject}`,
-          'MIME-Version: 1.0',
-          'Content-Type: text/html; charset=utf-8',
-          '',
-          config.html
-        ].join('\r\n');
+        if (hasAttachments) {
+          // Build multipart MIME message with attachments
+          const attachmentParts: string[] = [];
+          for (const attachment of config.attachments!) {
+            let content: string;
+            let filename = attachment.filename;
+
+            if (attachment.path && fs.existsSync(attachment.path)) {
+              content = fs.readFileSync(attachment.path).toString('base64');
+            } else if (attachment.content) {
+              content = Buffer.isBuffer(attachment.content)
+                ? attachment.content.toString('base64')
+                : Buffer.from(attachment.content).toString('base64');
+            } else {
+              console.warn(`[Email] Skipping attachment ${filename} - no content`);
+              continue;
+            }
+
+            const contentType = attachment.contentType || 'application/octet-stream';
+            attachmentParts.push(
+              `--${boundary}\r\n` +
+              `Content-Type: ${contentType}; name="${filename}"\r\n` +
+              `Content-Disposition: attachment; filename="${filename}"\r\n` +
+              `Content-Transfer-Encoding: base64\r\n\r\n` +
+              content
+            );
+          }
+
+          emailContent = [
+            `From: ${config.fromUserEmail}`,
+            `To: ${config.to}`,
+            ...(config.cc && config.cc.length > 0 ? [`Cc: ${config.cc.join(', ')}`] : []),
+            `Subject: ${config.subject}`,
+            'MIME-Version: 1.0',
+            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+            '',
+            `--${boundary}`,
+            'Content-Type: text/html; charset=utf-8',
+            'Content-Transfer-Encoding: quoted-printable',
+            '',
+            config.html,
+            ...attachmentParts,
+            `--${boundary}--`
+          ].join('\r\n');
+        } else {
+          // Simple message without attachments
+          emailContent = [
+            `From: ${config.fromUserEmail}`,
+            `To: ${config.to}`,
+            ...(config.cc && config.cc.length > 0 ? [`Cc: ${config.cc.join(', ')}`] : []),
+            `Subject: ${config.subject}`,
+            'MIME-Version: 1.0',
+            'Content-Type: text/html; charset=utf-8',
+            '',
+            config.html
+          ].join('\r\n');
+        }
 
         // Encode the message in base64url format
         const encodedMessage = Buffer.from(emailContent)
