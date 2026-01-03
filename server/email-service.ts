@@ -183,10 +183,12 @@ class EmailService {
 
             if (attachment.path && fs.existsSync(attachment.path)) {
               content = fs.readFileSync(attachment.path).toString('base64');
+              console.log(`[Email] Attached file from path: ${attachment.path} (${content.length} chars base64)`);
             } else if (attachment.content) {
               content = Buffer.isBuffer(attachment.content)
                 ? attachment.content.toString('base64')
                 : Buffer.from(attachment.content).toString('base64');
+              console.log(`[Email] Attached content: ${filename} (${content.length} chars base64)`);
             } else {
               console.warn(`[Email] Skipping attachment ${filename} - no content`);
               continue;
@@ -202,6 +204,9 @@ class EmailService {
             );
           }
 
+          // Encode HTML body in base64 for reliable transport
+          const htmlBase64 = Buffer.from(config.html).toString('base64');
+
           emailContent = [
             `From: ${config.fromUserEmail}`,
             `To: ${config.to}`,
@@ -212,12 +217,14 @@ class EmailService {
             '',
             `--${boundary}`,
             'Content-Type: text/html; charset=utf-8',
-            'Content-Transfer-Encoding: quoted-printable',
+            'Content-Transfer-Encoding: base64',
             '',
-            config.html,
+            htmlBase64,
             ...attachmentParts,
             `--${boundary}--`
           ].join('\r\n');
+
+          console.log(`[Email] Built MIME message with ${attachmentParts.length} attachments`);
         } else {
           // Simple message without attachments
           emailContent = [
