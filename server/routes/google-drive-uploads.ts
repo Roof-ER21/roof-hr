@@ -699,4 +699,88 @@ router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any,
   }
 });
 
+/**
+ * Proxy endpoint to serve resume files from Google Drive
+ * This bypasses Google Drive permission issues by serving files through our server
+ */
+router.get('/api/resumes/view/:fileId', requireAuth as any, async (req: Request, res: Response) => {
+  try {
+    const { fileId } = req.params;
+
+    if (!fileId) {
+      return res.status(400).json({ error: 'File ID required' });
+    }
+
+    console.log('[Resume Proxy] Fetching file:', fileId);
+
+    // Initialize Google Drive if needed
+    if (!googleDriveService.isInitialized()) {
+      await googleDriveService.initialize();
+    }
+
+    // Get file metadata first to determine mime type
+    const metadata = await googleDriveService.getFileMetadata(fileId);
+    const mimeType = metadata.mimeType || 'application/pdf';
+    const fileName = metadata.name || 'resume.pdf';
+
+    console.log('[Resume Proxy] File metadata:', fileName, mimeType);
+
+    // Download file content
+    const fileStream = await googleDriveService.downloadFile(fileId);
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600'); // Cache for 1 hour
+
+    // Pipe the file stream to response
+    fileStream.pipe(res);
+  } catch (error: any) {
+    console.error('[Resume Proxy] Error:', error);
+    if (error.code === 404) {
+      return res.status(404).json({ error: 'Resume file not found' });
+    }
+    res.status(500).json({ error: 'Failed to retrieve resume' });
+  }
+});
+
+/**
+ * Get embeddable URL for a resume (returns proxy URL for Google Drive files)
+ */
+router.get('/api/resumes/embed-url/:candidateId', requireAuth as any, async (req: Request, res: Response) => {
+  try {
+    const { candidateId } = req.params;
+
+    // Get candidate
+    const candidate = await storage.getCandidate(candidateId);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    if (!candidate.resumeUrl) {
+      return res.status(404).json({ error: 'No resume URL for this candidate' });
+    }
+
+    // Check if it's a Google Drive URL
+    const driveMatch = candidate.resumeUrl.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+    if (driveMatch) {
+      const fileId = driveMatch[1];
+      // Return our proxy URL
+      return res.json({
+        embedUrl: `/api/resumes/view/${fileId}`,
+        isProxy: true
+      });
+    }
+
+    // For local files, return as-is
+    res.json({
+      embedUrl: candidate.resumeUrl,
+      isProxy: false
+    });
+  } catch (error: any) {
+    console.error('[Resume Embed URL] Error:', error);
+    res.status(500).json({ error: 'Failed to get resume URL' });
+  }
+});
+
 export default router;

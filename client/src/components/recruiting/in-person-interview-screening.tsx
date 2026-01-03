@@ -51,7 +51,7 @@ export function InPersonInterviewScreening({
     clearCommunication: '',
     notes: ''
   });
-  const [showNoteRequirement, setShowNoteRequirement] = useState(false);
+  const [showNoteRequirement] = useState(true); // Notes are always required
   const [isReScreening, setIsReScreening] = useState(false);
   const [previousScreening, setPreviousScreening] = useState<PreviousScreening | null>(null);
 
@@ -77,9 +77,7 @@ export function InPersonInterviewScreening({
           notes: ''
         });
 
-        if (hadFailures) {
-          setShowNoteRequirement(true);
-        }
+        // Notes are always required regardless of screening results
       } catch (e) {
         setPreviousScreening(null);
         setIsReScreening(false);
@@ -113,14 +111,7 @@ export function InPersonInterviewScreening({
 
   const handleResponseChange = (field: string, value: string) => {
     setResponses(prev => ({ ...prev, [field]: value }));
-
-    // Check if any response is "no"
-    const updatedResponses = { ...responses, [field]: value };
-    const hasNoResponse = updatedResponses.driversLicense === 'no' ||
-                         updatedResponses.reliableVehicle === 'no' ||
-                         updatedResponses.clearCommunication === 'no';
-
-    setShowNoteRequirement(hasNoResponse);
+    // Notes are always required - no conditional logic needed
   };
 
   const handleSubmit = async () => {
@@ -138,11 +129,11 @@ export function InPersonInterviewScreening({
                      responses.reliableVehicle === 'yes' &&
                      responses.clearCommunication === 'yes';
 
-    // If any answer is no, require notes
-    if (!allPassed && !responses.notes.trim()) {
+    // Notes are always required
+    if (!responses.notes.trim()) {
       toast({
         title: 'Notes Required',
-        description: 'Please provide notes explaining the candidate\'s situation',
+        description: 'Please provide notes about the candidate before proceeding',
         variant: 'destructive'
       });
       return;
@@ -223,7 +214,6 @@ export function InPersonInterviewScreening({
       clearCommunication: '',
       notes: ''
     });
-    setShowNoteRequirement(false);
     onCancel();
   };
 
@@ -355,28 +345,16 @@ export function InPersonInterviewScreening({
             </RadioGroup>
           </div>
 
-          {/* Notes Section (Required if any answer is No) */}
-          {showNoteRequirement && (
-            <Alert className="border-orange-200 bg-orange-50">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="font-medium">
-                One or more requirements not met. Please provide detailed notes below.
-              </AlertDescription>
-            </Alert>
-          )}
-
+          {/* Notes Section - Always Required */}
           <div className="space-y-2">
             <Label htmlFor="notes" className="flex items-center gap-1">
-              Notes {showNoteRequirement && <span className="text-red-500">*</span>}
+              Notes <span className="text-red-500">*</span>
             </Label>
             <Textarea
               id="notes"
               value={responses.notes}
               onChange={(e) => setResponses(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder={showNoteRequirement 
-                ? "Please explain why the candidate doesn't meet all requirements and any special considerations..."
-                : "Optional additional notes about the candidate..."
-              }
+              placeholder="Provide notes about the candidate's screening responses, impressions, and any relevant observations..."
               className="min-h-[100px]"
             />
           </div>

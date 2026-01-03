@@ -5,12 +5,12 @@ async function sendTestEmail() {
   const emailService = new EmailService();
   await emailService.initialize();
   
-  console.log('Sending welcome email to ahmed.mahmoud@theroofdocs.com...');
+  console.log('Sending welcome email to ahmed.mahmoud21@gmail.com...');
   const result = await emailService.sendWelcomeEmail(
     {
       firstName: 'Test',
       lastName: 'Candidate',
-      email: 'ahmed.mahmoud@theroofdocs.com',
+      email: 'ahmed.mahmoud21@gmail.com',
       position: 'Sales Representative',
     },
     'TempPass123!',

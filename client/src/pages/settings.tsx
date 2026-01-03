@@ -30,6 +30,7 @@ import { ADMIN_ROLES, isAdmin } from '@shared/constants/roles';
 import { useAuth } from '@/lib/auth';
 import GoogleIntegration from './GoogleIntegration';
 import ScheduledReports from './ScheduledReports';
+import { AvailabilityManager } from '@/components/settings/availability-manager';
 
 const companySettingsSchema = z.object({
   companyName: z.string().min(1),
@@ -311,6 +312,9 @@ function Settings() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Interview Availability Settings */}
+          <AvailabilityManager />
         </TabsContent>
 
         {userIsAdmin && (

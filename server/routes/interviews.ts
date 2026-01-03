@@ -130,6 +130,99 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
       });
     }
 
+    // Check interviewer availability if interviewerId is provided
+    if (data.interviewerId && interviewer) {
+      const scheduledDate = new Date(data.scheduledDate);
+      const dayOfWeek = scheduledDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+      // Get interviewer's availability slots
+      const availability = await storage.getInterviewAvailabilityByInterviewer(data.interviewerId);
+      const daySlots = availability.filter((a: any) => a.dayOfWeek === dayOfWeek && a.isActive);
+
+      if (daySlots.length === 0) {
+        // No availability set for this day
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        // Find days with availability
+        const availableDays = [...new Set(availability.filter((a: any) => a.isActive).map((a: any) => a.dayOfWeek))];
+        const availableDayNames = availableDays.map(d => dayNames[d as number]).join(', ');
+
+        return res.status(400).json({
+          error: 'Outside interviewer availability',
+          message: `${interviewer.firstName} ${interviewer.lastName} is not available on ${dayNames[dayOfWeek]}s.`,
+          availableDays: availableDayNames || 'No availability set',
+          suggestion: availableDayNames ? `They are available on: ${availableDayNames}` : 'Please contact them to set up their availability.'
+        });
+      }
+
+      // Check if scheduled time falls within any slot
+      const scheduledHour = scheduledDate.getHours();
+      const scheduledMinute = scheduledDate.getMinutes();
+      const scheduledTimeStr = `${scheduledHour.toString().padStart(2, '0')}:${scheduledMinute.toString().padStart(2, '0')}`;
+
+      // Calculate end time
+      const endDate = new Date(scheduledDate.getTime() + data.duration * 60 * 1000);
+      const endHour = endDate.getHours();
+      const endMinute = endDate.getMinutes();
+      const endTimeStr = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+
+      // Helper to convert 24hr to 12hr format
+      const formatTime12Hour = (time24: string): string => {
+        const [hours, minutes] = time24.split(':').map(Number);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const hours12 = hours % 12 || 12;
+        return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+      };
+
+      const isWithinSlot = daySlots.some((slot: any) => {
+        return scheduledTimeStr >= slot.startTime && endTimeStr <= slot.endTime;
+      });
+
+      if (!isWithinSlot) {
+        // Format available slots for display
+        const availableSlots = daySlots.map((slot: any) =>
+          `${formatTime12Hour(slot.startTime)} - ${formatTime12Hour(slot.endTime)}`
+        ).join(', ');
+
+        return res.status(400).json({
+          error: 'Outside interviewer availability',
+          message: `The selected time (${formatTime12Hour(scheduledTimeStr)} - ${formatTime12Hour(endTimeStr)}) is outside ${interviewer.firstName}'s available hours.`,
+          availableSlots,
+          suggestion: `Available times: ${availableSlots}`
+        });
+      }
+
+      // Check for existing interviews at this time
+      const existingInterviews = await storage.getInterviewsByInterviewer(data.interviewerId);
+      const scheduledStart = scheduledDate.getTime();
+      const scheduledEnd = scheduledStart + data.duration * 60 * 1000;
+
+      const conflictingInterview = existingInterviews.find((interview: any) => {
+        if (interview.status === 'CANCELLED') return false;
+        const interviewStart = new Date(interview.scheduledDate).getTime();
+        const interviewEnd = interviewStart + interview.duration * 60 * 1000;
+        // Check if times overlap
+        return scheduledStart < interviewEnd && scheduledEnd > interviewStart;
+      });
+
+      if (conflictingInterview && !data.forceSchedule) {
+        const conflictCandidate = await storage.getCandidateById(conflictingInterview.candidateId);
+        const conflictTime = new Date(conflictingInterview.scheduledDate);
+
+        return res.status(409).json({
+          error: 'Interviewer has existing appointment',
+          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled at ${formatTime12Hour(
+            `${conflictTime.getHours().toString().padStart(2, '0')}:${conflictTime.getMinutes().toString().padStart(2, '0')}`
+          )} with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`,
+          existingInterview: {
+            time: conflictTime.toISOString(),
+            candidateName: conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'Unknown',
+            duration: conflictingInterview.duration
+          }
+        });
+      }
+    }
+
     // Check for calendar conflicts
     const conflictDetector = getConflictDetector(storage);
     const startTime = new Date(data.scheduledDate);

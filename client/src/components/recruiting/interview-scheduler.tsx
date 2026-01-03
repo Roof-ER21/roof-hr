@@ -180,26 +180,54 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       onScheduled?.();
     },
     onError: (error: any) => {
-      // Check if error is due to conflicts
-      if (error.status === 409) {
-        const errorData = error.data || error;
-        setConflicts(errorData.conflicts || []);
-        setSuggestedTimes(errorData.suggestedTimes?.map((t: string) => new Date(t)) || []);
-        setWarnings(errorData.warnings || []);
-        setShowConflictOverride(true);
-        
+      const errorData = error.data || error;
+
+      // Check if error is due to availability validation (400)
+      if (error.status === 400 && errorData.error === 'Outside interviewer availability') {
         toast({
-          title: 'Schedule Conflicts Detected',
-          description: 'There are conflicts with the selected time. Please review and either choose another time or override.',
+          title: 'Outside Available Hours',
+          description: errorData.message || 'The selected time is outside the interviewer\'s available hours.',
           variant: 'destructive',
         });
-      } else {
-        toast({
-          title: 'Error',
-          description: 'Failed to schedule interview',
-          variant: 'destructive',
-        });
+
+        // Show available slots if provided
+        if (errorData.availableSlots || errorData.suggestion) {
+          setWarnings([errorData.suggestion || `Available times: ${errorData.availableSlots}`]);
+        }
+        return;
       }
+
+      // Check if error is due to existing conflict (409)
+      if (error.status === 409) {
+        if (errorData.error === 'Interviewer has existing appointment') {
+          toast({
+            title: 'Interviewer Unavailable',
+            description: errorData.message || 'The interviewer already has an appointment at this time.',
+            variant: 'destructive',
+          });
+          setWarnings([errorData.message]);
+        } else {
+          // General conflicts (PTO, etc)
+          setConflicts(errorData.conflicts || []);
+          setSuggestedTimes(errorData.suggestedTimes?.map((t: string) => new Date(t)) || []);
+          setWarnings(errorData.warnings || []);
+          setShowConflictOverride(true);
+
+          toast({
+            title: 'Schedule Conflicts Detected',
+            description: 'There are conflicts with the selected time. Please review and either choose another time or override.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+
+      // Generic error
+      toast({
+        title: 'Error',
+        description: errorData.message || 'Failed to schedule interview',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -319,19 +347,21 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     const dayOfWeek = selectedDate.getDay();
     const dayAvailability = availability.filter(slot => slot.dayOfWeek === dayOfWeek);
 
-    const timeSlots = [];
+    const timeSlots: string[] = [];
     for (const slot of dayAvailability) {
       const [startHour, startMin] = slot.startTime.split(':').map(Number);
       const [endHour, endMin] = slot.endTime.split(':').map(Number);
 
-      for (let hour = startHour; hour < endHour; hour++) {
-        for (let min = 0; min < 60; min += 30) {
-          if (hour === startHour && min < startMin) continue;
-          if (hour === endHour - 1 && min + 30 > endMin) continue;
+      // Convert to minutes for easier comparison
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
 
-          const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-          timeSlots.push(time);
-        }
+      // Generate 30-minute slots from start up to (but not including) end time
+      for (let mins = startMinutes; mins < endMinutes; mins += 30) {
+        const hour = Math.floor(mins / 60);
+        const min = mins % 60;
+        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        timeSlots.push(time);
       }
     }
 
@@ -468,6 +498,41 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                         ))}
                     </SelectContent>
                   </Select>
+                )}
+
+                {/* Show interviewer availability when selected */}
+                {selectedInterviewer && !useCustomInterviewer && availability && Array.isArray(availability) && (
+                  <div className="mt-2 p-3 bg-blue-50 rounded-md border border-blue-200">
+                    <p className="text-sm font-medium text-blue-800 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      Available Hours
+                    </p>
+                    {availability.filter((a: any) => a.isActive !== false).length > 0 ? (
+                      <div className="mt-1 text-sm text-blue-700 space-y-1">
+                        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, idx) => {
+                          const daySlots = availability.filter((a: any) => a.dayOfWeek === idx && a.isActive !== false);
+                          if (daySlots.length === 0) return null;
+                          return (
+                            <div key={day} className="flex gap-2">
+                              <span className="font-medium w-20">{day}:</span>
+                              <span>
+                                {daySlots.map((slot: any, i: number) => (
+                                  <span key={i}>
+                                    {formatTime12Hour(slot.startTime)} - {formatTime12Hour(slot.endTime)}
+                                    {i < daySlots.length - 1 ? ', ' : ''}
+                                  </span>
+                                ))}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm text-orange-600">
+                        No availability set. Contact this person to set up their interview availability.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 

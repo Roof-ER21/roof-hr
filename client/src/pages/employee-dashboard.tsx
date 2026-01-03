@@ -12,6 +12,7 @@ import { EventFormModal } from '@/components/calendar/EventFormModal';
 import { DeleteEventDialog } from '@/components/calendar/DeleteEventDialog';
 import OrgChart from '@/components/OrgChart';
 import { OnboardingTaskList } from '@/components/onboarding/OnboardingTaskList';
+import { AvailabilityManager } from '@/components/settings/availability-manager';
 import {
   Calendar,
   Clock,
@@ -107,6 +108,9 @@ function EmployeeDashboard() {
 
   // Check if user is eligible for PTO
   const userGetsPto = employeeGetsPto({ department: user?.department, employmentType: user?.employmentType });
+
+  // Check if user can conduct interviews (Admins and Managers)
+  const canConductInterviews = user?.role && ['ADMIN', 'MANAGER', 'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'TRUE_ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role);
 
   // Event CRUD modal state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -572,6 +576,7 @@ function EmployeeDashboard() {
               <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
               <TabsTrigger value="pending">Pending Actions</TabsTrigger>
               <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+              {canConductInterviews && <TabsTrigger value="availability">My Availability</TabsTrigger>}
               <TabsTrigger value="orgchart">Org Chart</TabsTrigger>
             </TabsList>
 
@@ -1088,6 +1093,13 @@ function EmployeeDashboard() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Availability Tab - For interviewers */}
+            {canConductInterviews && (
+              <TabsContent value="availability" className="space-y-4">
+                <AvailabilityManager />
+              </TabsContent>
+            )}
 
             {/* Org Chart Tab */}
             <TabsContent value="orgchart" className="space-y-4">

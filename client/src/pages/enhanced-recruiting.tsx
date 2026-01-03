@@ -44,6 +44,7 @@ import { ChatbotWidget } from '@/components/recruitment/chatbot-widget';
 import { AIInsightsPanel } from '@/components/ai-enhancements/ai-insights-panel';
 import { InPersonInterviewScreening, type ScreeningData } from '@/components/recruiting/in-person-interview-screening';
 import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-candidate-modal';
+import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
@@ -1064,7 +1065,7 @@ export default function EnhancedRecruiting() {
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
 
   const location = useLocation();
-  
+
   // Form schemas
   const candidateFormSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
@@ -1214,6 +1215,16 @@ export default function EnhancedRecruiting() {
   const { data: candidates = [], isLoading } = useQuery<Candidate[]>({
     queryKey: ['/api/candidates'],
   });
+
+  // Keep selectedCandidate in sync with fresh data after AI analysis
+  useEffect(() => {
+    if (selectedCandidate && candidates.length > 0) {
+      const freshCandidate = candidates.find(c => c.id === selectedCandidate.id);
+      if (freshCandidate && JSON.stringify(freshCandidate) !== JSON.stringify(selectedCandidate)) {
+        setSelectedCandidate(freshCandidate);
+      }
+    }
+  }, [candidates, selectedCandidate]);
 
   // Fetch available sourcers for filtering
   const { data: sourcers = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; screenerColor?: string }>>({
@@ -2668,11 +2679,11 @@ export default function EnhancedRecruiting() {
             const candidateToSchedule = candidateForInterviewScreening.candidate;
             setShowInterviewScreening(false);
             setCandidateForInterviewScreening(null);
-            
-            // Now open the interview scheduler dialog AFTER screening is complete
+
+            // Open candidate profile so scheduler can review notes and resume
             setTimeout(() => {
-              setSelectedCandidateForInterview(candidateToSchedule);
-              setShowInterviewScheduler(true);
+              setSelectedCandidate(candidateToSchedule);
+              setShowCandidateDetails(true);
             }, 300); // Small delay to ensure smooth transition between dialogs
           }}
           onCancel={() => {
@@ -2686,180 +2697,36 @@ export default function EnhancedRecruiting() {
         />
       )}
 
-      {/* Candidate Details Dialog - For viewing from notifications */}
-      <Dialog open={showCandidateDetails} onOpenChange={setShowCandidateDetails}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Candidate Details</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowCandidateDetails(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </DialogTitle>
-            <DialogDescription>
-              View comprehensive candidate information and AI analysis
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedCandidate && (
-            <div className="space-y-6">
-              {/* Candidate Info */}
-              <div className="bg-muted p-4 rounded-lg">
-                <h3 className="font-semibold text-lg mb-2">
-                  {selectedCandidate.firstName || 'Unknown'} {selectedCandidate.lastName || 'Candidate'}
-                </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Position:</span>
-                    <span className="ml-2 font-medium">{selectedCandidate.position || 'Not specified'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Status:</span>
-                    <Badge className="ml-2" variant={
-                      selectedCandidate.status === 'HIRED' ? 'default' :
-                      selectedCandidate.status === 'REJECTED' ? 'destructive' :
-                      'secondary'
-                    }>
-                      {selectedCandidate.status || 'Unknown'}
-                    </Badge>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Email:</span>
-                    <span className="ml-2">{selectedCandidate.email || 'No email provided'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Phone:</span>
-                    <span className="ml-2">{selectedCandidate.phone || 'No phone provided'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Applied:</span>
-                    <span className="ml-2">{new Date(selectedCandidate.appliedDate).toLocaleDateString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Last Updated:</span>
-                    <span className="ml-2">{new Date(selectedCandidate.updatedAt).toLocaleDateString()}</span>
-                  </div>
-                  {selectedCandidate.assignedTo && (
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground">Assigned To:</span>
-                      <Badge className="ml-2" variant="outline">
-                        <Users className="h-3 w-3 mr-1" />
-                        {availableEmployees.find((e: any) => e.id === selectedCandidate.assignedTo)?.firstName} {availableEmployees.find((e: any) => e.id === selectedCandidate.assignedTo)?.lastName}
-                      </Badge>
-                    </div>
-                  )}
-                  {selectedCandidate.referralName && (
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground">Referred By:</span>
-                      <span className="ml-2 font-medium">{selectedCandidate.referralName}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* AI Analysis - Comprehensive Panel */}
-              <AIInsightsPanel 
-                candidateId={selectedCandidate.id} 
-                candidateData={selectedCandidate} 
-              />
-              
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setEditingCandidate(selectedCandidate);
-                    setShowEditCandidate(true);
-                    setShowCandidateDetails(false);
-                  }}
-                >
-                  <Pencil className="h-4 w-4 mr-1" />
-                  Edit Candidate
-                </Button>
-
-                {selectedCandidate.resumeUrl && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setPreviewResumeUrl(selectedCandidate.resumeUrl!);
-                      setShowResumePreview(true);
-                    }}
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    View Resume
-                  </Button>
-                )}
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const nextStatus = getNextStatus(selectedCandidate.status);
-                    if (nextStatus) {
-                      // Directly update status without questionnaire
-                      updateCandidateMutation.mutate({
-                        id: selectedCandidate.id,
-                        data: { status: nextStatus }
-                      });
-                    }
-                  }}
-                  disabled={!getNextStatus(selectedCandidate.status)}
-                >
-                  <ChevronRight className="h-4 w-4 mr-1" />
-                  Move to {getNextStatus(selectedCandidate.status) || 'Final Stage'}
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedCandidateForInterview(selectedCandidate);
-                    setShowInterviewScheduler(true);
-                  }}
-                >
-                  <Calendar className="h-4 w-4 mr-1" />
-                  Schedule Interview
-                </Button>
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedCandidateForEmail(selectedCandidate);
-                    setShowEmailGenerator(true);
-                  }}
-                >
-                  <Mail className="h-4 w-4 mr-1" />
-                  Send Email
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedCandidateForNotes(selectedCandidate);
-                    setShowNotes(true);
-                  }}
-                >
-                  <FileText className="h-4 w-4 mr-1" />
-                  View Notes
-                </Button>
-                
-                {!selectedCandidate.matchScore && (
-                  <Button
-                    variant="outline"
-                    onClick={() => analyzeCandidateMutation.mutate(selectedCandidate.id)}
-                    disabled={analyzeCandidateMutation.isPending}
-                  >
-                    <Brain className="h-4 w-4 mr-1" />
-                    Run AI Analysis
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Candidate Details Dialog - New Side-by-Side Layout */}
+      <CandidateDetailsDialog
+        isOpen={showCandidateDetails}
+        onOpenChange={setShowCandidateDetails}
+        candidate={selectedCandidate}
+        availableEmployees={availableEmployees}
+        onEditCandidate={(candidate) => {
+          setEditingCandidate(candidate);
+          setShowEditCandidate(true);
+          setShowCandidateDetails(false);
+        }}
+        onMoveToNextStage={(candidate, nextStatus) => {
+          updateCandidateMutation.mutate({
+            id: candidate.id,
+            data: { status: nextStatus }
+          });
+        }}
+        onScheduleInterview={(candidate) => {
+          setSelectedCandidateForInterview(candidate);
+          setShowInterviewScheduler(true);
+        }}
+        onSendEmail={(candidate) => {
+          setSelectedCandidateForEmail(candidate);
+          setShowEmailGenerator(true);
+        }}
+        onRunAIAnalysis={(candidateId) => analyzeCandidateMutation.mutate(candidateId)}
+        getNextStatus={getNextStatus}
+        isAnalyzing={analyzeCandidateMutation.isPending}
+        isUpdating={updateCandidateMutation.isPending}
+      />
       
       {/* Add Candidate Dialog */}
       <Dialog open={isCandidateDialogOpen} onOpenChange={setIsCandidateDialogOpen}>

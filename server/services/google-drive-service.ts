@@ -96,6 +96,7 @@ class GoogleDriveService {
     content: Buffer | fs.ReadStream;
     parentFolderId?: string;
     description?: string;
+    shareWithDomain?: boolean; // Auto-share with organization domain
   }) {
     try {
       // Ensure service is initialized
@@ -131,6 +132,26 @@ class GoogleDriveService {
       });
 
       console.log('[Google Drive] File uploaded:', response.data.id);
+
+      // Auto-share with organization domain or make viewable with link
+      // Default to true to make files accessible to all employees
+      if (options.shareWithDomain !== false) {
+        try {
+          // Share with anyone who has the link (reader access)
+          await this.drive.permissions.create({
+            fileId: response.data.id,
+            resource: {
+              type: 'anyone',
+              role: 'reader'
+            },
+            sendNotificationEmail: false
+          });
+          console.log('[Google Drive] File shared with anyone with link:', response.data.id);
+        } catch (shareError) {
+          console.warn('[Google Drive] Failed to auto-share file (continuing):', shareError);
+        }
+      }
+
       return response.data;
     } catch (error) {
       console.error('[Google Drive] Error uploading file:', error);
