@@ -29,6 +29,7 @@ uploads/
 # Ignore root public folder but not client/public (which has the logo)
 /public/
 !client/public/
+!public/documents/
 
 # Scripts that may contain secrets
 scripts/fetch-email.ts

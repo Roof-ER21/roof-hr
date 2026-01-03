@@ -59,6 +59,7 @@ import {
   BundleAssignment, InsertBundleAssignment, bundleAssignments,
   BundleAssignmentItem, InsertBundleAssignmentItem, bundleAssignmentItems,
   EquipmentReceipt, InsertEquipmentReceipt, equipmentReceipts,
+  EquipmentReceiptToken, InsertEquipmentReceiptToken, equipmentReceiptTokens,
   // Attendance tracking
   AttendanceSession, InsertAttendanceSession, attendanceSessions,
   AttendanceCheckIn, InsertAttendanceCheckIn, attendanceCheckIns,
@@ -2566,6 +2567,30 @@ class DrizzleStorage implements IStorage {
 
   async getPendingEquipmentReceipts(): Promise<any[]> {
     return await db.select().from(equipmentReceipts).where(eq(equipmentReceipts.status, 'PENDING'));
+  }
+
+  // Equipment Receipt Tokens (for public signing links)
+  async createEquipmentReceiptToken(data: { id: string; receiptId: string; startDate: Date; expiresAt: Date }): Promise<any> {
+    const [token] = await db.insert(equipmentReceiptTokens).values({
+      id: data.id,
+      receiptId: data.receiptId,
+      startDate: data.startDate,
+      expiresAt: data.expiresAt,
+    }).returning();
+    return token;
+  }
+
+  async getEquipmentReceiptToken(id: string): Promise<any | null> {
+    const [token] = await db.select().from(equipmentReceiptTokens).where(eq(equipmentReceiptTokens.id, id));
+    return token || null;
+  }
+
+  async markEquipmentReceiptTokenUsed(id: string): Promise<any> {
+    const [updated] = await db.update(equipmentReceiptTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(equipmentReceiptTokens.id, id))
+      .returning();
+    return updated;
   }
 
   // Search method

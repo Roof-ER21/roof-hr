@@ -1,5 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import { storage } from './storage';
@@ -2468,7 +2469,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     // Note: Tools are now assigned separately from the Tools page after hiring
     // This removes the performance bottleneck of sequential tool assignments
 
-    // Assign welcome package
+    // Assign welcome package and create equipment receipt for signing
+    let equipmentSigningUrl: string | undefined;
     if (welcomePackageId) {
       try {
         const bundleItemsList = await db
@@ -2497,6 +2499,37 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
           });
         }
         console.log(`[HIRE] Assigned welcome package to ${newEmployee.id}`);
+
+        // Create equipment receipt for signing (locked until start date)
+        try {
+          const receipt = await equipmentReceiptService.createReceipt({
+            employeeId: newEmployee.id,
+            employeeName: `${candidate.firstName} ${candidate.lastName}`,
+            position: candidate.position || 'Sales Representative',
+            startDate: new Date(startDate),
+            items: bundleItemsList.map(item => ({
+              toolId: item.id,
+              toolName: item.itemCategory + (item.requiresSize ? ` - ${shirtSize}` : ''),
+              quantity: item.quantity
+            })),
+            createdBy: user.id,
+          });
+
+          // Generate signing token (locked until start date)
+          const signingToken = crypto.randomBytes(32).toString('hex');
+          await storage.createEquipmentReceiptToken({
+            id: signingToken,
+            receiptId: receipt.id,
+            startDate: new Date(startDate),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          });
+
+          const baseUrl = process.env.CLIENT_URL || 'https://roofhr.up.railway.app';
+          equipmentSigningUrl = `${baseUrl}/sign-equipment/${signingToken}`;
+          console.log(`[HIRE] Created equipment receipt ${receipt.id} with signing URL`);
+        } catch (receiptError) {
+          console.error('[HIRE] Failed to create equipment receipt:', receiptError);
+        }
       } catch (bundleError) {
         console.error('[HIRE] Failed to assign welcome package:', bundleError);
       }
@@ -2576,6 +2609,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       const candidateLastName = candidate.lastName;
       const candidatePosition = candidate.position || 'Sales Representative';
       const senderEmail = user.email;
+      const emailStartDate = new Date(startDate);
+      const emailSigningUrl = equipmentSigningUrl; // Capture for async
 
       (async () => {
         try {
@@ -2593,13 +2628,15 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
             tempPassword,
             senderEmail,
             {
+              startDate: emailStartDate,
               includeAttachments: true,
               includeEquipmentChecklist: true,
+              equipmentSigningUrl: emailSigningUrl,
             }
           );
 
           if (emailSent) {
-            console.log(`[HIRE] Welcome email sent to ${candidateEmail}`);
+            console.log(`[HIRE] Welcome email sent to ${candidateEmail}${emailSigningUrl ? ' with signing link' : ''}`);
           } else {
             console.error(`[HIRE] Failed to send welcome email to ${candidateEmail}`);
           }

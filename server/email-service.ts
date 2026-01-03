@@ -444,8 +444,9 @@ class EmailService {
       startDate?: Date;
       includeAttachments?: boolean;
       includeEquipmentChecklist?: boolean;
-      ccRecipients?: string[];  // NEW: CC recipients
-      equipmentChecklistUrl?: string;  // NEW: Link to equipment checklist form
+      ccRecipients?: string[];  // CC recipients
+      equipmentChecklistUrl?: string;  // Link to equipment checklist form
+      equipmentSigningUrl?: string;  // Link to sign equipment receipt (locked until start date)
     }
   ) {
     try {
@@ -490,9 +491,23 @@ class EmailService {
                 <td style="padding: 8px; border: 1px solid #e5e7eb;">Sizes: S, M, L, XL, XXL, 3X | Colors: Red, Black, White, Gray</td>
               </tr>
             </table>
+            ${options?.equipmentSigningUrl ? `
+            <div style="text-align: center; margin: 20px 0;">
+              <a href="${options.equipmentSigningUrl}"
+                 style="display: inline-block; background-color: #2563eb; color: white;
+                        padding: 14px 28px; border-radius: 8px; text-decoration: none;
+                        font-weight: bold; font-size: 16px;">
+                Sign Equipment Receipt
+              </a>
+            </div>
+            <p style="color: #6b7280; font-size: 13px; text-align: center;">
+              (Signing will be available on ${formattedDate})
+            </p>
+            ` : `
             <p style="color: #dc2626; font-weight: bold; margin-top: 15px;">
               ⚠️ Please DO NOT sign the equipment receipt until your first day in office.
             </p>
+            `}
           </div>
       ` : '';
 
@@ -567,8 +582,8 @@ class EmailService {
       // Prepare attachments
       const attachments: EmailAttachment[] = [];
       if (options?.includeAttachments !== false) {
-        const templatesDir = path.resolve(process.cwd(), 'uploads', 'templates');
-        console.log('[Welcome Email] Templates directory:', templatesDir);
+        const templatesDir = path.resolve(process.cwd(), 'public', 'documents');
+        console.log('[Welcome Email] Documents directory:', templatesDir);
         console.log('[Welcome Email] Current working directory:', process.cwd());
 
         const culturePdfPath = path.join(templatesDir, 'Culture-and-Commitment.pdf');

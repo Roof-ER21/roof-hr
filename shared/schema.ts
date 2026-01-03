@@ -1368,6 +1368,19 @@ export const insertEquipmentReceiptSchema = createInsertSchema(equipmentReceipts
 export type EquipmentReceipt = typeof equipmentReceipts.$inferSelect;
 export type InsertEquipmentReceipt = typeof equipmentReceipts.$inferInsert;
 
+// Equipment Receipt Signing Tokens (for public signing links)
+export const equipmentReceiptTokens = pgTable('equipment_receipt_tokens', {
+  id: text('id').primaryKey(), // 64-char random hex token
+  receiptId: text('receipt_id').notNull(),
+  startDate: timestamp('start_date').notNull(), // Signing locked until this date
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'), // Set when signed
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export type EquipmentReceiptToken = typeof equipmentReceiptTokens.$inferSelect;
+export type InsertEquipmentReceiptToken = typeof equipmentReceiptTokens.$inferInsert;
+
 // Inventory Alert Thresholds
 export const inventoryAlerts = pgTable('inventory_alerts', {
   id: text('id').primaryKey(),

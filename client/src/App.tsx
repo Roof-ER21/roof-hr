@@ -37,6 +37,7 @@ import AttendanceAdminDashboard from '@/pages/AttendanceAdminDashboard';
 import EquipmentChecklistForm from '@/pages/equipment-checklist-form';
 import EquipmentAgreementForm from '@/pages/equipment-agreement-form';
 import EquipmentReturnForm from '@/pages/equipment-return-form';
+import SignEquipmentReceipt from '@/pages/sign-equipment-receipt';
 import EmployeeDashboard from '@/pages/employee-dashboard';
 import TeamDirectory from '@/pages/team-directory';
 import TeamDashboard from '@/pages/team-dashboard';
@@ -252,6 +253,7 @@ function App() {
             <Route path="/equipment-checklist/:token" element={<EquipmentChecklistForm />} />
             <Route path="/equipment-agreement/:token" element={<EquipmentAgreementForm />} />
             <Route path="/equipment-return/:token" element={<EquipmentReturnForm />} />
+            <Route path="/sign-equipment/:token" element={<SignEquipmentReceipt />} />
             <Route path="/login" element={<Login />} />
 
             {/* Protected routes - require authentication */}
