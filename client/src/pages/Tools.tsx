@@ -1,5 +1,6 @@
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, Fragment, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from '@/hooks/use-debounce';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -124,6 +125,11 @@ export function Tools() {
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [assignmentNotes, setAssignmentNotes] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  // Debounce search to prevent excessive API calls/re-renders
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 200; // Items per page
   const [showAdjustQuantityDialog, setShowAdjustQuantityDialog] = useState(false);
   const [quantityAdjustment, setQuantityAdjustment] = useState<{
     toolId: string;
@@ -162,9 +168,14 @@ export function Tools() {
   const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
     (user?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role));
 
-  // Fetch tools inventory
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
+
+  // Fetch tools inventory with pagination and search
   const { data: tools = [], isLoading: toolsLoading, error: toolsError } = useQuery<Tool[]>({
-    queryKey: ['/api/tools/inventory'],
+    queryKey: ['/api/tools/inventory', currentPage, debouncedSearchTerm],
     queryFn: async () => {
       const token = localStorage.getItem('token');
       const headers: HeadersInit = {};
@@ -173,7 +184,16 @@ export function Tools() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const res = await fetch('/api/tools/inventory', {
+      // Use server-side pagination and search
+      const params = new URLSearchParams({
+        limit: pageSize.toString(),
+        offset: ((currentPage - 1) * pageSize).toString(),
+      });
+      if (debouncedSearchTerm) {
+        params.set('search', debouncedSearchTerm);
+      }
+
+      const res = await fetch(`/api/tools/inventory?${params}`, {
         headers,
         credentials: "include",
       });
@@ -185,7 +205,8 @@ export function Tools() {
 
       return await res.json();
     },
-    enabled: true
+    enabled: true,
+    staleTime: 30000, // Cache for 30 seconds
   });
   
   // Debug logging
@@ -516,13 +537,8 @@ export function Tools() {
     return index === -1 ? 999 : index;
   };
   
-  // Filter and sort tools
+  // Sort tools (server already handles search filtering with debouncedSearchTerm)
   const filteredTools = (tools as Tool[])
-    .filter((tool: Tool) =>
-      tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tool.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tool.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
     .sort((a: Tool, b: Tool) => {
       // First sort by category
       if (a.category !== b.category) {

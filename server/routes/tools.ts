@@ -254,19 +254,19 @@ router.post('/inventory', checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
     const user = req.user!;
 
-    // Check for duplicate name
+    // Check for duplicate name (case-insensitive to prevent duplicates)
     const existingTool = await db
       .select()
       .from(toolInventory)
       .where(and(
-        eq(toolInventory.name, req.body.name),
+        sql`LOWER(${toolInventory.name}) = LOWER(${req.body.name})`,
         eq(toolInventory.isActive, true)
       ))
       .limit(1);
 
     if (existingTool.length > 0) {
       return res.status(400).json({
-        error: 'A tool with this name already exists',
+        error: 'A tool with this name already exists (case-insensitive match)',
         existingId: existingTool[0].id,
         existingName: existingTool[0].name
       });
@@ -318,13 +318,13 @@ router.patch('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res)
     const { id } = req.params;
     const updates = req.body;
 
-    // If name is being changed, check for duplicates
+    // If name is being changed, check for duplicates (case-insensitive)
     if (updates.name) {
       const existingTool = await db
         .select()
         .from(toolInventory)
         .where(and(
-          eq(toolInventory.name, updates.name),
+          sql`LOWER(${toolInventory.name}) = LOWER(${updates.name})`,
           eq(toolInventory.isActive, true)
         ))
         .limit(1);
@@ -332,7 +332,7 @@ router.patch('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res)
       // Check if there's another tool with this name (not the current one)
       if (existingTool.length > 0 && existingTool[0].id !== id) {
         return res.status(400).json({
-          error: 'Another tool with this name already exists',
+          error: 'Another tool with this name already exists (case-insensitive match)',
           existingId: existingTool[0].id,
           existingName: existingTool[0].name
         });
@@ -480,15 +480,24 @@ router.post('/import-sheets', checkRole(['ADMIN', 'MANAGER']), async (req, res) 
     await googleSheetsService.initialize();
     const importedTools = await googleSheetsService.importToolsInventory(spreadsheetId);
     
-    // Update database with imported tools
-    let updatedCount = 0;
-    let createdCount = 0;
-    
-    for (const tool of importedTools) {
-      const existing = await db.select().from(toolInventory).where(eq(toolInventory.id, tool.id)).limit(1);
-      
-      if (existing.length > 0) {
-        // Update existing tool
+    // OPTIMIZED: Batch update/insert imported tools
+    // First, get all existing tool IDs in one query
+    const importedIds = importedTools.map(t => t.id);
+    const existingTools = await db
+      .select({ id: toolInventory.id })
+      .from(toolInventory)
+      .where(inArray(toolInventory.id, importedIds));
+
+    const existingIdSet = new Set(existingTools.map(t => t.id));
+
+    // Separate into updates and inserts
+    const toUpdate = importedTools.filter(t => existingIdSet.has(t.id));
+    const toInsert = importedTools.filter(t => !existingIdSet.has(t.id));
+
+    // Batch update existing tools
+    if (toUpdate.length > 0) {
+      for (const tool of toUpdate) {
+        // Use individual updates but no existence check (we already know they exist)
         await db.update(toolInventory)
           .set({
             quantity: tool.quantity,
@@ -499,18 +508,23 @@ router.post('/import-sheets', checkRole(['ADMIN', 'MANAGER']), async (req, res) 
             updatedAt: new Date()
           })
           .where(eq(toolInventory.id, tool.id));
-        updatedCount++;
-      } else {
-        // Create new tool
-        await db.insert(toolInventory).values({
+      }
+    }
+
+    // Batch insert new tools
+    if (toInsert.length > 0) {
+      await db.insert(toolInventory).values(
+        toInsert.map(tool => ({
           ...tool,
           createdBy: req.user!.id,
           createdAt: new Date(),
           updatedAt: new Date()
-        });
-        createdCount++;
-      }
+        }))
+      );
     }
+
+    const updatedCount = toUpdate.length;
+    const createdCount = toInsert.length;
     
     res.json({ 
       message: 'Tools imported from Google Sheets successfully',
@@ -592,9 +606,10 @@ router.post('/assignments', async (req, res) => {
       return res.status(404).json({ error: 'One or more tools not found' });
     }
 
-    // Create assignments
+    // Create assignments and collect quantity updates
     const assignments = [];
     const assignmentTokens: { [key: string]: string } = {};
+    const quantityUpdates: { id: string; newQuantity: number }[] = [];
 
     for (const toolId of toolIds) {
       const tool = tools.find(t => t.id === toolId);
@@ -625,14 +640,26 @@ router.post('/assignments', async (req, res) => {
 
       assignmentTokens[assignmentId] = signatureToken;
 
-      // Update available quantity
-      await db
-        .update(toolInventory)
-        .set({
-          availableQuantity: tool.availableQuantity - 1,
-          updatedAt: new Date()
-        })
-        .where(eq(toolInventory.id, toolId));
+      // Queue quantity update (will batch after loop)
+      quantityUpdates.push({
+        id: toolId,
+        newQuantity: tool.availableQuantity - 1
+      });
+    }
+
+    // OPTIMIZED: Batch update all tool quantities in a single query
+    if (quantityUpdates.length > 0) {
+      const updateCases = quantityUpdates.map(u =>
+        sql`WHEN ${toolInventory.id} = ${u.id} THEN ${u.newQuantity}`
+      );
+      const updateIds = quantityUpdates.map(u => u.id);
+
+      await db.execute(sql`
+        UPDATE tool_inventory
+        SET available_quantity = CASE ${sql.join(updateCases, sql` `)} END,
+            updated_at = NOW()
+        WHERE id IN (${sql.join(updateIds.map(id => sql`${id}`), sql`, `)})
+      `);
     }
 
     // Insert all assignments
@@ -709,17 +736,16 @@ ROOF-ER HR Team`,
 
       try {
         await sgMail.send(emailContent);
-        
-        // Mark email as sent
-        for (const assignment of createdAssignments) {
-          await db
-            .update(toolAssignments)
-            .set({ 
-              emailSent: true,
-              emailSentDate: new Date()
-            })
-            .where(eq(toolAssignments.id, assignment.id));
-        }
+
+        // OPTIMIZED: Batch update all assignments in single query
+        const assignmentIds = createdAssignments.map(a => a.id);
+        await db
+          .update(toolAssignments)
+          .set({
+            emailSent: true,
+            emailSentDate: new Date()
+          })
+          .where(inArray(toolAssignments.id, assignmentIds));
       } catch (emailError) {
         console.error('Failed to send assignment email:', emailError);
       }
@@ -988,7 +1014,8 @@ router.post('/alerts/check', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_A
       .where(eq(inventoryAlerts.alertEnabled, true));
 
     const triggeredAlerts = [];
-    
+    const triggeredAlertIds: string[] = [];
+
     for (const { alert, tool } of alerts) {
       if (tool && tool.availableQuantity <= alert.thresholdQuantity) {
         triggeredAlerts.push({
@@ -998,17 +1025,22 @@ router.post('/alerts/check', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_A
           recipients: alert.alertRecipients
         });
 
-        // Update last alert sent timestamp
-        await db
-          .update(inventoryAlerts)
-          .set({ lastAlertSent: new Date() })
-          .where(eq(inventoryAlerts.id, alert.id));
+        // Collect alert ID for batch update
+        triggeredAlertIds.push(alert.id);
       }
     }
 
-    res.json({ 
+    // OPTIMIZED: Batch update all triggered alert timestamps in single query
+    if (triggeredAlertIds.length > 0) {
+      await db
+        .update(inventoryAlerts)
+        .set({ lastAlertSent: new Date() })
+        .where(inArray(inventoryAlerts.id, triggeredAlertIds));
+    }
+
+    res.json({
       message: `Checked ${alerts.length} alerts, ${triggeredAlerts.length} triggered`,
-      triggeredAlerts 
+      triggeredAlerts
     });
   } catch (error) {
     console.error('Error checking inventory alerts:', error);
@@ -1205,9 +1237,15 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
       .from(bundleItems)
       .where(eq(bundleItems.bundleId, bundleId));
 
-    // Process each item in the bundle
+    // OPTIMIZED: Pre-fetch all active inventory in one query
+    const allInventory = await db
+      .select()
+      .from(toolInventory)
+      .where(eq(toolInventory.isActive, true));
+
+    // Process each item in the bundle (in-memory lookups, no N+1)
     const assignmentItems = [];
-    const inventoryUpdates = [];
+    const inventoryUpdates: { id: string; reduceBy: number }[] = [];
 
     for (const item of items) {
       let toolId = null;
@@ -1216,54 +1254,49 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
       // If item requires size (clothing), use employee's shirt size or provided selection
       if (item.requiresSize) {
         size = itemSelections?.[item.id]?.size || employee.shirtSize;
-        
+
         if (!size) {
           continue; // Skip if no size available
         }
 
-        // Find matching inventory item by category and size
-        const [inventoryItem] = await db
-          .select()
-          .from(toolInventory)
-          .where(
-            and(
-              eq(toolInventory.category, item.itemCategory as any),
-              sql`${toolInventory.name} ILIKE '%${size}%'`,
-              eq(toolInventory.isActive, true)
-            )
-          )
-          .limit(1);
+        // FIXED: Use parameterized ILIKE pattern (prevents SQL injection)
+        const sizePattern = size.toLowerCase();
+        const inventoryItem = allInventory.find(inv =>
+          inv.category === item.itemCategory &&
+          inv.name.toLowerCase().includes(sizePattern) &&
+          inv.availableQuantity >= item.quantity
+        );
 
-        if (inventoryItem && inventoryItem.availableQuantity >= item.quantity) {
+        if (inventoryItem) {
           toolId = inventoryItem.id;
-          
+
           // Queue inventory update
           inventoryUpdates.push({
             id: inventoryItem.id,
             reduceBy: item.quantity
           });
+
+          // Reduce in-memory to handle multiple items needing same tool
+          inventoryItem.availableQuantity -= item.quantity;
         }
       } else {
-        // For non-clothing items, find by category
-        const [inventoryItem] = await db
-          .select()
-          .from(toolInventory)
-          .where(
-            and(
-              eq(toolInventory.category, item.itemCategory as any),
-              eq(toolInventory.isActive, true)
-            )
-          )
-          .limit(1);
+        // For non-clothing items, find by category (in-memory)
+        const inventoryItem = allInventory.find(inv =>
+          inv.category === item.itemCategory &&
+          inv.availableQuantity >= item.quantity
+        );
 
-        if (inventoryItem && inventoryItem.availableQuantity >= item.quantity) {
+        if (inventoryItem) {
           toolId = inventoryItem.id;
-          
+
           // Queue inventory update
           inventoryUpdates.push({
             id: inventoryItem.id,
             reduceBy: item.quantity
           });
+
+          // Reduce in-memory to handle multiple items needing same tool
+          inventoryItem.availableQuantity -= item.quantity;
         }
       }
 
@@ -1284,27 +1317,39 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
       await db.insert(bundleAssignmentItems).values(assignmentItems as any);
     }
 
-    // Update inventory quantities
+    // OPTIMIZED: Batch update all inventory quantities
+    // Group updates by tool ID to combine reductions
+    const updatesByToolId = new Map<string, number>();
     for (const update of inventoryUpdates) {
-      await db
-        .update(toolInventory)
-        .set({
-          availableQuantity: sql`${toolInventory.availableQuantity} - ${update.reduceBy}`,
-          updatedAt: new Date()
-        })
-        .where(eq(toolInventory.id, update.id));
+      const current = updatesByToolId.get(update.id) || 0;
+      updatesByToolId.set(update.id, current + update.reduceBy);
+    }
 
-      // Create tool assignment record
-      await db
-        .insert(toolAssignments)
-        .values({
-          id: uuidv4(),
-          toolId: update.id,
-          employeeId,
-          assignedBy: user.id,
-          condition: 'NEW',
-          notes: `Assigned as part of bundle: ${bundleId}`
-        });
+    if (updatesByToolId.size > 0) {
+      // Batch inventory update
+      const updateCases = Array.from(updatesByToolId.entries()).map(([id, reduceBy]) =>
+        sql`WHEN ${toolInventory.id} = ${id} THEN ${toolInventory.availableQuantity} - ${reduceBy}`
+      );
+      const updateIds = Array.from(updatesByToolId.keys());
+
+      await db.execute(sql`
+        UPDATE tool_inventory
+        SET available_quantity = CASE ${sql.join(updateCases, sql` `)} END,
+            updated_at = NOW()
+        WHERE id IN (${sql.join(updateIds.map(id => sql`${id}`), sql`, `)})
+      `);
+
+      // Batch insert all tool assignments
+      const toolAssignmentValues = inventoryUpdates.map(update => ({
+        id: uuidv4(),
+        toolId: update.id,
+        employeeId,
+        assignedBy: user.id,
+        condition: 'NEW' as const,
+        notes: `Assigned as part of bundle: ${bundleId}`
+      }));
+
+      await db.insert(toolAssignments).values(toolAssignmentValues);
     }
 
     // Update assignment status

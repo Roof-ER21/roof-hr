@@ -106,9 +106,11 @@ export function HireCandidateModal({
   const { data: bundles = [] } = useQuery<Bundle[]>({
     queryKey: ['/api/bundles'],
     queryFn: async () => {
-      const token = localStorage.getItem('authToken');
+      // Use 'token' key for consistency with other components
+      const token = localStorage.getItem('token');
       const response = await fetch('/api/bundles', {
         headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch bundles');
       return response.json();
