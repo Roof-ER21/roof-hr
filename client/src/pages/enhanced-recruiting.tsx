@@ -45,6 +45,7 @@ import { AIInsightsPanel } from '@/components/ai-enhancements/ai-insights-panel'
 import { InPersonInterviewScreening, type ScreeningData } from '@/components/recruiting/in-person-interview-screening';
 import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-candidate-modal';
 import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
+import { OfferNotesDialog } from '@/components/recruiting/offer-notes-dialog';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
@@ -1053,6 +1054,10 @@ export default function EnhancedRecruiting() {
   const [selectedAssignedEmployee, setSelectedAssignedEmployee] = useState<string>('');
   const [showInterviewScreening, setShowInterviewScreening] = useState(false);
   const [candidateForInterviewScreening, setCandidateForInterviewScreening] = useState<{candidate: Candidate; nextStatus: string} | null>(null);
+  // Offer notes dialog - requires notes when moving to OFFER stage
+  const [showOfferNotesDialog, setShowOfferNotesDialog] = useState(false);
+  const [candidateForOfferNotes, setCandidateForOfferNotes] = useState<{candidate: Candidate; newStatus: string} | null>(null);
+  const [isSubmittingOfferNotes, setIsSubmittingOfferNotes] = useState(false);
   const [isCandidateDialogOpen, setIsCandidateDialogOpen] = useState(false);
   const [isNewHireDialogOpen, setIsNewHireDialogOpen] = useState(false);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
@@ -1681,6 +1686,16 @@ export default function EnhancedRecruiting() {
     if (newStatus === 'DEAD') {
       setCandidateForDeadType(currentCandidate);
       setShowDeadTypeModal(true);
+      return;
+    }
+
+    // Check if moving to OFFER - require notes about why not hired yet
+    if (newStatus === 'OFFER' && currentCandidate.status !== 'OFFER') {
+      setCandidateForOfferNotes({
+        candidate: currentCandidate,
+        newStatus: newStatus
+      });
+      setShowOfferNotesDialog(true);
       return;
     }
 
@@ -2462,6 +2477,55 @@ export default function EnhancedRecruiting() {
         />
       )}
 
+      {/* Offer Notes Dialog - requires notes when moving to offer stage */}
+      {candidateForOfferNotes && (
+        <OfferNotesDialog
+          open={showOfferNotesDialog}
+          onClose={() => {
+            setShowOfferNotesDialog(false);
+            setCandidateForOfferNotes(null);
+          }}
+          onSubmit={async (notes, expectedDecisionDate) => {
+            setIsSubmittingOfferNotes(true);
+            try {
+              // 1. Save the note to the candidate
+              await apiRequest(`/api/candidates/${candidateForOfferNotes.candidate.id}/notes`, {
+                method: 'POST',
+                body: JSON.stringify({
+                  content: `[OFFER STATUS UPDATE]${expectedDecisionDate ? `\nExpected Decision: ${expectedDecisionDate}` : ''}\n\n${notes}`,
+                  type: 'INTERNAL'
+                }),
+              });
+
+              // 2. Update the candidate status
+              await updateCandidateMutation.mutateAsync({
+                id: candidateForOfferNotes.candidate.id,
+                data: { status: candidateForOfferNotes.newStatus as 'OFFER' }
+              });
+
+              toast({
+                title: 'Moved to Offer',
+                description: `${candidateForOfferNotes.candidate.firstName} has been moved to offer stage.`
+              });
+
+              setShowOfferNotesDialog(false);
+              setCandidateForOfferNotes(null);
+            } catch (error) {
+              toast({
+                title: 'Error',
+                description: 'Failed to update candidate status.',
+                variant: 'destructive'
+              });
+            } finally {
+              setIsSubmittingOfferNotes(false);
+            }
+          }}
+          candidateName={`${candidateForOfferNotes.candidate.firstName} ${candidateForOfferNotes.candidate.lastName}`}
+          newStatus={candidateForOfferNotes.newStatus}
+          isSubmitting={isSubmittingOfferNotes}
+        />
+      )}
+
       {/* Dead Type Selection Modal */}
       <Dialog open={showDeadTypeModal} onOpenChange={setShowDeadTypeModal}>
         <DialogContent className="sm:max-w-[425px]">
@@ -2709,6 +2773,16 @@ export default function EnhancedRecruiting() {
           setShowCandidateDetails(false);
         }}
         onMoveToNextStage={(candidate, nextStatus) => {
+          // Check if moving to OFFER - require notes
+          if (nextStatus === 'OFFER' && candidate.status !== 'OFFER') {
+            setCandidateForOfferNotes({
+              candidate: candidate,
+              newStatus: nextStatus
+            });
+            setShowOfferNotesDialog(true);
+            setShowCandidateDetails(false);
+            return;
+          }
           updateCandidateMutation.mutate({
             id: candidate.id,
             data: { status: nextStatus }

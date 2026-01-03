@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import {
   User, Mail, Phone, Calendar, Users, ChevronRight, Pencil,
   Brain, FileText, CheckCircle, XCircle, Clock, AlertCircle,
   ClipboardList, Sparkles, TrendingUp, ShieldAlert, ExternalLink,
-  Loader2, Trash2, MessageSquare
+  Loader2, Trash2, MessageSquare, FileQuestion
 } from 'lucide-react';
 import { InterviewQuestionsDialog } from './interview-questions-dialog';
 
@@ -44,10 +44,10 @@ interface CandidateDetailsDialogProps {
 }
 
 const noteTypeConfig = {
-  GENERAL: { label: 'General', color: 'bg-gray-100 text-gray-800' },
-  INTERVIEW: { label: 'Interview', color: 'bg-blue-100 text-blue-800' },
-  REFERENCE: { label: 'Reference', color: 'bg-green-100 text-green-800' },
-  INTERNAL: { label: 'Internal', color: 'bg-orange-100 text-orange-800' },
+  GENERAL: { label: 'General', color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200' },
+  INTERVIEW: { label: 'Interview', color: 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200' },
+  REFERENCE: { label: 'Reference', color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' },
+  INTERNAL: { label: 'Internal', color: 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' },
 };
 
 // Helper to convert Google Drive URLs to proxy URLs for seamless viewing
@@ -67,15 +67,41 @@ const getResumeViewUrl = (resumeUrl: string): string => {
 };
 
 const statusColors: Record<string, string> = {
-  APPLIED: 'bg-blue-100 text-blue-800',
-  SCREENING: 'bg-yellow-100 text-yellow-800',
-  INTERVIEW: 'bg-purple-100 text-purple-800',
-  OFFER: 'bg-indigo-100 text-indigo-800',
-  HIRED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  DEAD_BY_US: 'bg-red-100 text-red-800',
-  DEAD_BY_CANDIDATE: 'bg-orange-100 text-orange-800',
-  NO_SHOW: 'bg-gray-100 text-gray-800',
+  APPLIED: 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200',
+  SCREENING: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200',
+  INTERVIEW: 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200',
+  OFFER: 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200',
+  HIRED: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
+  REJECTED: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
+  DEAD_BY_US: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
+  DEAD_BY_CANDIDATE: 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200',
+  NO_SHOW: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
+};
+
+// Helper to parse interview Q&A from notes content
+const parseInterviewQA = (content: string): Array<{ question: string; answer: string }> => {
+  const lines = content.split('\n');
+  const qa: Array<{ question: string; answer: string }> = [];
+  let currentQ = '';
+  let currentA = '';
+
+  for (const line of lines) {
+    if (line.match(/^Q\d+:/)) {
+      if (currentQ && currentA) {
+        qa.push({ question: currentQ, answer: currentA.trim() });
+      }
+      currentQ = line.replace(/^Q\d+:\s*/, '');
+      currentA = '';
+    } else if (line.startsWith('A:')) {
+      currentA = line.replace(/^A:\s*/, '');
+    } else if (currentA && line.trim()) {
+      currentA += ' ' + line.trim();
+    }
+  }
+  if (currentQ && currentA) {
+    qa.push({ question: currentQ, answer: currentA.trim() });
+  }
+  return qa;
 };
 
 function YesNoIndicator({ value, label }: { value: boolean | null | undefined; label: string }) {
@@ -85,11 +111,11 @@ function YesNoIndicator({ value, label }: { value: boolean | null | undefined; l
       {value === null || value === undefined ? (
         <Badge variant="outline" className="text-xs">Not answered</Badge>
       ) : value ? (
-        <Badge className="bg-green-100 text-green-800 text-xs">
+        <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs">
           <CheckCircle className="h-3 w-3 mr-1" /> Yes
         </Badge>
       ) : (
-        <Badge className="bg-red-100 text-red-800 text-xs">
+        <Badge className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs">
           <XCircle className="h-3 w-3 mr-1" /> No
         </Badge>
       )}
@@ -114,15 +140,15 @@ function AIInsightsSummary({ candidate }: { candidate: any }) {
   const strengths = fullAnalysis?.strengths || [];
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'bg-green-100 text-green-800 border-green-200';
-    if (score >= 60) return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (score >= 40) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    return 'bg-red-100 text-red-800 border-red-200';
+    if (score >= 80) return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700';
+    if (score >= 60) return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+    if (score >= 40) return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700';
+    return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
   };
 
   if (!candidate.matchScore && !candidate.predictedSuccessScore) {
     return (
-      <div className="bg-gray-50 p-4 rounded-lg border">
+      <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border">
         <div className="flex items-center gap-2 text-muted-foreground">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm">No AI analysis yet. Run analysis to get insights.</span>
@@ -132,7 +158,7 @@ function AIInsightsSummary({ candidate }: { candidate: any }) {
   }
 
   return (
-    <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border space-y-3">
+    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 p-4 rounded-lg border space-y-3">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-purple-600" />
         <span className="font-semibold">AI Analysis</span>
@@ -166,12 +192,12 @@ function AIInsightsSummary({ candidate }: { candidate: any }) {
       {/* Top Strengths */}
       {strengths.length > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center gap-1 text-xs font-medium text-green-700">
+          <div className="flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400">
             <TrendingUp className="h-3 w-3" /> Top Strengths
           </div>
           <div className="flex flex-wrap gap-1">
             {strengths.slice(0, 3).map((s: string, i: number) => (
-              <Badge key={i} variant="outline" className="text-xs bg-green-50">
+              <Badge key={i} variant="outline" className="text-xs bg-green-50 dark:bg-green-950">
                 {s}
               </Badge>
             ))}
@@ -182,12 +208,12 @@ function AIInsightsSummary({ candidate }: { candidate: any }) {
       {/* Top Risks */}
       {risks.length > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center gap-1 text-xs font-medium text-red-700">
+          <div className="flex items-center gap-1 text-xs font-medium text-red-700 dark:text-red-400">
             <ShieldAlert className="h-3 w-3" /> Key Risks
           </div>
           <div className="flex flex-wrap gap-1">
             {risks.slice(0, 2).map((r: any, i: number) => (
-              <Badge key={i} variant="outline" className="text-xs bg-red-50">
+              <Badge key={i} variant="outline" className="text-xs bg-red-50 dark:bg-red-950">
                 {typeof r === 'string' ? r : r.risk || r.factor}
               </Badge>
             ))}
@@ -218,6 +244,64 @@ export function CandidateDetailsDialog({
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [noteType, setNoteType] = useState<'GENERAL' | 'INTERVIEW' | 'REFERENCE' | 'INTERNAL'>('GENERAL');
+
+  // Resume blob URL state for authenticated loading
+  const [resumeBlobUrl, setResumeBlobUrl] = useState<string | null>(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
+  // Fetch resume with authentication to bypass iframe auth issues
+  useEffect(() => {
+    if (!candidate?.resumeUrl || !isOpen) {
+      setResumeBlobUrl(null);
+      return;
+    }
+
+    const fetchResume = async () => {
+      setResumeLoading(true);
+      setResumeError(null);
+
+      // Extract fileId from Google Drive URL
+      const driveMatch = candidate.resumeUrl.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+      if (!driveMatch) {
+        // Non-Google Drive URL - use directly
+        setResumeBlobUrl(candidate.resumeUrl);
+        setResumeLoading(false);
+        return;
+      }
+
+      const fileId = driveMatch[1];
+      const token = localStorage.getItem('sessionToken');
+
+      try {
+        const response = await fetch(`/api/resumes/view/${fileId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load resume');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setResumeBlobUrl(url);
+      } catch (err) {
+        console.error('Resume fetch error:', err);
+        setResumeError('Unable to load resume');
+      } finally {
+        setResumeLoading(false);
+      }
+    };
+
+    fetchResume();
+
+    // Cleanup blob URL on unmount or when candidate changes
+    return () => {
+      if (resumeBlobUrl && resumeBlobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(resumeBlobUrl);
+      }
+    };
+  }, [candidate?.resumeUrl, candidate?.id, isOpen]);
 
   // Fetch notes
   const { data: notes = [], isLoading: notesLoading } = useQuery<CandidateNote[]>({
@@ -387,7 +471,7 @@ export function CandidateDetailsDialog({
                           <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                             Interview Screening
                           </h4>
-                          <div className="bg-blue-50 rounded-lg p-3 space-y-1">
+                          <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-3 space-y-1">
                             <YesNoIndicator value={screeningData.hasDriversLicense} label="License Verified" />
                             <YesNoIndicator value={screeningData.hasReliableVehicle} label="Vehicle Verified" />
                             <YesNoIndicator value={screeningData.hasClearCommunication} label="Clear Communication" />
@@ -444,21 +528,91 @@ export function CandidateDetailsDialog({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(getResumeViewUrl(candidate.resumeUrl), '_blank')}
+                            onClick={() => {
+                              if (resumeBlobUrl) {
+                                window.open(resumeBlobUrl, '_blank');
+                              } else {
+                                window.open(getResumeViewUrl(candidate.resumeUrl), '_blank');
+                              }
+                            }}
                           >
                             <ExternalLink className="h-3 w-3 mr-1" />
                             New Tab
                           </Button>
                         </h4>
-                        <div className="border rounded-lg overflow-hidden bg-white">
-                          <iframe
-                            src={getResumeViewUrl(candidate.resumeUrl)}
-                            className="w-full h-[300px]"
-                            title="Resume Preview"
-                          />
+                        <div className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900">
+                          {resumeLoading ? (
+                            <div className="w-full h-[300px] flex items-center justify-center">
+                              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                              <span className="ml-2 text-muted-foreground">Loading resume...</span>
+                            </div>
+                          ) : resumeError ? (
+                            <div className="w-full h-[300px] flex flex-col items-center justify-center text-muted-foreground">
+                              <AlertCircle className="h-8 w-8 mb-2" />
+                              <span>{resumeError}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => window.open(candidate.resumeUrl, '_blank')}
+                              >
+                                Open Original Link
+                              </Button>
+                            </div>
+                          ) : resumeBlobUrl ? (
+                            <iframe
+                              src={resumeBlobUrl}
+                              className="w-full h-[300px]"
+                              title="Resume Preview"
+                            />
+                          ) : (
+                            <div className="w-full h-[300px] flex items-center justify-center text-muted-foreground">
+                              <FileText className="h-8 w-8 mr-2" />
+                              <span>No preview available</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
+
+                    {/* Interview Responses (parsed from INTERVIEW type notes) */}
+                    {(() => {
+                      const interviewNotes = notes.filter((n) => n.type === 'INTERVIEW');
+                      if (interviewNotes.length === 0) return null;
+
+                      return (
+                        <>
+                          <Separator />
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                              <FileQuestion className="h-4 w-4" />
+                              Interview Responses
+                            </h4>
+                            <div className="space-y-4 bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
+                              {interviewNotes.map((note, noteIdx) => {
+                                const qa = parseInterviewQA(note.content);
+                                const author = users.find((u) => u.id === note.authorId);
+                                if (qa.length === 0) return null;
+                                return (
+                                  <div key={note.id} className="space-y-2">
+                                    {noteIdx > 0 && <Separator className="my-2" />}
+                                    <div className="text-xs text-muted-foreground mb-2">
+                                      {author ? `${author.firstName} ${author.lastName}` : 'Unknown'} - {format(new Date(note.createdAt), 'MMM d, h:mm a')}
+                                    </div>
+                                    {qa.map((item, i) => (
+                                      <div key={i} className="border-l-2 border-blue-500 dark:border-blue-400 pl-3 py-1">
+                                        <p className="text-sm font-medium">{item.question}</p>
+                                        <p className="text-sm text-muted-foreground mt-1">{item.answer}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     <Separator />
 
