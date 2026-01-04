@@ -14,7 +14,7 @@ const pool = new Pool({
 
 async function fixPtoPolicy() {
   console.log('🔧 Fixing PTO Policy with SQL Updates...\n');
-  console.log('Target: 12 vacation, 3 sick, 2 personal = 17 total\n');
+  console.log('Target: 10 vacation, 5 sick, 2 personal = 17 total\n');
 
   const client = await pool.connect();
 
@@ -26,12 +26,12 @@ async function fixPtoPolicy() {
     const updateCompanyResult = await client.query(`
       UPDATE company_pto_policy
       SET
-        vacation_days = 12,
-        sick_days = 3,
+        vacation_days = 10,
+        sick_days = 5,
         personal_days = 2,
         total_days = 17,
         last_updated_by = 'system-fix',
-        policy_notes = 'Updated to correct allocation: 12 vacation, 3 sick, 2 personal = 17 total',
+        policy_notes = 'Updated to correct allocation: 10 vacation, 5 sick, 2 personal = 17 total',
         updated_at = NOW()
       WHERE TRUE
       RETURNING id, vacation_days, sick_days, personal_days, total_days;
@@ -47,8 +47,8 @@ async function fixPtoPolicy() {
     const updateDeptResult = await client.query(`
       UPDATE department_pto_settings
       SET
-        vacation_days = 12,
-        sick_days = 3,
+        vacation_days = 10,
+        sick_days = 5,
         personal_days = 2,
         total_days = 17,
         updated_at = NOW()
@@ -80,8 +80,8 @@ async function fixPtoPolicy() {
     const updateEmployeeResult = await client.query(`
       UPDATE pto_policies
       SET
-        vacation_days = 12,
-        sick_days = 3,
+        vacation_days = 10,
+        sick_days = 5,
         personal_days = 2,
         base_days = 17,
         total_days = 17 + additional_days,
@@ -117,7 +117,7 @@ async function fixPtoPolicy() {
 
     console.log('\n\n✅ PTO Policy Fix Complete!\n');
     console.log('Summary:');
-    console.log(`  ✅ Company policy: 12/3/2 = 17 total`);
+    console.log(`  ✅ Company policy: 10/5/2 = 17 total`);
     console.log(`  ✅ Departments updated: ${updateDeptResult.rowCount}`);
     console.log(`  ✅ Employees updated: ${updateEmployeeResult.rowCount}`);
     console.log('\n');
