@@ -814,6 +814,93 @@ router.post('/assignments/:id/return', async (req, res) => {
   }
 });
 
+// Report tool as damaged or lost
+router.post('/assignments/:id/report-issue', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    if (!status || !['DAMAGED', 'LOST'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be DAMAGED or LOST' });
+    }
+
+    // Get assignment details
+    const [assignment] = await db
+      .select()
+      .from(toolAssignments)
+      .where(eq(toolAssignments.id, id));
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+
+    if (assignment.status !== 'ASSIGNED') {
+      return res.status(400).json({ error: 'Tool is not currently assigned' });
+    }
+
+    // Get tool details
+    const [tool] = await db
+      .select()
+      .from(toolInventory)
+      .where(eq(toolInventory.id, assignment.toolId));
+
+    if (status === 'DAMAGED') {
+      // DAMAGED: Return to inventory with POOR condition
+      await db
+        .update(toolAssignments)
+        .set({
+          status: 'RETURNED',
+          returnDate: new Date(),
+          condition: 'POOR',
+          notes: notes ? `${assignment.notes || ''}\nDAMAGED: ${notes}` : `${assignment.notes || ''}\nReported as damaged`,
+          updatedAt: new Date()
+        })
+        .where(eq(toolAssignments.id, id));
+
+      // Increase availability and mark as POOR condition
+      if (tool) {
+        await db
+          .update(toolInventory)
+          .set({
+            availableQuantity: tool.availableQuantity + 1,
+            condition: 'POOR',
+            updatedAt: new Date()
+          })
+          .where(eq(toolInventory.id, tool.id));
+      }
+
+      res.json({ message: 'Equipment marked as damaged and returned to inventory' });
+    } else {
+      // LOST: Do NOT increase availability - equipment is gone
+      await db
+        .update(toolAssignments)
+        .set({
+          status: 'LOST',
+          returnDate: new Date(),
+          notes: notes ? `${assignment.notes || ''}\nLOST: ${notes}` : `${assignment.notes || ''}\nReported as lost`,
+          updatedAt: new Date()
+        })
+        .where(eq(toolAssignments.id, id));
+
+      // Decrease total quantity since equipment is gone
+      if (tool && tool.quantity > 0) {
+        await db
+          .update(toolInventory)
+          .set({
+            quantity: tool.quantity - 1,
+            updatedAt: new Date()
+          })
+          .where(eq(toolInventory.id, tool.id));
+      }
+
+      res.json({ message: 'Equipment marked as lost. Inventory quantity reduced.' });
+    }
+  } catch (error) {
+    console.error('Error reporting issue:', error);
+    res.status(500).json({ error: 'Failed to report issue' });
+  }
+});
+
 // Get signature by token (public endpoint for employees)
 router.get('/signature/:token', async (req, res) => {
   try {

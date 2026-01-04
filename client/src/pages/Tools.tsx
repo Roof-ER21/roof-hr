@@ -20,8 +20,9 @@ import { apiRequest } from '@/lib/queryClient';
 import {
   Laptop, Package, Car, HardHat, Shirt, Wrench, Plus,
   Send, Edit, Trash2, CheckCircle, XCircle, Clock,
-  AlertCircle, Mail, FileSignature, ArrowLeft, Search,
-  Upload, Download, RefreshCw, ChevronDown, ChevronRight, User, PenTool
+  AlertCircle, AlertTriangle, Mail, FileSignature, ArrowLeft, Search,
+  Upload, Download, RefreshCw, ChevronDown, ChevronRight, User, PenTool, Bell,
+  ClipboardList, Copy, ExternalLink
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -164,6 +165,59 @@ export function Tools() {
     notes: ''
   });
 
+  // Deduplication dialog state
+  const [showDeduplicateDialog, setShowDeduplicateDialog] = useState(false);
+  const [deduplicateResult, setDeduplicateResult] = useState<{
+    success: boolean;
+    message: string;
+    stats: {
+      totalTools: number;
+      uniqueNames: number;
+      duplicatesToDelete: number;
+      willKeep: number;
+      dryRun: boolean;
+    };
+    kept: Array<{ name: string; id: string; count: number }>;
+  } | null>(null);
+
+  // Inventory Alerts dialog state
+  const [showAlertsDialog, setShowAlertsDialog] = useState(false);
+  const [newAlert, setNewAlert] = useState<{
+    toolId: string;
+    thresholdQuantity: number;
+  } | null>(null);
+
+  // Equipment Checklist dialog state
+  const [showChecklistDialog, setShowChecklistDialog] = useState(false);
+  const [checklistForm, setChecklistForm] = useState<{
+    employeeId: string;
+    type: 'ISSUED' | 'RETURNED';
+  }>({ employeeId: '', type: 'ISSUED' });
+  const [checklistResult, setChecklistResult] = useState<{
+    formUrl: string;
+    employeeName: string;
+  } | null>(null);
+
+  // Enhanced Return dialog state
+  const [showReturnDialog, setShowReturnDialog] = useState(false);
+  const [returnAssignment, setReturnAssignment] = useState<{
+    id: string;
+    toolName: string;
+    employeeName: string;
+  } | null>(null);
+  const [returnCondition, setReturnCondition] = useState<string>('GOOD');
+  const [returnNotes, setReturnNotes] = useState<string>('');
+
+  // Report Issue dialog state (Damaged/Lost)
+  const [showReportIssueDialog, setShowReportIssueDialog] = useState(false);
+  const [reportIssueAssignment, setReportIssueAssignment] = useState<{
+    id: string;
+    toolName: string;
+    employeeName: string;
+  } | null>(null);
+  const [issueType, setIssueType] = useState<'DAMAGED' | 'LOST'>('DAMAGED');
+  const [issueDescription, setIssueDescription] = useState<string>('');
+
   // Ahmed always has manager access via email fallback
   const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
     (user?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role));
@@ -266,7 +320,24 @@ export function Tools() {
     enabled: true
   });
 
-
+  // Fetch inventory alerts
+  const { data: alerts = [], isLoading: alertsLoading } = useQuery<any[]>({
+    queryKey: ['/api/tools/alerts'],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch('/api/tools/alerts', {
+        headers,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error('Failed to fetch alerts');
+      return res.json();
+    },
+    enabled: isManager
+  });
 
   // Create tool mutation
   const createToolMutation = useMutation({
@@ -458,6 +529,138 @@ export function Tools() {
     }
   });
 
+  // Deduplicate tools mutation
+  const deduplicateMutation = useMutation({
+    mutationFn: async (dryRun: boolean) => {
+      return await apiRequest('/api/tools/admin/deduplicate', 'POST', { dryRun });
+    },
+    onSuccess: (data: any) => {
+      setDeduplicateResult(data);
+      if (!data.stats.dryRun) {
+        queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
+      }
+      toast({
+        title: data.stats.dryRun ? 'Dry Run Complete' : 'Deduplication Complete',
+        description: data.message
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to deduplicate tools',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Save inventory alert mutation
+  const saveAlertMutation = useMutation({
+    mutationFn: async (data: { toolId: string; thresholdQuantity: number }) => {
+      return await apiRequest('/api/tools/alerts', 'POST', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/alerts'] });
+      setNewAlert(null);
+      toast({
+        title: 'Success',
+        description: 'Inventory alert saved successfully'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save alert',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Check alerts mutation
+  const checkAlertsMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/tools/alerts/check', 'POST');
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/alerts'] });
+      toast({
+        title: 'Alerts Checked',
+        description: data.message || 'Alert check complete'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to check alerts',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Create equipment checklist mutation
+  const createChecklistMutation = useMutation({
+    mutationFn: async (data: { employeeId: string; employeeName: string; employeeEmail: string; type: 'ISSUED' | 'RETURNED' }) => {
+      return await apiRequest('/api/equipment-checklists', 'POST', data);
+    },
+    onSuccess: (data: any) => {
+      const employee = (employees as Employee[]).find(e => e.id === checklistForm.employeeId);
+      setChecklistResult({
+        formUrl: data.formUrl || `/equipment-checklist/${data.accessToken}`,
+        employeeName: employee ? `${employee.firstName} ${employee.lastName}` : 'Employee'
+      });
+      toast({
+        title: 'Checklist Created',
+        description: 'Equipment checklist form has been generated'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create equipment checklist',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Report issue (damaged/lost) mutation
+  const reportIssueMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { status: 'DAMAGED' | 'LOST'; notes: string } }) => {
+      return await apiRequest(`/api/tools/assignments/${id}/report-issue`, 'POST', data);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
+      setShowReportIssueDialog(false);
+      setReportIssueAssignment(null);
+      setIssueType('DAMAGED');
+      setIssueDescription('');
+      toast({
+        title: 'Issue Reported',
+        description: data.message || 'Equipment issue has been recorded'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to report issue',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const handleCreateChecklist = () => {
+    if (!checklistForm.employeeId) return;
+
+    const employee = (employees as Employee[]).find(e => e.id === checklistForm.employeeId);
+    if (!employee) return;
+
+    createChecklistMutation.mutate({
+      employeeId: employee.id,
+      employeeName: `${employee.firstName} ${employee.lastName}`,
+      employeeEmail: employee.email,
+      type: checklistForm.type
+    });
+  };
+
   const handleCreateTool = () => {
     createToolMutation.mutate({
       ...newTool,
@@ -499,10 +702,57 @@ export function Tools() {
     });
   };
 
-  const handleReturnTool = (assignmentId: string, condition: string = 'GOOD') => {
+  // Open enhanced return dialog
+  const handleReturnTool = (assignmentId: string, toolName: string, employeeName: string) => {
+    setReturnAssignment({ id: assignmentId, toolName, employeeName });
+    setReturnCondition('GOOD');
+    setReturnNotes('');
+    setShowReturnDialog(true);
+  };
+
+  // Process the actual return with condition and notes
+  const processReturn = () => {
+    if (!returnAssignment) return;
+
     returnToolMutation.mutate({
-      id: assignmentId,
-      data: { condition }
+      id: returnAssignment.id,
+      data: {
+        condition: returnCondition,
+        notes: returnNotes
+      }
+    });
+
+    setShowReturnDialog(false);
+    setReturnAssignment(null);
+    setReturnCondition('GOOD');
+    setReturnNotes('');
+  };
+
+  // Open report issue dialog (damaged/lost)
+  const handleReportIssue = (assignmentId: string, toolName: string, employeeName: string) => {
+    setReportIssueAssignment({ id: assignmentId, toolName, employeeName });
+    setIssueType('DAMAGED');
+    setIssueDescription('');
+    setShowReportIssueDialog(true);
+  };
+
+  // Process the issue report
+  const processIssueReport = () => {
+    if (!reportIssueAssignment || !issueDescription.trim()) {
+      toast({
+        title: 'Required Field',
+        description: 'Please provide a description of the issue',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    reportIssueMutation.mutate({
+      id: reportIssueAssignment.id,
+      data: {
+        status: issueType,
+        notes: issueDescription.trim()
+      }
     });
   };
 
@@ -872,7 +1122,45 @@ export function Tools() {
               )}
               Export to Sheets
             </Button>
-            
+            {user?.role === 'ADMIN' || user?.role === 'TRUE_ADMIN' || user?.role === 'SYSTEM_ADMIN' ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeduplicateResult(null);
+                  setShowDeduplicateDialog(true);
+                }}
+                title="Remove duplicate tools from inventory"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Deduplicate
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={() => setShowAlertsDialog(true)}
+              title="Manage low inventory alerts"
+            >
+              <Bell className="mr-2 h-4 w-4" />
+              Alerts
+              {alerts.filter((a: any) => a.tool && a.tool.availableQuantity <= a.alert.thresholdQuantity).length > 0 && (
+                <Badge className="ml-2 bg-red-500 text-white" variant="destructive">
+                  {alerts.filter((a: any) => a.tool && a.tool.availableQuantity <= a.alert.thresholdQuantity).length}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setChecklistForm({ employeeId: '', type: 'ISSUED' });
+                setChecklistResult(null);
+                setShowChecklistDialog(true);
+              }}
+              title="Create equipment checklist for employee"
+            >
+              <ClipboardList className="mr-2 h-4 w-4" />
+              Checklist
+            </Button>
+
             <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
               <DialogTrigger asChild>
                 <Button>
@@ -1201,10 +1489,19 @@ export function Tools() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleReturnTool(assignment.id)}
+                                  onClick={() => handleReturnTool(assignment.id, assignment.toolName, group.employeeName)}
                                 >
                                   <ArrowLeft className="mr-1 h-3 w-3" />
                                   Return
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                                  onClick={() => handleReportIssue(assignment.id, assignment.toolName, group.employeeName)}
+                                  title="Report damaged or lost"
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
                                 </Button>
                               </div>
                             </div>
@@ -1714,59 +2011,684 @@ export function Tools() {
       {/* Edit Tool Dialog */}
       {selectedTool && (
         <Dialog open={showEditToolDialog} onOpenChange={setShowEditToolDialog}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Tool</DialogTitle>
               <DialogDescription>
-                Update tool information
+                Update tool information. All fields are editable.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={selectedTool.name}
+                    onChange={(e) => setSelectedTool({ ...selectedTool, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select
+                    value={selectedTool.category}
+                    onValueChange={(value) => setSelectedTool({ ...selectedTool, category: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LAPTOP">Laptop</SelectItem>
+                      <SelectItem value="LADDER">Ladder</SelectItem>
+                      <SelectItem value="IPAD">iPad</SelectItem>
+                      <SelectItem value="BOOTS">Boots</SelectItem>
+                      <SelectItem value="POLO">Polo</SelectItem>
+                      <SelectItem value="CAR">Car</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Serial Number</Label>
+                  <Input
+                    value={selectedTool.serialNumber || ''}
+                    onChange={(e) => setSelectedTool({ ...selectedTool, serialNumber: e.target.value })}
+                    placeholder="Enter serial number"
+                  />
+                </div>
+                <div>
+                  <Label>Model</Label>
+                  <Input
+                    value={selectedTool.model || ''}
+                    onChange={(e) => setSelectedTool({ ...selectedTool, model: e.target.value })}
+                    placeholder="Enter model"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Condition</Label>
+                  <Select
+                    value={selectedTool.condition}
+                    onValueChange={(value) => setSelectedTool({ ...selectedTool, condition: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NEW">New</SelectItem>
+                      <SelectItem value="GOOD">Good</SelectItem>
+                      <SelectItem value="FAIR">Fair</SelectItem>
+                      <SelectItem value="POOR">Poor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <Input
+                    value={selectedTool.location || ''}
+                    onChange={(e) => setSelectedTool({ ...selectedTool, location: e.target.value })}
+                    placeholder="Enter location"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Purchase Date</Label>
+                  <Input
+                    type="date"
+                    value={selectedTool.purchaseDate ? selectedTool.purchaseDate.split('T')[0] : ''}
+                    onChange={(e) => setSelectedTool({ ...selectedTool, purchaseDate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Purchase Price ($)</Label>
+                  <Input
+                    type="number"
+                    value={selectedTool.purchasePrice ? selectedTool.purchasePrice / 100 : ''}
+                    onChange={(e) => setSelectedTool({ ...selectedTool, purchasePrice: e.target.value ? parseFloat(e.target.value) * 100 : 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
               <div>
-                <Label>Name</Label>
+                <Label>Description</Label>
                 <Input
-                  value={selectedTool.name}
-                  onChange={(e) => setSelectedTool({ ...selectedTool, name: e.target.value })}
+                  value={selectedTool.description || ''}
+                  onChange={(e) => setSelectedTool({ ...selectedTool, description: e.target.value })}
+                  placeholder="Enter description"
                 />
               </div>
-              <div>
-                <Label>Condition</Label>
-                <Select 
-                  value={selectedTool.condition} 
-                  onValueChange={(value) => setSelectedTool({ ...selectedTool, condition: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEW">New</SelectItem>
-                    <SelectItem value="GOOD">Good</SelectItem>
-                    <SelectItem value="FAIR">Fair</SelectItem>
-                    <SelectItem value="POOR">Poor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Location</Label>
-                <Input
-                  value={selectedTool.location || ''}
-                  onChange={(e) => setSelectedTool({ ...selectedTool, location: e.target.value })}
-                />
-              </div>
+
               <div>
                 <Label>Notes</Label>
                 <Textarea
                   value={selectedTool.notes || ''}
                   onChange={(e) => setSelectedTool({ ...selectedTool, notes: e.target.value })}
+                  placeholder="Additional notes..."
+                  rows={3}
                 />
               </div>
-              <Button onClick={handleUpdateTool} className="w-full">
+
+              <Button onClick={handleUpdateTool} className="w-full" disabled={updateToolMutation.isPending}>
+                {updateToolMutation.isPending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                 Update Tool
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Deduplicate Tools Dialog */}
+      <Dialog open={showDeduplicateDialog} onOpenChange={setShowDeduplicateDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Deduplicate Tool Inventory</DialogTitle>
+            <DialogDescription>
+              Find and remove duplicate tools, keeping the oldest entry for each unique name.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!deduplicateResult ? (
+            <div className="space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-800 dark:text-amber-200">Run Dry Run First</p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      We recommend running a dry run first to see how many duplicates will be removed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => deduplicateMutation.mutate(true)}
+                  disabled={deduplicateMutation.isPending}
+                  className="flex-1"
+                >
+                  {deduplicateMutation.isPending ? (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="mr-2 h-4 w-4" />
+                  )}
+                  Run Dry Run (Preview)
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Total Tools</div>
+                  <div className="text-2xl font-bold">{deduplicateResult.stats.totalTools}</div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Unique Names</div>
+                  <div className="text-2xl font-bold">{deduplicateResult.stats.uniqueNames}</div>
+                </div>
+                <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+                  <div className="text-sm text-red-600 dark:text-red-400">Duplicates to Remove</div>
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {deduplicateResult.stats.duplicatesToDelete}
+                  </div>
+                </div>
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <div className="text-sm text-green-600 dark:text-green-400">Will Keep</div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {deduplicateResult.stats.willKeep}
+                  </div>
+                </div>
+              </div>
+
+              {deduplicateResult.kept && deduplicateResult.kept.length > 0 && (
+                <div>
+                  <Label className="text-sm font-medium">Preview (showing first 20):</Label>
+                  <ScrollArea className="h-[150px] border rounded-md p-2 mt-2">
+                    {deduplicateResult.kept.slice(0, 20).map((item) => (
+                      <div key={item.id} className="text-sm py-1 border-b last:border-0 dark:border-gray-700">
+                        <span className="font-medium">{item.name}</span>
+                        <span className="text-gray-500 dark:text-gray-400 ml-2">({item.count} copies, keeping 1)</span>
+                      </div>
+                    ))}
+                  </ScrollArea>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {deduplicateResult.stats.dryRun && deduplicateResult.stats.duplicatesToDelete > 0 && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => deduplicateMutation.mutate(false)}
+                    disabled={deduplicateMutation.isPending}
+                    className="flex-1"
+                  >
+                    {deduplicateMutation.isPending ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" />
+                    )}
+                    Delete {deduplicateResult.stats.duplicatesToDelete} Duplicates
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeduplicateDialog(false)}
+                  className="flex-1"
+                >
+                  {deduplicateResult.stats.dryRun ? 'Cancel' : 'Done'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Inventory Alerts Dialog */}
+      <Dialog open={showAlertsDialog} onOpenChange={setShowAlertsDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Inventory Low Stock Alerts</DialogTitle>
+            <DialogDescription>
+              Configure alerts to notify you when inventory falls below threshold levels.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => checkAlertsMutation.mutate()}
+                disabled={checkAlertsMutation.isPending}
+              >
+                {checkAlertsMutation.isPending ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Check Alerts Now
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setNewAlert({ toolId: '', thresholdQuantity: 5 })}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Alert
+              </Button>
+            </div>
+
+            {/* Add Alert Form */}
+            {newAlert && (
+              <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+                <CardContent className="pt-4 space-y-4">
+                  <div>
+                    <Label>Select Tool</Label>
+                    <Select
+                      value={newAlert.toolId}
+                      onValueChange={(value) => setNewAlert({ ...newAlert, toolId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a tool..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredTools.map((tool) => (
+                          <SelectItem key={tool.id} value={tool.id}>
+                            {tool.name} (Available: {tool.availableQuantity})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Alert Threshold</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={newAlert.thresholdQuantity}
+                      onChange={(e) => setNewAlert({
+                        ...newAlert,
+                        thresholdQuantity: parseInt(e.target.value) || 0
+                      })}
+                      placeholder="Alert when quantity falls to or below..."
+                    />
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      Alert triggers when available quantity is at or below this number
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => saveAlertMutation.mutate(newAlert)}
+                      disabled={!newAlert.toolId || saveAlertMutation.isPending}
+                      className="flex-1"
+                    >
+                      {saveAlertMutation.isPending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                      Save Alert
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setNewAlert(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Existing Alerts */}
+            <ScrollArea className="h-[300px]">
+              {alertsLoading ? (
+                <div className="text-center py-4">Loading alerts...</div>
+              ) : alerts.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No alerts configured. Add an alert to get notified when inventory is low.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tool</TableHead>
+                      <TableHead>Threshold</TableHead>
+                      <TableHead>Current Stock</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {alerts.map((item: any) => (
+                      <TableRow key={item.alert?.id || item.id}>
+                        <TableCell>{item.tool?.name || 'Unknown'}</TableCell>
+                        <TableCell>{item.alert?.thresholdQuantity ?? item.thresholdQuantity}</TableCell>
+                        <TableCell>{item.tool?.availableQuantity ?? '-'}</TableCell>
+                        <TableCell>
+                          {item.tool && (item.alert?.thresholdQuantity !== undefined
+                            ? item.tool.availableQuantity <= item.alert.thresholdQuantity
+                            : item.tool.availableQuantity <= item.thresholdQuantity) ? (
+                            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">Low Stock</Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">OK</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Equipment Checklist Dialog */}
+      <Dialog open={showChecklistDialog} onOpenChange={setShowChecklistDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Equipment Checklist</DialogTitle>
+            <DialogDescription>
+              Generate an equipment checklist form for an employee to sign.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!checklistResult ? (
+            <div className="space-y-4">
+              <div>
+                <Label>Employee</Label>
+                <Select
+                  value={checklistForm.employeeId}
+                  onValueChange={(value) => setChecklistForm({ ...checklistForm, employeeId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(employees as Employee[]).map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.firstName} {emp.lastName} - {emp.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Checklist Type</Label>
+                <Select
+                  value={checklistForm.type}
+                  onValueChange={(value) => setChecklistForm({ ...checklistForm, type: value as 'ISSUED' | 'RETURNED' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ISSUED">Equipment Issued (New Hire)</SelectItem>
+                    <SelectItem value="RETURNED">Equipment Return (Termination)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={handleCreateChecklist}
+                disabled={!checklistForm.employeeId || createChecklistMutation.isPending}
+                className="w-full"
+              >
+                {createChecklistMutation.isPending ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ClipboardList className="mr-2 h-4 w-4" />
+                )}
+                Generate Checklist
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-green-800 dark:text-green-200">Checklist Created</p>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      Equipment checklist for {checklistResult.employeeName} has been generated.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label>Form URL</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input value={`${window.location.origin}${checklistResult.formUrl}`} readOnly className="text-sm" />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}${checklistResult.formUrl}`);
+                      toast({ title: 'Copied!', description: 'URL copied to clipboard' });
+                    }}
+                    title="Copy URL"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Share this link with the employee to complete the checklist.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(checklistResult.formUrl, '_blank')}
+                  className="flex-1"
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Open Form
+                </Button>
+                <Button
+                  onClick={() => {
+                    setChecklistResult(null);
+                    setShowChecklistDialog(false);
+                  }}
+                  className="flex-1"
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Enhanced Return Dialog */}
+      <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Return Equipment</DialogTitle>
+            <DialogDescription>
+              Confirm return of equipment and document its condition.
+            </DialogDescription>
+          </DialogHeader>
+
+          {returnAssignment && (
+            <div className="space-y-4">
+              {/* Equipment Info */}
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Returning</div>
+                <div className="font-semibold text-gray-900 dark:text-white">{returnAssignment.toolName}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                  From: {returnAssignment.employeeName}
+                </div>
+              </div>
+
+              {/* Condition Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="returnCondition" className="text-sm font-medium">
+                  Return Condition <span className="text-red-500">*</span>
+                </Label>
+                <Select value={returnCondition} onValueChange={setReturnCondition}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select condition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NEW">New - Like new, unused</SelectItem>
+                    <SelectItem value="GOOD">Good - Normal wear</SelectItem>
+                    <SelectItem value="FAIR">Fair - Visible wear, functional</SelectItem>
+                    <SelectItem value="POOR">Poor - Significant wear/damage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label htmlFor="returnNotes" className="text-sm font-medium">
+                  Return Notes
+                </Label>
+                <Textarea
+                  id="returnNotes"
+                  placeholder="Any observations about the equipment condition, damages, missing parts, etc."
+                  value={returnNotes}
+                  onChange={(e) => setReturnNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowReturnDialog(false);
+                    setReturnAssignment(null);
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={processReturn}
+                  disabled={returnToolMutation.isPending}
+                  className="flex-1"
+                >
+                  {returnToolMutation.isPending ? 'Processing...' : 'Confirm Return'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Issue Dialog (Damaged/Lost) */}
+      <Dialog open={showReportIssueDialog} onOpenChange={setShowReportIssueDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Report Equipment Issue
+            </DialogTitle>
+            <DialogDescription>
+              Report equipment as damaged or lost. This will update inventory records.
+            </DialogDescription>
+          </DialogHeader>
+
+          {reportIssueAssignment && (
+            <div className="space-y-4">
+              {/* Equipment Info */}
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Equipment</div>
+                <div className="font-semibold text-gray-900 dark:text-white">{reportIssueAssignment.toolName}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                  Assigned to: {reportIssueAssignment.employeeName}
+                </div>
+              </div>
+
+              {/* Issue Type Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="issueType" className="text-sm font-medium">
+                  Issue Type <span className="text-red-500">*</span>
+                </Label>
+                <Select value={issueType} onValueChange={(v) => setIssueType(v as 'DAMAGED' | 'LOST')}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select issue type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DAMAGED">
+                      <span className="flex items-center gap-2">
+                        <span>Damaged</span>
+                        <span className="text-xs text-gray-500">- Returns to inventory</span>
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="LOST">
+                      <span className="flex items-center gap-2">
+                        <span>Lost</span>
+                        <span className="text-xs text-gray-500">- Removes from inventory</span>
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Warning for LOST */}
+              {issueType === 'LOST' && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="text-sm text-red-700 dark:text-red-300">
+                      <strong>Warning:</strong> Marking equipment as lost will permanently reduce inventory count.
+                      This action should only be used when the equipment cannot be recovered.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label htmlFor="issueDescription" className="text-sm font-medium">
+                  Description <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  id="issueDescription"
+                  placeholder={issueType === 'DAMAGED'
+                    ? "Describe the damage (e.g., torn fabric, broken zipper, cracked screen...)"
+                    : "Describe the circumstances of the loss (e.g., left at job site, stolen from vehicle...)"}
+                  value={issueDescription}
+                  onChange={(e) => setIssueDescription(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowReportIssueDialog(false);
+                    setReportIssueAssignment(null);
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={processIssueReport}
+                  disabled={reportIssueMutation.isPending || !issueDescription.trim()}
+                  className={issueType === 'LOST' ? 'flex-1 bg-red-600 hover:bg-red-700' : 'flex-1'}
+                >
+                  {reportIssueMutation.isPending
+                    ? 'Reporting...'
+                    : issueType === 'LOST'
+                      ? 'Mark as Lost'
+                      : 'Report Damage'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

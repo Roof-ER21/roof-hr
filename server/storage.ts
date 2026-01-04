@@ -712,7 +712,7 @@ class DrizzleStorage implements IStorage {
       })
       .where(and(
         eq(candidates.isArchived, false),
-        inArray(candidates.status, ['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']),
+        inArray(candidates.status, ['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW', 'HIRED']),
         lt(candidates.updatedAt, cutoffDate)
       ))
       .returning();
