@@ -53,7 +53,9 @@ import {
   RotateCcw,
   FileText,
   Search,
+  Eye,
 } from 'lucide-react';
+import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -80,6 +82,8 @@ export default function RecruitingAnalytics() {
   const [archiveSearch, setArchiveSearch] = useState('');
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<string>('all');
   const [selectedArchivedIds, setSelectedArchivedIds] = useState<string[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [showCandidateDetails, setShowCandidateDetails] = useState(false);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -164,6 +168,16 @@ export default function RecruitingAnalytics() {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch candidates');
+      return response.json();
+    },
+  });
+
+  // Fetch employees for candidate details dialog
+  const { data: employees = [] } = useQuery<any[]>({
+    queryKey: ['/api/users'],
+    queryFn: async () => {
+      const response = await fetch('/api/users', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },
   });
@@ -840,7 +854,18 @@ export default function RecruitingAnalytics() {
                         <TableCell className="text-center">
                           {candidate.matchScore ? `${candidate.matchScore}%` : '-'}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedCandidate(candidate);
+                              setShowCandidateDetails(true);
+                            }}
+                            title="View Profile"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -873,6 +898,21 @@ export default function RecruitingAnalytics() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Candidate Details Dialog */}
+      <CandidateDetailsDialog
+        isOpen={showCandidateDetails}
+        onOpenChange={setShowCandidateDetails}
+        candidate={selectedCandidate}
+        availableEmployees={employees}
+        onEditCandidate={() => {}}
+        onScheduleInterview={() => {}}
+        onSendEmail={() => {}}
+        onRunAIAnalysis={() => {}}
+        getNextStatus={() => ''}
+        isAnalyzing={false}
+        isUpdating={false}
+      />
     </div>
   );
 }
