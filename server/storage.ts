@@ -675,7 +675,51 @@ class DrizzleStorage implements IStorage {
   async deleteCandidate(id: string): Promise<void> {
     await db.delete(candidates).where(eq(candidates.id, id));
   }
-  
+
+  // Archive methods
+  async archiveCandidate(id: string, archive: boolean): Promise<Candidate> {
+    const [candidate] = await db.update(candidates)
+      .set({
+        isArchived: archive,
+        archivedAt: archive ? new Date() : null,
+        updatedAt: new Date()
+      })
+      .where(eq(candidates.id, id))
+      .returning();
+    return candidate;
+  }
+
+  async bulkArchiveCandidates(ids: string[], archive: boolean): Promise<Candidate[]> {
+    return await db.update(candidates)
+      .set({
+        isArchived: archive,
+        archivedAt: archive ? new Date() : null,
+        updatedAt: new Date()
+      })
+      .where(inArray(candidates.id, ids))
+      .returning();
+  }
+
+  async autoArchiveDeadCandidates(daysOld: number = 30): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+    const result = await db.update(candidates)
+      .set({
+        isArchived: true,
+        archivedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(candidates.isArchived, false),
+        inArray(candidates.status, ['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']),
+        lt(candidates.updatedAt, cutoffDate)
+      ))
+      .returning();
+
+    return result.length;
+  }
+
   // Candidate Notes methods
   async createCandidateNote(data: InsertCandidateNote): Promise<CandidateNote> {
     const id = uuidv4();

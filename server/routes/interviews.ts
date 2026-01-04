@@ -133,7 +133,18 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
     // Check interviewer availability if interviewerId is provided
     if (data.interviewerId && interviewer) {
       const scheduledDate = new Date(data.scheduledDate);
-      const dayOfWeek = scheduledDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+      // Get interviewer's timezone for proper time comparison
+      const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId);
+
+      // Get day of week in interviewer's timezone (not UTC)
+      const dayFormatter = new Intl.DateTimeFormat('en-US', {
+        weekday: 'short',
+        timeZone: interviewerTimezone
+      });
+      const dayName = dayFormatter.format(scheduledDate);
+      const dayMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+      const dayOfWeek = dayMap[dayName] ?? scheduledDate.getDay();
 
       // Get interviewer's availability slots
       const availability = await storage.getInterviewAvailabilityByInterviewer(data.interviewerId);
@@ -155,15 +166,23 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
         });
       }
 
-      // Check if scheduled time falls within any slot
-      const scheduledHour = scheduledDate.getHours();
-      const scheduledMinute = scheduledDate.getMinutes();
+      // Get scheduled time in interviewer's timezone (not UTC)
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: interviewerTimezone
+      });
+      const scheduledTimeParts = timeFormatter.formatToParts(scheduledDate);
+      const scheduledHour = parseInt(scheduledTimeParts.find(p => p.type === 'hour')?.value || '0');
+      const scheduledMinute = parseInt(scheduledTimeParts.find(p => p.type === 'minute')?.value || '0');
       const scheduledTimeStr = `${scheduledHour.toString().padStart(2, '0')}:${scheduledMinute.toString().padStart(2, '0')}`;
 
-      // Calculate end time
+      // Calculate end time in interviewer's timezone
       const endDate = new Date(scheduledDate.getTime() + data.duration * 60 * 1000);
-      const endHour = endDate.getHours();
-      const endMinute = endDate.getMinutes();
+      const endTimeParts = timeFormatter.formatToParts(endDate);
+      const endHour = parseInt(endTimeParts.find(p => p.type === 'hour')?.value || '0');
+      const endMinute = parseInt(endTimeParts.find(p => p.type === 'minute')?.value || '0');
       const endTimeStr = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
 
       // Helper to convert 24hr to 12hr format

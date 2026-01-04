@@ -8,7 +8,8 @@ import {
   MoreVertical,
   Brain,
   Move,
-  FileText
+  FileText,
+  Archive
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -76,6 +77,7 @@ interface Candidate {
   aiMatchScore?: number;
   aiPotentialScore?: number;
   assignedTo?: string | null;
+  isArchived?: boolean;
   sourcer?: {
     id: string;
     firstName: string;
@@ -92,6 +94,7 @@ interface DraggableCandidateCardProps {
   onScheduleInterview?: (candidate: Candidate) => void;
   onEmail?: (candidate: Candidate) => void;
   onNotes?: (candidate: Candidate) => void;
+  onArchive?: (candidate: Candidate) => void;
   onClick?: (candidate: Candidate) => void;
   isDragDisabled?: boolean;
   isSelected?: boolean;
@@ -107,6 +110,7 @@ export function DraggableCandidateCard({
   onScheduleInterview,
   onEmail,
   onNotes,
+  onArchive,
   onClick,
   isDragDisabled = false,
   isSelected = false,
@@ -258,6 +262,15 @@ export function DraggableCandidateCard({
               }}>
                 <Calendar className="w-4 h-4 mr-2" />
                 Schedule Interview
+              </DropdownMenuItem>
+            )}
+            {onArchive && (
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation();
+                onArchive(candidate);
+              }}>
+                <Archive className="w-4 h-4 mr-2" />
+                {candidate.isArchived ? 'Unarchive' : 'Archive'}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

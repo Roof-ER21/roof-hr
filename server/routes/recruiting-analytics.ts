@@ -554,4 +554,219 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
   }
 });
 
+// Helper function to generate CSV from candidates
+function generateCandidateCSV(candidates: any[]): string {
+  const headers = [
+    'Name', 'Email', 'Phone', 'Position', 'Status', 'Stage', 'Applied Date',
+    'Match Score', 'Potential Score', 'Culture Fit', 'Technical Fit',
+    'Is Archived', 'Archived Date', 'Notes'
+  ];
+
+  const rows = candidates.map(c => [
+    `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+    c.email || '',
+    c.phone || '',
+    c.position || '',
+    c.status || '',
+    c.stage || '',
+    c.appliedDate ? new Date(c.appliedDate).toLocaleDateString('en-US', { timeZone: 'America/New_York' }) : '',
+    c.matchScore?.toString() || '',
+    c.potentialScore?.toString() || '',
+    c.cultureFitScore?.toString() || '',
+    c.technicalFitScore?.toString() || '',
+    c.isArchived ? 'Yes' : 'No',
+    c.archivedAt ? new Date(c.archivedAt).toLocaleDateString('en-US', { timeZone: 'America/New_York' }) : '',
+    (c.notes || '').replace(/"/g, '""').replace(/\n/g, ' ') // Escape quotes and newlines
+  ]);
+
+  return [headers, ...rows]
+    .map(row => row.map(cell => `"${cell}"`).join(','))
+    .join('\n');
+}
+
+// Helper function to generate PDF report content
+function generatePDFReport(candidates: any[], type: string): string {
+  // Generate an HTML report that can be displayed/printed
+  const now = new Date();
+  const typeLabel = type === 'archived' ? 'Archived' : type === 'current' ? 'Current' : 'All';
+
+  // Calculate stats
+  const statusCounts: Record<string, number> = {};
+  const positionCounts: Record<string, number> = {};
+  let totalMatchScore = 0;
+  let matchScoreCount = 0;
+
+  candidates.forEach(c => {
+    statusCounts[c.status] = (statusCounts[c.status] || 0) + 1;
+    positionCounts[c.position] = (positionCounts[c.position] || 0) + 1;
+    if (c.matchScore) {
+      totalMatchScore += c.matchScore;
+      matchScoreCount++;
+    }
+  });
+
+  const avgMatchScore = matchScoreCount > 0 ? Math.round(totalMatchScore / matchScoreCount) : 0;
+
+  // Sort by match score for top candidates
+  const topCandidates = [...candidates]
+    .filter(c => c.matchScore)
+    .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))
+    .slice(0, 10);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Roof HR - ${typeLabel} Candidates Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+    h1 { color: #1a365d; border-bottom: 2px solid #3182ce; padding-bottom: 10px; }
+    h2 { color: #2d3748; margin-top: 30px; }
+    .header { margin-bottom: 30px; }
+    .meta { color: #718096; font-size: 14px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }
+    .stat-box { background: #f7fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .stat-value { font-size: 28px; font-weight: bold; color: #2d3748; }
+    .stat-label { color: #718096; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f7fafc; font-weight: 600; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+    .badge-blue { background: #ebf8ff; color: #2b6cb0; }
+    .badge-green { background: #f0fff4; color: #276749; }
+    .badge-red { background: #fff5f5; color: #c53030; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #718096; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Roof HR - Candidate Report</h1>
+    <p class="meta">Generated: ${now.toLocaleDateString('en-US', { timeZone: 'America/New_York' })} at ${now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' })}</p>
+    <p class="meta">Report Type: <strong>${typeLabel} Candidates</strong></p>
+  </div>
+
+  <h2>Summary</h2>
+  <div class="summary-grid">
+    <div class="stat-box">
+      <div class="stat-value">${candidates.length}</div>
+      <div class="stat-label">Total Candidates</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-value">${avgMatchScore}%</div>
+      <div class="stat-label">Average Match Score</div>
+    </div>
+  </div>
+
+  <h2>By Status</h2>
+  <table>
+    <tr><th>Status</th><th>Count</th><th>Percentage</th></tr>
+    ${Object.entries(statusCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([status, count]) => `
+        <tr>
+          <td>${status.replace(/_/g, ' ')}</td>
+          <td>${count}</td>
+          <td>${Math.round((count / candidates.length) * 100)}%</td>
+        </tr>
+      `).join('')}
+  </table>
+
+  <h2>By Position</h2>
+  <table>
+    <tr><th>Position</th><th>Count</th><th>Percentage</th></tr>
+    ${Object.entries(positionCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([position, count]) => `
+        <tr>
+          <td>${position}</td>
+          <td>${count}</td>
+          <td>${Math.round((count / candidates.length) * 100)}%</td>
+        </tr>
+      `).join('')}
+  </table>
+
+  ${topCandidates.length > 0 ? `
+  <h2>Top Candidates by Match Score</h2>
+  <table>
+    <tr><th>#</th><th>Name</th><th>Position</th><th>Status</th><th>Match Score</th></tr>
+    ${topCandidates.map((c, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.firstName} ${c.lastName}</td>
+        <td>${c.position}</td>
+        <td>${c.status}</td>
+        <td><strong>${c.matchScore}%</strong></td>
+      </tr>
+    `).join('')}
+  </table>
+  ` : ''}
+
+  <div class="footer">
+    <p>This report was generated by Roof HR. For questions, contact your HR administrator.</p>
+  </div>
+</body>
+</html>`;
+
+  return html;
+}
+
+// GET /api/recruiting-analytics/export/csv
+// Export candidates as CSV file
+router.get('/export/csv', requireAuthOrAssignments(), async (req: any, res: any) => {
+  try {
+    const type = (req.query.type as string) || 'all'; // 'archived' | 'current' | 'all'
+
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+
+    let filtered = candidates;
+    if (type === 'archived') {
+      filtered = candidates.filter((c: any) => c.isArchived);
+    } else if (type === 'current') {
+      filtered = candidates.filter((c: any) => !c.isArchived);
+    }
+
+    const csv = generateCandidateCSV(filtered);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=candidates-${type}-${Date.now()}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error exporting CSV:', error);
+    res.status(500).json({
+      error: 'Failed to export CSV',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/recruiting-analytics/export/pdf
+// Export candidates as PDF report (returns HTML that can be printed to PDF)
+router.get('/export/pdf', requireAuthOrAssignments(), async (req: any, res: any) => {
+  try {
+    const type = (req.query.type as string) || 'all'; // 'archived' | 'current' | 'all'
+
+    const allCandidates = await storage.getAllCandidates();
+    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+
+    let filtered = candidates;
+    if (type === 'archived') {
+      filtered = candidates.filter((c: any) => c.isArchived);
+    } else if (type === 'current') {
+      filtered = candidates.filter((c: any) => !c.isArchived);
+    }
+
+    const html = generatePDFReport(filtered, type);
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error exporting PDF:', error);
+    res.status(500).json({
+      error: 'Failed to export PDF',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;

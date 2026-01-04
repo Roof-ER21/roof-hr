@@ -2054,7 +2054,15 @@ router.get('/api/user/has-candidate-assignments', requireAuth, async (req: any, 
 router.get('/api/candidates', requireAuth, async (req: any, res) => {
   try {
     const user = req.user;
+    const includeArchived = req.query.includeArchived === 'true';
+
     let candidates = await storage.getAllCandidates();
+
+    // Filter out archived candidates by default
+    if (!includeArchived) {
+      candidates = candidates.filter((c: any) => !c.isArchived);
+    }
+
     const totalCandidates = candidates.length;
 
     // Manager-level roles see all candidates
@@ -2387,6 +2395,78 @@ router.post('/api/candidates/bulk-status', requireAuth, requireManagerOrLeadSour
     console.error('[POST /api/candidates/bulk-status] Error:', error);
     res.status(400).json({
       error: 'Failed to update candidates',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
+// Archive a single candidate
+router.post('/api/candidates/:id/archive', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const { archive } = req.body;
+    if (typeof archive !== 'boolean') {
+      return res.status(400).json({ error: 'archive must be a boolean' });
+    }
+
+    const candidate = await storage.archiveCandidate(req.params.id, archive);
+    console.log(`[ARCHIVE] User ${req.user.email} ${archive ? 'archived' : 'unarchived'} candidate ${req.params.id}`);
+
+    res.json(candidate);
+  } catch (error: any) {
+    console.error('[POST /api/candidates/:id/archive] Error:', error);
+    res.status(400).json({
+      error: 'Failed to archive candidate',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
+// Bulk archive candidates
+router.post('/api/candidates/bulk-archive', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const { candidateIds, archive } = req.body;
+
+    if (!candidateIds || !Array.isArray(candidateIds) || candidateIds.length === 0) {
+      return res.status(400).json({ error: 'candidateIds array is required' });
+    }
+
+    if (typeof archive !== 'boolean') {
+      return res.status(400).json({ error: 'archive must be a boolean' });
+    }
+
+    const result = await storage.bulkArchiveCandidates(candidateIds, archive);
+    console.log(`[BULK-ARCHIVE] User ${req.user.email} ${archive ? 'archived' : 'unarchived'} ${result.length} candidates`);
+
+    res.json({
+      success: true,
+      count: result.length
+    });
+  } catch (error: any) {
+    console.error('[POST /api/candidates/bulk-archive] Error:', error);
+    res.status(400).json({
+      error: 'Failed to bulk archive candidates',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
+// Auto-archive dead candidates older than X days
+router.post('/api/candidates/auto-archive', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const daysOld = req.body.daysOld || 30;
+
+    const archivedCount = await storage.autoArchiveDeadCandidates(daysOld);
+    console.log(`[AUTO-ARCHIVE] User ${req.user.email} archived ${archivedCount} dead candidates older than ${daysOld} days`);
+
+    res.json({
+      success: true,
+      archivedCount,
+      daysOld
+    });
+  } catch (error: any) {
+    console.error('[POST /api/candidates/auto-archive] Error:', error);
+    res.status(400).json({
+      error: 'Failed to auto-archive candidates',
       details: error.message || 'Unknown error'
     });
   }

@@ -353,6 +353,9 @@ export const candidates = pgTable('candidates', {
   interviewScreeningBy: text('interview_screening_by'), // User ID who conducted screening
   // Referral tracking
   referralName: text('referral_name'), // Who referred this candidate (simple text, not FK)
+  // Archive fields
+  isArchived: boolean('is_archived').default(false).notNull(),
+  archivedAt: timestamp('archived_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

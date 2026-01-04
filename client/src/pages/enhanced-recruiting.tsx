@@ -28,7 +28,7 @@ import {
   TrendingUp, Award, Zap, GitCompare, MailIcon, X, FileUp, Pencil,
   Shield, Store, Building2, RefreshCw, User, ExternalLink,
   CheckCircle2, Loader2, FolderSync, Megaphone, Target,
-  Clipboard, Wrench, Eye, Check, ChevronsUpDown
+  Clipboard, Wrench, Eye, Check, ChevronsUpDown, Archive
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { CandidateComparison } from '@/components/recruiting/candidate-comparison';
@@ -1219,6 +1219,15 @@ export default function EnhancedRecruiting() {
 
   const { data: candidates = [], isLoading } = useQuery<Candidate[]>({
     queryKey: ['/api/candidates'],
+    queryFn: async () => {
+      const response = await fetch('/api/candidates', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch candidates');
+      return response.json();
+    }
   });
 
   // Keep selectedCandidate in sync with fresh data after AI analysis
@@ -1348,6 +1357,46 @@ export default function EnhancedRecruiting() {
       toast({
         title: 'Move Failed',
         description: error.message || 'Failed to move candidates',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Archive mutations
+  const archiveMutation = useMutation({
+    mutationFn: ({ id, archive }: { id: string; archive: boolean }) =>
+      apiRequest(`/api/candidates/${id}/archive`, 'POST', { archive }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      toast({
+        title: variables.archive ? 'Candidate Archived' : 'Candidate Unarchived',
+        description: variables.archive ? 'Candidate moved to archive' : 'Candidate restored from archive',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Archive Failed',
+        description: error.message || 'Failed to archive candidate',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const bulkArchiveMutation = useMutation({
+    mutationFn: ({ candidateIds, archive }: { candidateIds: string[]; archive: boolean }) =>
+      apiRequest('/api/candidates/bulk-archive', 'POST', { candidateIds, archive }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      setSelectedCandidates(new Set());
+      toast({
+        title: variables.archive ? 'Candidates Archived' : 'Candidates Unarchived',
+        description: `${variables.candidateIds.length} candidate(s) ${variables.archive ? 'archived' : 'unarchived'}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Bulk Archive Failed',
+        description: error.message || 'Failed to archive candidates',
         variant: 'destructive',
       });
     },
@@ -2143,6 +2192,12 @@ export default function EnhancedRecruiting() {
                               setShowInterviewScheduler(true);
                             }
                           }}
+                          onArchive={['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'].includes(candidate.status) ? (candidate) => {
+                            const originalCandidate = candidates.find(c => c.id === candidate.id);
+                            if (originalCandidate) {
+                              archiveMutation.mutate({ id: originalCandidate.id, archive: !originalCandidate.isArchived });
+                            }
+                          } : undefined}
                         />
                       ))}
                     </div>
@@ -2239,6 +2294,12 @@ export default function EnhancedRecruiting() {
                             setSelectedCandidateForInterview(originalCandidate);
                             setShowInterviewScheduler(true);
                           }
+                        }}
+                        onArchive={(candidate) => {
+                          archiveMutation.mutate({
+                            id: candidate.id,
+                            archive: !candidate.isArchived
+                          });
                         }}
                       />
                     </div>
