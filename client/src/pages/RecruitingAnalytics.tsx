@@ -649,12 +649,12 @@ export default function RecruitingAnalytics() {
         </Card>
       </div>
 
-      {/* Recruiter Performance Table */}
+      {/* Team Performance Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Recruiter Performance
+            Team Performance
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -669,7 +669,8 @@ export default function RecruitingAnalytics() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Recruiter</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Team Member</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Role</th>
                     <th className="text-center py-3 px-4 font-medium text-muted-foreground">Candidates</th>
                     <th className="text-center py-3 px-4 font-medium text-muted-foreground">Hired</th>
                     <th className="text-center py-3 px-4 font-medium text-muted-foreground">Hire Rate</th>
@@ -678,12 +679,28 @@ export default function RecruitingAnalytics() {
                 </thead>
                 <tbody>
                   {recruiters.recruiters.map((recruiter: any) => (
-                    <tr key={recruiter.id} className="border-b hover:bg-muted/50">
+                    <tr
+                      key={recruiter.id}
+                      className={`border-b hover:bg-muted/50 ${recruiter.id === 'unassigned' ? 'bg-muted/30 italic' : ''}`}
+                    >
                       <td className="py-3 px-4">
                         <div>
-                          <p className="font-medium">{recruiter.name}</p>
-                          <p className="text-xs text-muted-foreground">{recruiter.email}</p>
+                          <p className={`font-medium ${recruiter.id === 'unassigned' ? 'text-muted-foreground' : ''}`}>
+                            {recruiter.name}
+                          </p>
+                          {recruiter.email && (
+                            <p className="text-xs text-muted-foreground">{recruiter.email}</p>
+                          )}
                         </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {recruiter.role ? (
+                          <Badge variant="outline" className="text-xs">
+                            {recruiter.role.replace(/_/g, ' ')}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </td>
                       <td className="text-center py-3 px-4">{recruiter.candidatesAssigned}</td>
                       <td className="text-center py-3 px-4">
@@ -700,11 +717,32 @@ export default function RecruitingAnalytics() {
                     </tr>
                   ))}
                 </tbody>
+                {/* Totals Row */}
+                {recruiters.totals && (
+                  <tfoot>
+                    <tr className="border-t-2 bg-muted/50 font-semibold">
+                      <td className="py-3 px-4">Total</td>
+                      <td className="py-3 px-4"></td>
+                      <td className="text-center py-3 px-4">{recruiters.totals.totalCandidates}</td>
+                      <td className="text-center py-3 px-4">
+                        <span className="text-green-600">{recruiters.totals.totalHired}</span>
+                      </td>
+                      <td className="text-center py-3 px-4">
+                        <Badge variant="default">
+                          {recruiters.totals.totalCandidates > 0
+                            ? Math.round((recruiters.totals.totalHired / recruiters.totals.totalCandidates) * 100 * 10) / 10
+                            : 0}%
+                        </Badge>
+                      </td>
+                      <td className="text-center py-3 px-4">-</td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           ) : (
             <div className="py-8 text-center text-muted-foreground">
-              No recruiter data available for this period
+              No team data available for this period
             </div>
           )}
         </CardContent>

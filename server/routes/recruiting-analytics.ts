@@ -475,7 +475,7 @@ router.get('/interviews', requireAuthOrAssignments(), async (req: any, res: any)
 });
 
 // GET /api/recruiting-analytics/recruiters
-// Recruiter performance: candidates per recruiter, hire rate, avg time to hire
+// Team performance: candidates per assignee (including sourcers and unassigned)
 router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
@@ -491,60 +491,101 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       return appliedDate >= start && appliedDate <= end;
     });
 
-    // Build recruiter map (users who have candidates assigned)
-    const recruiterMap = new Map<string, {
-      id: string;
-      name: string;
-      email: string;
+    // Build assignee map from candidates (including null for unassigned)
+    const assigneeMap = new Map<string | null, {
       assigned: number;
       hired: number;
       totalDays: number;
     }>();
 
-    // Initialize with all managers/recruiters
-    users.filter((u: any) =>
-      ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'].includes(u.role)
-    ).forEach((u: any) => {
-      recruiterMap.set(u.id.toString(), {
-        id: u.id.toString(),
-        name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
-        email: u.email,
-        assigned: 0,
-        hired: 0,
-        totalDays: 0,
-      });
-    });
-
-    // Count candidates by assigned recruiter
+    // Count candidates by assignee (including unassigned)
     filteredCandidates.forEach((c: any) => {
-      const recruiterId = c.assignedTo?.toString() || c.recruiterId?.toString();
-      if (recruiterId && recruiterMap.has(recruiterId)) {
-        const data = recruiterMap.get(recruiterId)!;
-        data.assigned++;
-        if (c.status === 'HIRED') {
-          data.hired++;
-          const applied = new Date(c.appliedDate || c.createdAt);
-          const hired = new Date(c.updatedAt || c.createdAt);
-          data.totalDays += Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
-        }
+      const assigneeId = c.assignedTo?.toString() || null;
+
+      if (!assigneeMap.has(assigneeId)) {
+        assigneeMap.set(assigneeId, { assigned: 0, hired: 0, totalDays: 0 });
+      }
+
+      const data = assigneeMap.get(assigneeId)!;
+      data.assigned++;
+
+      if (c.status === 'HIRED') {
+        data.hired++;
+        const applied = new Date(c.appliedDate || c.createdAt);
+        const hired = new Date(c.updatedAt || c.createdAt);
+        data.totalDays += Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
       }
     });
 
-    // Convert to array and calculate rates
-    const recruiters = Array.from(recruiterMap.values())
-      .filter(r => r.assigned > 0) // Only show recruiters with activity
-      .map(r => ({
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        candidatesAssigned: r.assigned,
-        hiredCount: r.hired,
-        hireRate: r.assigned > 0 ? Math.round((r.hired / r.assigned) * 100 * 10) / 10 : 0,
-        avgDaysToHire: r.hired > 0 ? Math.round(r.totalDays / r.hired) : 0,
-      }))
-      .sort((a, b) => b.candidatesAssigned - a.candidatesAssigned);
+    // Build response with user lookup
+    const recruiters: Array<{
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      candidatesAssigned: number;
+      hiredCount: number;
+      hireRate: number;
+      avgDaysToHire: number;
+    }> = [];
 
-    res.json({ recruiters });
+    for (const [assigneeId, data] of assigneeMap.entries()) {
+      if (assigneeId === null) {
+        // Unassigned category
+        recruiters.push({
+          id: 'unassigned',
+          name: 'Unassigned',
+          email: '',
+          role: '',
+          candidatesAssigned: data.assigned,
+          hiredCount: data.hired,
+          hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100 * 10) / 10 : 0,
+          avgDaysToHire: data.hired > 0 ? Math.round(data.totalDays / data.hired) : 0,
+        });
+      } else {
+        // Find user info
+        const user = users.find((u: any) => u.id.toString() === assigneeId);
+        if (user) {
+          recruiters.push({
+            id: assigneeId,
+            name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            email: user.email,
+            role: user.role || '',
+            candidatesAssigned: data.assigned,
+            hiredCount: data.hired,
+            hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100 * 10) / 10 : 0,
+            avgDaysToHire: data.hired > 0 ? Math.round(data.totalDays / data.hired) : 0,
+          });
+        } else {
+          // User not found - still show their data
+          recruiters.push({
+            id: assigneeId,
+            name: 'Unknown User',
+            email: '',
+            role: '',
+            candidatesAssigned: data.assigned,
+            hiredCount: data.hired,
+            hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100 * 10) / 10 : 0,
+            avgDaysToHire: data.hired > 0 ? Math.round(data.totalDays / data.hired) : 0,
+          });
+        }
+      }
+    }
+
+    // Sort: Unassigned at bottom, then by candidates assigned descending
+    recruiters.sort((a, b) => {
+      if (a.id === 'unassigned') return 1;
+      if (b.id === 'unassigned') return -1;
+      return b.candidatesAssigned - a.candidatesAssigned;
+    });
+
+    // Calculate totals
+    const totals = {
+      totalCandidates: filteredCandidates.length,
+      totalHired: recruiters.reduce((sum, r) => sum + r.hiredCount, 0),
+    };
+
+    res.json({ recruiters, totals });
   } catch (error) {
     console.error('Error fetching recruiter analytics:', error);
     res.status(500).json({
