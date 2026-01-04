@@ -13,7 +13,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle, UserX, Loader2 } from 'lucide-react';
+import { DialogFooter } from '@/components/ui/dialog';
 import { format, addDays, setHours, setMinutes, isBefore, isAfter, startOfDay, endOfDay } from 'date-fns';
 
 interface InterviewSchedulerProps {
@@ -59,6 +60,13 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const [selectedOfficeLocation, setSelectedOfficeLocation] = useState<string>('');
   const [customInterviewer, setCustomInterviewer] = useState('');
   const [useCustomInterviewer, setUseCustomInterviewer] = useState(false);
+
+  // Interview status update state
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [statusDialogType, setStatusDialogType] = useState<'COMPLETED' | 'CANCELLED' | null>(null);
+  const [statusDialogInterview, setStatusDialogInterview] = useState<any>(null);
+  const [outcomeNotes, setOutcomeNotes] = useState('');
+  const [notesError, setNotesError] = useState('');
 
   // Office locations
   const officeLocations = {
@@ -281,6 +289,81 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       }
     },
   });
+
+  // Update interview status mutation
+  const updateInterviewStatusMutation = useMutation({
+    mutationFn: async ({ interviewId, status, outcomeNotes }: { interviewId: string; status: string; outcomeNotes?: string }) => {
+      return await apiRequest(`/api/interviews/${interviewId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, outcomeNotes }),
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/interviews/candidate/${candidateId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/interviews'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+
+      const statusMessages: Record<string, string> = {
+        COMPLETED: 'Interview marked as completed',
+        CANCELLED: 'Interview cancelled',
+        NO_SHOW: 'Candidate marked as no-show and moved to Dead status',
+      };
+
+      toast({
+        title: 'Interview Updated',
+        description: statusMessages[variables.status] || 'Interview status updated',
+      });
+
+      // Reset dialog state
+      setShowStatusDialog(false);
+      setStatusDialogType(null);
+      setStatusDialogInterview(null);
+      setOutcomeNotes('');
+      setNotesError('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to update interview status',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Handler for opening status dialog
+  const handleOpenStatusDialog = (interview: any, type: 'COMPLETED' | 'CANCELLED') => {
+    setStatusDialogInterview(interview);
+    setStatusDialogType(type);
+    setOutcomeNotes('');
+    setNotesError('');
+    setShowStatusDialog(true);
+  };
+
+  // Handler for submitting status with notes
+  const handleSubmitStatus = () => {
+    if (!outcomeNotes.trim()) {
+      setNotesError('Please provide notes about this interview.');
+      return;
+    }
+
+    if (statusDialogInterview && statusDialogType) {
+      updateInterviewStatusMutation.mutate({
+        interviewId: statusDialogInterview.id,
+        status: statusDialogType,
+        outcomeNotes: outcomeNotes.trim(),
+      });
+    }
+  };
+
+  // Handler for No Show (immediate, no dialog)
+  const handleNoShow = (interview: any) => {
+    if (window.confirm('Mark as No Show?\n\nThis will move the candidate to Dead status with a "No Show" tag.')) {
+      updateInterviewStatusMutation.mutate({
+        interviewId: interview.id,
+        status: 'NO_SHOW',
+      });
+    }
+  };
 
   const resetForm = () => {
     setSelectedDate(undefined);
@@ -927,9 +1010,10 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                             interview.status === 'COMPLETED' ? 'default' :
                             interview.status === 'SCHEDULED' ? 'secondary' :
                             interview.status === 'CANCELLED' ? 'destructive' :
+                            interview.status === 'NO_SHOW' ? 'destructive' :
                             'outline'
                           }>
-                            {interview.status}
+                            {interview.status === 'NO_SHOW' ? 'NO SHOW' : interview.status}
                           </Badge>
                         </div>
                         <CardDescription>
@@ -956,6 +1040,42 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                               </div>
                             </div>
                           )}
+
+                          {/* Action buttons for SCHEDULED interviews */}
+                          {interview.status === 'SCHEDULED' && (
+                            <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-200 hover:bg-green-50"
+                                onClick={() => handleOpenStatusDialog(interview, 'COMPLETED')}
+                                disabled={updateInterviewStatusMutation.isPending}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Complete
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                                onClick={() => handleOpenStatusDialog(interview, 'CANCELLED')}
+                                disabled={updateInterviewStatusMutation.isPending}
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                                onClick={() => handleNoShow(interview)}
+                                disabled={updateInterviewStatusMutation.isPending}
+                              >
+                                <UserX className="h-4 w-4 mr-1" />
+                                No Show
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -966,6 +1086,74 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                   No interviews scheduled yet
                 </p>
               )}
+
+              {/* Status Update Dialog (for Complete/Cancel with required notes) */}
+              <Dialog open={showStatusDialog} onOpenChange={(open) => {
+                if (!open) {
+                  setShowStatusDialog(false);
+                  setStatusDialogType(null);
+                  setStatusDialogInterview(null);
+                  setOutcomeNotes('');
+                  setNotesError('');
+                }
+              }}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {statusDialogType === 'COMPLETED' ? 'Complete Interview' : 'Cancel Interview'}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Please provide notes about this interview outcome. Notes will be saved to the candidate's profile.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="outcome-notes" className="flex items-center gap-1">
+                        Notes <span className="text-red-500">*</span>
+                      </Label>
+                      <Textarea
+                        id="outcome-notes"
+                        value={outcomeNotes}
+                        onChange={(e) => {
+                          setOutcomeNotes(e.target.value);
+                          if (notesError) setNotesError('');
+                        }}
+                        placeholder={statusDialogType === 'COMPLETED'
+                          ? "How did the interview go? Any feedback or observations?"
+                          : "Why was this interview cancelled?"
+                        }
+                        className="min-h-[120px] resize-none"
+                      />
+                      {notesError && (
+                        <p className="text-sm text-red-500">{notesError}</p>
+                      )}
+                    </div>
+                  </div>
+                  <DialogFooter className="gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowStatusDialog(false)}
+                      disabled={updateInterviewStatusMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSubmitStatus}
+                      disabled={updateInterviewStatusMutation.isPending || !outcomeNotes.trim()}
+                      className={statusDialogType === 'COMPLETED' ? 'bg-green-600 hover:bg-green-700' : ''}
+                    >
+                      {updateInterviewStatusMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>Save</>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
           </Tabs>
   );

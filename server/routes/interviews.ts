@@ -689,9 +689,11 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Update interview (reschedule, cancel, etc.)
+// Update interview (reschedule, cancel, complete, no-show, etc.)
 router.patch('/:id', requireAuth, async (req, res) => {
   try {
+    const { outcomeNotes, ...updateData } = req.body;
+
     // First get the existing interview
     const existingInterview = await storage.getInterviewById(req.params.id);
     if (!existingInterview) {
@@ -699,23 +701,76 @@ router.patch('/:id', requireAuth, async (req, res) => {
     }
 
     // Update the interview in storage
-    const interview = await storage.updateInterview(req.params.id, req.body);
+    const interview = await storage.updateInterview(req.params.id, updateData);
+
+    // Handle NO_SHOW: Move candidate to Dead status with "No Show" tag
+    if (updateData.status === 'NO_SHOW' && existingInterview.candidateId) {
+      try {
+        const candidate = await storage.getCandidateById(existingInterview.candidateId);
+        if (candidate) {
+          // Add "No Show" tag and move to Dead status
+          const existingTags = candidate.customTags || [];
+          const newTags = existingTags.includes('No Show') ? existingTags : [...existingTags, 'No Show'];
+
+          await storage.updateCandidate(existingInterview.candidateId, {
+            status: 'DEAD_BY_CANDIDATE',
+            customTags: newTags
+          });
+
+          // Add note about the no-show
+          const interviewDate = new Date(existingInterview.scheduledDate).toLocaleDateString('en-US', {
+            timeZone: 'America/New_York',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+          await storage.createCandidateNote({
+            candidateId: existingInterview.candidateId,
+            content: `Interview no-show on ${interviewDate}. Candidate moved to Dead status.`,
+            type: 'INTERVIEW',
+            createdBy: (req as any).user?.id || 'system'
+          });
+          console.log('[INTERVIEW] Candidate marked as no-show:', existingInterview.candidateId);
+        }
+      } catch (candidateError) {
+        console.error('[INTERVIEW] Failed to update candidate for no-show:', candidateError);
+        // Don't fail the interview update
+      }
+    }
+
+    // Save outcome notes to candidate profile for COMPLETED or CANCELLED
+    if (outcomeNotes && ['COMPLETED', 'CANCELLED'].includes(updateData.status) && existingInterview.candidateId) {
+      try {
+        const statusLabel = updateData.status === 'COMPLETED' ? 'completed' : 'cancelled';
+        await storage.createCandidateNote({
+          candidateId: existingInterview.candidateId,
+          content: `Interview ${statusLabel}: ${outcomeNotes}`,
+          type: 'INTERVIEW',
+          createdBy: (req as any).user?.id || 'system'
+        });
+        console.log('[INTERVIEW] Saved outcome notes to candidate profile');
+      } catch (noteError) {
+        console.error('[INTERVIEW] Failed to save outcome notes:', noteError);
+        // Don't fail the interview update
+      }
+    }
 
     // If there's a calendar event ID and the date/time/duration changed, update the calendar
     if (existingInterview.googleEventId && (
-      req.body.scheduledDate || 
-      req.body.duration || 
-      req.body.location || 
-      req.body.meetingLink ||
-      req.body.status === 'CANCELLED'
+      updateData.scheduledDate ||
+      updateData.duration ||
+      updateData.location ||
+      updateData.meetingLink ||
+      updateData.status === 'CANCELLED' ||
+      updateData.status === 'NO_SHOW'
     )) {
       try {
         const GoogleCalendarService = (await import('../services/google-calendar-service')).default;
         const calendarService = new GoogleCalendarService();
         await calendarService.initialize();
 
-        if (req.body.status === 'CANCELLED') {
-          // Delete the calendar event if interview is cancelled
+        if (updateData.status === 'CANCELLED' || updateData.status === 'NO_SHOW') {
+          // Delete the calendar event if interview is cancelled or no-show
           await calendarService.deleteEvent(existingInterview.googleEventId);
           console.log('[INTERVIEW] Google Calendar event deleted:', existingInterview.googleEventId);
         } else {
