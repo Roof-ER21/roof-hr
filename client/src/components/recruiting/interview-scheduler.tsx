@@ -302,6 +302,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       queryClient.invalidateQueries({ queryKey: [`/api/interviews/candidate/${candidateId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/interviews'] });
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
+      // Invalidate analytics to update interview metrics
+      queryClient.invalidateQueries({ queryKey: ['recruiting-analytics'] });
 
       const statusMessages: Record<string, string> = {
         COMPLETED: 'Interview marked as completed',

@@ -383,6 +383,8 @@ export function CandidateDetailsDialog({
       queryClient.invalidateQueries({ queryKey: ['/api/interviews'] });
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
       queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidate?.id}/notes`] });
+      // Invalidate analytics to update interview metrics
+      queryClient.invalidateQueries({ queryKey: ['recruiting-analytics'] });
 
       const statusMessages: Record<string, string> = {
         COMPLETED: 'Interview marked as completed',
@@ -507,8 +509,8 @@ export function CandidateDetailsDialog({
 
             {/* Main Content - Side by Side */}
             <div className="flex flex-1 overflow-hidden">
-              {/* LEFT PANEL - Candidate Info */}
-              <div className="w-[400px] flex-shrink-0 border-r overflow-y-auto">
+              {/* LEFT PANEL - Candidate Info & Activity */}
+              <div className="w-[450px] flex-shrink-0 border-r overflow-y-auto">
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-4">
                     {/* Contact Info */}
@@ -573,6 +575,122 @@ export function CandidateDetailsDialog({
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Activity Timeline (Notes + Interview Q&A) */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4" />
+                        Activity ({notes.length})
+                      </h4>
+
+                      {/* Add Note Form */}
+                      <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                        <div className="flex gap-2">
+                          <Select
+                            value={noteType}
+                            onValueChange={(v: any) => setNoteType(v)}
+                          >
+                            <SelectTrigger className="w-[100px] h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="GENERAL">General</SelectItem>
+                              <SelectItem value="INTERVIEW">Interview</SelectItem>
+                              <SelectItem value="REFERENCE">Reference</SelectItem>
+                              <SelectItem value="INTERNAL">Internal</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            onClick={handleAddNote}
+                            disabled={!newNote.trim() || createNoteMutation.isPending}
+                            className="h-8"
+                          >
+                            {createNoteMutation.isPending ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              'Add'
+                            )}
+                          </Button>
+                        </div>
+                        <Textarea
+                          placeholder="Add a note..."
+                          value={newNote}
+                          onChange={(e) => setNewNote(e.target.value)}
+                          className="min-h-[50px] resize-none text-sm"
+                        />
+                      </div>
+
+                      {/* Timeline Entries */}
+                      {notesLoading ? (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                          Loading...
+                        </div>
+                      ) : notesWithAuthors.length === 0 ? (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                          No activity yet
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                          {notesWithAuthors
+                            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                            .map((note) => {
+                              const qa = parseInterviewQA(note.content);
+                              const hasQA = qa.length > 0;
+
+                              return (
+                                <div
+                                  key={note.id}
+                                  className="p-2.5 bg-background border rounded-lg space-y-1.5"
+                                >
+                                  {/* Header with type badge, author, time, and delete */}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                      <Badge className={`${noteTypeConfig[note.type].color} text-[10px] px-1.5 py-0`}>
+                                        {hasQA ? 'Q&A' : noteTypeConfig[note.type].label}
+                                      </Badge>
+                                      <span className="text-[11px] text-muted-foreground truncate">
+                                        {note.author
+                                          ? `${note.author.firstName} ${note.author.lastName}`
+                                          : 'System'}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {format(new Date(note.createdAt), 'MMM d, h:mm a')}
+                                      </span>
+                                    </div>
+                                    {user?.role !== 'EMPLOYEE' && user?.id === note.authorId && (
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-5 w-5 flex-shrink-0"
+                                        onClick={() => deleteNoteMutation.mutate(note.id)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+
+                                  {/* Content - either Q&A format or regular text */}
+                                  {hasQA ? (
+                                    <div className="space-y-1.5 pl-1">
+                                      {qa.map((item, i) => (
+                                        <div key={i} className="border-l-2 border-blue-400 pl-2 py-0.5">
+                                          <p className="text-xs font-medium text-foreground">{item.question}</p>
+                                          <p className="text-xs text-muted-foreground mt-0.5">{item.answer}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs whitespace-pre-wrap text-foreground/90">{note.content}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Interview Screening (if completed) */}
@@ -780,136 +898,6 @@ export function CandidateDetailsDialog({
                       </div>
                     )}
 
-                    {/* Interview Responses (parsed from INTERVIEW type notes) */}
-                    {(() => {
-                      const interviewNotes = notes.filter((n) => n.type === 'INTERVIEW');
-                      if (interviewNotes.length === 0) return null;
-
-                      return (
-                        <>
-                          <Separator />
-                          <div className="space-y-3">
-                            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                              <FileQuestion className="h-4 w-4" />
-                              Interview Responses
-                            </h4>
-                            <div className="space-y-4 bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
-                              {interviewNotes.map((note, noteIdx) => {
-                                const qa = parseInterviewQA(note.content);
-                                const author = users.find((u) => u.id === note.authorId);
-                                if (qa.length === 0) return null;
-                                return (
-                                  <div key={note.id} className="space-y-2">
-                                    {noteIdx > 0 && <Separator className="my-2" />}
-                                    <div className="text-xs text-muted-foreground mb-2">
-                                      {author ? `${author.firstName} ${author.lastName}` : 'Unknown'} - {format(new Date(note.createdAt), 'MMM d, h:mm a')}
-                                    </div>
-                                    {qa.map((item, i) => (
-                                      <div key={i} className="border-l-2 border-blue-500 dark:border-blue-400 pl-3 py-1">
-                                        <p className="text-sm font-medium">{item.question}</p>
-                                        <p className="text-sm text-muted-foreground mt-1">{item.answer}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-
-                    <Separator />
-
-                    {/* Notes Section */}
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4" />
-                        Notes ({notes.length})
-                      </h4>
-
-                      {/* Add Note Form */}
-                      <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
-                        <div className="flex gap-2">
-                          <Select
-                            value={noteType}
-                            onValueChange={(v: any) => setNoteType(v)}
-                          >
-                            <SelectTrigger className="w-[120px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="GENERAL">General</SelectItem>
-                              <SelectItem value="INTERVIEW">Interview</SelectItem>
-                              <SelectItem value="REFERENCE">Reference</SelectItem>
-                              <SelectItem value="INTERNAL">Internal</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            onClick={handleAddNote}
-                            disabled={!newNote.trim() || createNoteMutation.isPending}
-                          >
-                            {createNoteMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              'Add'
-                            )}
-                          </Button>
-                        </div>
-                        <Textarea
-                          placeholder="Add a note..."
-                          value={newNote}
-                          onChange={(e) => setNewNote(e.target.value)}
-                          className="min-h-[60px] resize-none"
-                        />
-                      </div>
-
-                      {/* Notes List */}
-                      {notesLoading ? (
-                        <div className="text-center py-4 text-muted-foreground">
-                          Loading notes...
-                        </div>
-                      ) : notesWithAuthors.length === 0 ? (
-                        <div className="text-center py-4 text-muted-foreground">
-                          No notes yet
-                        </div>
-                      ) : (
-                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                          {notesWithAuthors.map((note) => (
-                            <div
-                              key={note.id}
-                              className="p-3 bg-background border rounded-lg space-y-2"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge className={noteTypeConfig[note.type].color}>
-                                    {noteTypeConfig[note.type].label}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    {note.author
-                                      ? `${note.author.firstName} ${note.author.lastName}`
-                                      : 'Unknown'}{' '}
-                                    - {format(new Date(note.createdAt), 'MMM d, h:mm a')}
-                                  </span>
-                                </div>
-                                {user?.role !== 'EMPLOYEE' && user?.id === note.authorId && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-6 w-6"
-                                    onClick={() => deleteNoteMutation.mutate(note.id)}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
-                              <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </ScrollArea>
               </div>

@@ -746,7 +746,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
           candidateId: existingInterview.candidateId,
           content: `Interview ${statusLabel}: ${outcomeNotes}`,
           type: 'INTERVIEW',
-          createdBy: (req as any).user?.id || 'system'
+          authorId: (req as any).user?.id || 'system'
         });
         console.log('[INTERVIEW] Saved outcome notes to candidate profile');
       } catch (noteError) {
