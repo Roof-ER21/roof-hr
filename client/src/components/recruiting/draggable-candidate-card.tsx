@@ -145,7 +145,7 @@ export function DraggableCandidateCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 hover:shadow-sm transition-all duration-150 border-l-4 ${positionColor.border} ${
+      className={`flex items-start justify-between px-3 py-2 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 hover:shadow-sm transition-all duration-150 border-l-4 ${positionColor.border} ${
         isDragging ? 'opacity-50 shadow-lg scale-105 z-50' : ''
       }`}
       onClick={handleCardClick}
@@ -167,30 +167,37 @@ export function DraggableCandidateCard({
         </div>
       )}
 
-      {/* Name, sourcer dot, and dead type badge */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+      {/* Name and status indicators - stacked layout for better name visibility */}
+      <div className="flex-1 min-w-0">
+        {/* Name on its own line - gets full width */}
+        <span
+          className="text-sm font-medium text-gray-900 dark:text-white block"
+          title={`${candidate.firstName} ${candidate.lastName}`}
+        >
           {candidate.firstName} {candidate.lastName}
         </span>
-        {/* Sourcer color dot - gray if unassigned */}
-        <div
-          className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white shadow-sm"
-          style={{ backgroundColor: candidate.sourcer?.screenerColor || '#D1D5DB' }}
-          title={candidate.sourcer
-            ? `Assigned to: ${candidate.sourcer.firstName} ${candidate.sourcer.lastName}`
-            : 'Unassigned'}
-        />
-        {/* Show dead type badge if applicable */}
-        {candidate.status === 'DEAD_BY_US' && (
-          <Badge className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0 flex-shrink-0">
-            By Us
-          </Badge>
-        )}
-        {candidate.status === 'DEAD_BY_CANDIDATE' && (
-          <Badge className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0 flex-shrink-0">
-            By Candidate
-          </Badge>
-        )}
+        {/* Indicators row - sourcer dot and dead badges */}
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {/* Sourcer color dot - gray if unassigned */}
+          <div
+            className="w-2 h-2 rounded-full flex-shrink-0 border border-white/50 shadow-sm"
+            style={{ backgroundColor: candidate.sourcer?.screenerColor || '#D1D5DB' }}
+            title={candidate.sourcer
+              ? `Assigned to: ${candidate.sourcer.firstName} ${candidate.sourcer.lastName}`
+              : 'Unassigned'}
+          />
+          {/* Show dead type badge if applicable */}
+          {candidate.status === 'DEAD_BY_US' && (
+            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] px-1 py-0 flex-shrink-0">
+              By Us
+            </Badge>
+          )}
+          {candidate.status === 'DEAD_BY_CANDIDATE' && (
+            <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 text-[9px] px-1 py-0 flex-shrink-0">
+              By Candidate
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Minimal actions */}
