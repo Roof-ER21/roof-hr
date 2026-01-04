@@ -901,6 +901,175 @@ router.post('/assignments/:id/report-issue', async (req, res) => {
   }
 });
 
+// Bulk return tools
+router.post('/assignments/bulk-return', async (req, res) => {
+  try {
+    const { assignmentIds, condition, notes } = req.body;
+
+    if (!assignmentIds || !Array.isArray(assignmentIds) || assignmentIds.length === 0) {
+      return res.status(400).json({ error: 'assignmentIds array is required' });
+    }
+
+    if (!condition) {
+      return res.status(400).json({ error: 'condition is required' });
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as string[]
+    };
+
+    // Process each assignment
+    for (const assignmentId of assignmentIds) {
+      try {
+        // Get assignment details
+        const [assignment] = await db
+          .select()
+          .from(toolAssignments)
+          .where(eq(toolAssignments.id, assignmentId));
+
+        if (!assignment) {
+          results.failed++;
+          results.errors.push(`Assignment ${assignmentId} not found`);
+          continue;
+        }
+
+        if (assignment.status !== 'ASSIGNED') {
+          results.failed++;
+          results.errors.push(`Assignment ${assignmentId} is not currently assigned`);
+          continue;
+        }
+
+        // Update assignment
+        await db
+          .update(toolAssignments)
+          .set({
+            status: 'RETURNED',
+            returnDate: new Date(),
+            condition: condition,
+            notes: notes ? `${assignment.notes || ''}\nBulk Return: ${notes}` : assignment.notes,
+            updatedAt: new Date()
+          })
+          .where(eq(toolAssignments.id, assignmentId));
+
+        // Update tool availability
+        const [tool] = await db
+          .select()
+          .from(toolInventory)
+          .where(eq(toolInventory.id, assignment.toolId));
+
+        if (tool) {
+          await db
+            .update(toolInventory)
+            .set({
+              availableQuantity: tool.availableQuantity + 1,
+              condition: condition,
+              updatedAt: new Date()
+            })
+            .where(eq(toolInventory.id, tool.id));
+        }
+
+        results.success++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`Failed to return assignment ${assignmentId}`);
+      }
+    }
+
+    res.json({
+      message: `Bulk return complete: ${results.success} successful, ${results.failed} failed`,
+      ...results
+    });
+  } catch (error) {
+    console.error('Error in bulk return:', error);
+    res.status(500).json({ error: 'Failed to process bulk return' });
+  }
+});
+
+// Bulk edit inventory items
+router.patch('/inventory/bulk-edit', async (req, res) => {
+  try {
+    const { toolIds, updates } = req.body;
+
+    if (!toolIds || !Array.isArray(toolIds) || toolIds.length === 0) {
+      return res.status(400).json({ error: 'toolIds array is required' });
+    }
+
+    if (!updates || typeof updates !== 'object') {
+      return res.status(400).json({ error: 'updates object is required' });
+    }
+
+    const { condition, location, notesToAppend } = updates;
+
+    // Check if there's anything to update
+    if (!condition && !location && !notesToAppend) {
+      return res.status(400).json({ error: 'At least one update field is required' });
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as string[]
+    };
+
+    // Process each tool
+    for (const toolId of toolIds) {
+      try {
+        // Get current tool
+        const [tool] = await db
+          .select()
+          .from(toolInventory)
+          .where(eq(toolInventory.id, toolId));
+
+        if (!tool) {
+          results.failed++;
+          results.errors.push(`Tool ${toolId} not found`);
+          continue;
+        }
+
+        // Build update object
+        const updateData: any = {
+          updatedAt: new Date()
+        };
+
+        if (condition) {
+          updateData.condition = condition;
+        }
+
+        if (location) {
+          updateData.location = location;
+        }
+
+        if (notesToAppend) {
+          updateData.notes = tool.notes
+            ? `${tool.notes}\n${notesToAppend}`
+            : notesToAppend;
+        }
+
+        // Update tool
+        await db
+          .update(toolInventory)
+          .set(updateData)
+          .where(eq(toolInventory.id, toolId));
+
+        results.success++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`Failed to update tool ${toolId}`);
+      }
+    }
+
+    res.json({
+      message: `Bulk edit complete: ${results.success} successful, ${results.failed} failed`,
+      ...results
+    });
+  } catch (error) {
+    console.error('Error in bulk edit:', error);
+    res.status(500).json({ error: 'Failed to process bulk edit' });
+  }
+});
+
 // Get signature by token (public endpoint for employees)
 router.get('/signature/:token', async (req, res) => {
   try {

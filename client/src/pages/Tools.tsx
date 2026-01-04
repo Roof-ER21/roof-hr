@@ -218,6 +218,24 @@ export function Tools() {
   const [issueType, setIssueType] = useState<'DAMAGED' | 'LOST'>('DAMAGED');
   const [issueDescription, setIssueDescription] = useState<string>('');
 
+  // Bulk selection state for inventory
+  const [selectedInventoryItems, setSelectedInventoryItems] = useState<Set<string>>(new Set());
+  const [showBulkAssignDialog, setShowBulkAssignDialog] = useState(false);
+  const [bulkAssignEmployee, setBulkAssignEmployee] = useState<string>('');
+  const [bulkAssignNotes, setBulkAssignNotes] = useState<string>('');
+
+  // Bulk selection state for assignments (returns)
+  const [selectedAssignments, setSelectedAssignments] = useState<Set<string>>(new Set());
+  const [showBulkReturnDialog, setShowBulkReturnDialog] = useState(false);
+  const [bulkReturnCondition, setBulkReturnCondition] = useState<string>('GOOD');
+  const [bulkReturnNotes, setBulkReturnNotes] = useState<string>('');
+
+  // Bulk edit state for inventory
+  const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
+  const [bulkEditCondition, setBulkEditCondition] = useState<string>('');
+  const [bulkEditLocation, setBulkEditLocation] = useState<string>('');
+  const [bulkEditNotes, setBulkEditNotes] = useState<string>('');
+
   // Ahmed always has manager access via email fallback
   const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
     (user?.role && ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role));
@@ -647,6 +665,58 @@ export function Tools() {
     }
   });
 
+  // Bulk return mutation
+  const bulkReturnMutation = useMutation({
+    mutationFn: async (data: { assignmentIds: string[]; condition: string; notes: string }) => {
+      return await apiRequest('/api/tools/assignments/bulk-return', 'POST', data);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
+      setShowBulkReturnDialog(false);
+      setSelectedAssignments(new Set());
+      setBulkReturnCondition('GOOD');
+      setBulkReturnNotes('');
+      toast({
+        title: 'Bulk Return Complete',
+        description: data.message || 'All selected items have been returned'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to process bulk return',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  // Bulk edit mutation
+  const bulkEditMutation = useMutation({
+    mutationFn: async (data: { toolIds: string[]; updates: { condition?: string; location?: string; notesToAppend?: string } }) => {
+      return await apiRequest('/api/tools/inventory/bulk-edit', 'PATCH', data);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tools/inventory'] });
+      setShowBulkEditDialog(false);
+      setSelectedInventoryItems(new Set());
+      setBulkEditCondition('');
+      setBulkEditLocation('');
+      setBulkEditNotes('');
+      toast({
+        title: 'Bulk Edit Complete',
+        description: data.message || 'All selected items have been updated'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to process bulk edit',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const handleCreateChecklist = () => {
     if (!checklistForm.employeeId) return;
 
@@ -752,6 +822,118 @@ export function Tools() {
       data: {
         status: issueType,
         notes: issueDescription.trim()
+      }
+    });
+  };
+
+  // Bulk selection helpers
+  const toggleInventorySelection = (toolId: string) => {
+    const newSelection = new Set(selectedInventoryItems);
+    if (newSelection.has(toolId)) {
+      newSelection.delete(toolId);
+    } else {
+      newSelection.add(toolId);
+    }
+    setSelectedInventoryItems(newSelection);
+  };
+
+  const selectAllInventory = () => {
+    const availableTools = tools.filter(t => t.availableQuantity > 0);
+    if (selectedInventoryItems.size === availableTools.length) {
+      setSelectedInventoryItems(new Set());
+    } else {
+      setSelectedInventoryItems(new Set(availableTools.map(t => t.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedInventoryItems(new Set());
+  };
+
+  // Assignment selection helpers
+  const toggleAssignmentSelection = (assignmentId: string) => {
+    const newSelection = new Set(selectedAssignments);
+    if (newSelection.has(assignmentId)) {
+      newSelection.delete(assignmentId);
+    } else {
+      newSelection.add(assignmentId);
+    }
+    setSelectedAssignments(newSelection);
+  };
+
+  const clearAssignmentSelection = () => {
+    setSelectedAssignments(new Set());
+  };
+
+  // Handle bulk return
+  const handleBulkReturn = () => {
+    if (selectedAssignments.size === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one assignment to return',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    bulkReturnMutation.mutate({
+      assignmentIds: Array.from(selectedAssignments),
+      condition: bulkReturnCondition,
+      notes: bulkReturnNotes
+    });
+  };
+
+  // Handle bulk edit
+  const handleBulkEdit = () => {
+    if (selectedInventoryItems.size === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one inventory item to edit',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!bulkEditCondition && !bulkEditLocation && !bulkEditNotes) {
+      toast({
+        title: 'Error',
+        description: 'Please provide at least one field to update',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    bulkEditMutation.mutate({
+      toolIds: Array.from(selectedInventoryItems),
+      updates: {
+        ...(bulkEditCondition && { condition: bulkEditCondition }),
+        ...(bulkEditLocation && { location: bulkEditLocation }),
+        ...(bulkEditNotes && { notesToAppend: bulkEditNotes })
+      }
+    });
+  };
+
+  // Handle bulk assignment
+  const handleBulkAssign = () => {
+    if (!bulkAssignEmployee || selectedInventoryItems.size === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select an employee and at least one tool',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    createAssignmentMutation.mutate({
+      employeeId: bulkAssignEmployee,
+      toolIds: Array.from(selectedInventoryItems),
+      notes: bulkAssignNotes
+    }, {
+      onSuccess: () => {
+        setShowBulkAssignDialog(false);
+        setBulkAssignEmployee('');
+        setBulkAssignNotes('');
+        clearSelection();
       }
     });
   };
@@ -1412,6 +1594,34 @@ export function Tools() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Bulk Return Action Bar */}
+              {isManager && selectedAssignments.size > 0 && (
+                <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <span className="font-medium text-green-700 dark:text-green-300">
+                      {selectedAssignments.size} assignment{selectedAssignments.size > 1 ? 's' : ''} selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={clearAssignmentSelection}
+                    >
+                      Clear Selection
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowBulkReturnDialog(true)}
+                    >
+                      <ArrowLeft className="mr-1 h-4 w-4" />
+                      Return Selected
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {assignmentsLoading ? (
                 <div className="text-center py-8">Loading assignments...</div>
               ) : activeAssignments.length === 0 ? (
@@ -1457,6 +1667,12 @@ export function Tools() {
                               className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg hover:shadow-sm transition-shadow"
                             >
                               <div className="flex items-center gap-3">
+                                {isManager && (
+                                  <Checkbox
+                                    checked={selectedAssignments.has(assignment.id)}
+                                    onCheckedChange={() => toggleAssignmentSelection(assignment.id)}
+                                  />
+                                )}
                                 <div className="flex items-center justify-center w-8 h-8 rounded bg-gray-100 dark:bg-gray-700">
                                   {categoryIcons[assignment.toolCategory as keyof typeof categoryIcons]}
                                 </div>
@@ -1525,6 +1741,42 @@ export function Tools() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Bulk Action Bar */}
+              {isManager && selectedInventoryItems.size > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-blue-600" />
+                    <span className="font-medium text-blue-700 dark:text-blue-300">
+                      {selectedInventoryItems.size} item{selectedInventoryItems.size > 1 ? 's' : ''} selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={clearSelection}
+                    >
+                      Clear Selection
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowBulkAssignDialog(true)}
+                    >
+                      <Send className="mr-1 h-4 w-4" />
+                      Assign Selected
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowBulkEditDialog(true)}
+                    >
+                      <Edit className="mr-1 h-4 w-4" />
+                      Bulk Edit
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {toolsLoading ? (
                 <div className="text-center py-8">Loading inventory...</div>
               ) : filteredTools.length === 0 ? (
@@ -1535,6 +1787,14 @@ export function Tools() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {isManager && (
+                        <TableHead className="w-[50px]">
+                          <Checkbox
+                            checked={selectedInventoryItems.size > 0 && selectedInventoryItems.size === tools.filter(t => t.availableQuantity > 0).length}
+                            onCheckedChange={() => selectAllInventory()}
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Tool</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Serial/Model</TableHead>
@@ -1555,6 +1815,7 @@ export function Tools() {
                           className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-gray-700 bg-gray-50/80 dark:bg-gray-800"
                           onClick={() => toggleClothingGroup(group.key)}
                         >
+                          {isManager && <TableCell></TableCell>}
                           <TableCell className="font-semibold">
                             <div className="flex items-center gap-2">
                               {expandedClothingGroups.has(group.key) ? (
@@ -1603,7 +1864,7 @@ export function Tools() {
                           <>
                             {/* Dropdown filters row for clothing */}
                             <TableRow className="bg-blue-50/30">
-                              <TableCell colSpan={isManager ? 9 : 8} className="py-4">
+                              <TableCell colSpan={isManager ? 10 : 8} className="py-4">
                                 <div className="flex flex-wrap items-center gap-4 pl-6">
                                   <div className="flex items-center gap-2">
                                     <Label className="text-sm font-medium whitespace-nowrap">Style:</Label>
@@ -1685,6 +1946,15 @@ export function Tools() {
                             {/* Filtered clothing items */}
                             {filteredClothingItems.map((tool) => (
                               <TableRow key={tool.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                {isManager && (
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={selectedInventoryItems.has(tool.id)}
+                                      onCheckedChange={() => toggleInventorySelection(tool.id)}
+                                      disabled={tool.availableQuantity === 0}
+                                    />
+                                  </TableCell>
+                                )}
                                 <TableCell className="font-medium pl-10 text-gray-900 dark:text-white">
                                   {tool.name}
                                 </TableCell>
@@ -1780,6 +2050,15 @@ export function Tools() {
                         {/* Expanded items for non-clothing categories (tech, equipment) */}
                         {expandedClothingGroups.has(group.key) && group.key !== 'clothing' && group.items.map((tool) => (
                           <TableRow key={tool.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                            {isManager && (
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedInventoryItems.has(tool.id)}
+                                  onCheckedChange={() => toggleInventorySelection(tool.id)}
+                                  disabled={tool.availableQuantity === 0}
+                                />
+                              </TableCell>
+                            )}
                             <TableCell className="font-medium pl-10 text-gray-900 dark:text-white">
                               {tool.name}
                             </TableCell>
@@ -2687,6 +2966,271 @@ export function Tools() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={showBulkAssignDialog} onOpenChange={setShowBulkAssignDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Selected Equipment</DialogTitle>
+            <DialogDescription>
+              Assign {selectedInventoryItems.size} selected item{selectedInventoryItems.size > 1 ? 's' : ''} to an employee.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Selected Items Preview */}
+            <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg max-h-32 overflow-y-auto">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Selected Items:</div>
+              <div className="space-y-1">
+                {Array.from(selectedInventoryItems).map(toolId => {
+                  const tool = tools.find(t => t.id === toolId);
+                  return tool ? (
+                    <div key={toolId} className="text-sm text-gray-700 dark:text-gray-300">
+                      • {tool.name}
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            </div>
+
+            {/* Employee Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkAssignEmployee" className="text-sm font-medium">
+                Assign To <span className="text-red-500">*</span>
+              </Label>
+              <Select value={bulkAssignEmployee} onValueChange={setBulkAssignEmployee}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(employees as Employee[]).map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkAssignNotes" className="text-sm font-medium">
+                Notes
+              </Label>
+              <Textarea
+                id="bulkAssignNotes"
+                placeholder="Optional notes for this assignment..."
+                value={bulkAssignNotes}
+                onChange={(e) => setBulkAssignNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowBulkAssignDialog(false);
+                  setBulkAssignEmployee('');
+                  setBulkAssignNotes('');
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBulkAssign}
+                disabled={createAssignmentMutation.isPending || !bulkAssignEmployee}
+                className="flex-1"
+              >
+                {createAssignmentMutation.isPending ? 'Assigning...' : 'Assign All'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Return Dialog */}
+      <Dialog open={showBulkReturnDialog} onOpenChange={setShowBulkReturnDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Return Equipment</DialogTitle>
+            <DialogDescription>
+              Return {selectedAssignments.size} selected assignment{selectedAssignments.size > 1 ? 's' : ''} at once.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Selected Assignments Preview */}
+            <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg max-h-32 overflow-y-auto">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Selected Assignments:</div>
+              <div className="space-y-1">
+                {Array.from(selectedAssignments).map(assignmentId => {
+                  const assignment = activeAssignments.find((a: Assignment) => a.id === assignmentId);
+                  return assignment ? (
+                    <div key={assignmentId} className="text-sm text-gray-700 dark:text-gray-300">
+                      • {assignment.toolName} ({assignment.employeeName})
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            </div>
+
+            {/* Return Condition */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkReturnCondition" className="text-sm font-medium">
+                Return Condition <span className="text-red-500">*</span>
+              </Label>
+              <Select value={bulkReturnCondition} onValueChange={setBulkReturnCondition}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select condition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NEW">New - Like new, unused</SelectItem>
+                  <SelectItem value="GOOD">Good - Normal wear</SelectItem>
+                  <SelectItem value="FAIR">Fair - Visible wear, functional</SelectItem>
+                  <SelectItem value="POOR">Poor - Significant wear/damage</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkReturnNotes" className="text-sm font-medium">
+                Return Notes
+              </Label>
+              <Textarea
+                id="bulkReturnNotes"
+                placeholder="Optional notes for this bulk return..."
+                value={bulkReturnNotes}
+                onChange={(e) => setBulkReturnNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowBulkReturnDialog(false);
+                  setBulkReturnCondition('GOOD');
+                  setBulkReturnNotes('');
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBulkReturn}
+                disabled={bulkReturnMutation.isPending}
+                className="flex-1"
+              >
+                {bulkReturnMutation.isPending ? 'Returning...' : 'Return All'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Dialog */}
+      <Dialog open={showBulkEditDialog} onOpenChange={setShowBulkEditDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Edit Inventory</DialogTitle>
+            <DialogDescription>
+              Update {selectedInventoryItems.size} selected item{selectedInventoryItems.size > 1 ? 's' : ''}. Leave fields empty to keep current values.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Selected Items Preview */}
+            <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg max-h-32 overflow-y-auto">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Selected Items:</div>
+              <div className="space-y-1">
+                {Array.from(selectedInventoryItems).map(toolId => {
+                  const tool = tools.find(t => t.id === toolId);
+                  return tool ? (
+                    <div key={toolId} className="text-sm text-gray-700 dark:text-gray-300">
+                      • {tool.name}
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            </div>
+
+            {/* Condition */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkEditCondition" className="text-sm font-medium">
+                Condition
+              </Label>
+              <Select value={bulkEditCondition} onValueChange={setBulkEditCondition}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Leave unchanged" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Leave unchanged</SelectItem>
+                  <SelectItem value="NEW">New</SelectItem>
+                  <SelectItem value="GOOD">Good</SelectItem>
+                  <SelectItem value="FAIR">Fair</SelectItem>
+                  <SelectItem value="POOR">Poor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkEditLocation" className="text-sm font-medium">
+                Location
+              </Label>
+              <Input
+                id="bulkEditLocation"
+                placeholder="Leave unchanged"
+                value={bulkEditLocation}
+                onChange={(e) => setBulkEditLocation(e.target.value)}
+              />
+            </div>
+
+            {/* Notes to Append */}
+            <div className="space-y-2">
+              <Label htmlFor="bulkEditNotes" className="text-sm font-medium">
+                Notes to Append
+              </Label>
+              <Textarea
+                id="bulkEditNotes"
+                placeholder="Optional notes to add to all selected items..."
+                value={bulkEditNotes}
+                onChange={(e) => setBulkEditNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowBulkEditDialog(false);
+                  setBulkEditCondition('');
+                  setBulkEditLocation('');
+                  setBulkEditNotes('');
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBulkEdit}
+                disabled={bulkEditMutation.isPending || (!bulkEditCondition && !bulkEditLocation && !bulkEditNotes)}
+                className="flex-1"
+              >
+                {bulkEditMutation.isPending ? 'Updating...' : 'Update All'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
