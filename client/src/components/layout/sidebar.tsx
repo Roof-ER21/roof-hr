@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -33,6 +33,7 @@ import {
   Package,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   MapPin,
   AlertTriangle,
   Link as LinkIcon,
@@ -42,7 +43,9 @@ import {
   UserCircle,
   DoorOpen,
   ClipboardList,
-  GitBranch
+  GitBranch,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
 
 // Navigation configuration with role-based access
@@ -146,6 +149,34 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting', 'Facilities']);
 
+  // Collapse state with localStorage persistence
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sidebar-collapsed') === 'true';
+    }
+    return false;
+  });
+
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed(prev => {
+      const newState = !prev;
+      localStorage.setItem('sidebar-collapsed', String(newState));
+      return newState;
+    });
+  }, []);
+
+  // Keyboard shortcut: Ctrl/Cmd+B to toggle collapse
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        toggleCollapse();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleCollapse]);
+
   // Check if user has candidate assignments (for Recruiting visibility)
   const isManager = user?.role && MANAGER_ROLES.includes(user.role);
   const { data: assignmentData, isLoading: assignmentLoading, error: assignmentError } = useQuery<{ hasAssignments: boolean }>({
@@ -186,17 +217,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#171717] shadow-lg transform transition-transform duration-200 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 bg-white dark:bg-[#171717] shadow-lg transform transition-all duration-200 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
+        isCollapsed ? "w-16" : "w-64",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex-shrink-0 flex items-center justify-center p-6 border-b dark:border-[#2E2E2E]">
-            <Logo size="md" />
+          <div className={cn(
+            "flex-shrink-0 flex items-center justify-center border-b dark:border-[#2E2E2E]",
+            isCollapsed ? "p-3" : "p-6"
+          )}>
+            <Logo size={isCollapsed ? "sm" : "md"} />
           </div>
 
           {/* Navigation - scrollable */}
-          <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
+          <nav className={cn(
+            "flex-1 overflow-y-auto py-4 space-y-1",
+            isCollapsed ? "px-2" : "px-4"
+          )}>
             {navigation
               .filter(item => {
                 // Ahmed always sees all menu items (super admin email fallback)
@@ -229,6 +267,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 const isChildActive = hasChildren && item.children.some(child => location.pathname === child.href);
 
                 if (hasChildren) {
+                  // When collapsed: show as simple link to main href
+                  if (isCollapsed) {
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        onClick={onClose}
+                        title={item.name}
+                        className={cn(
+                          "flex items-center justify-center p-2 text-sm font-medium rounded-lg transition-colors",
+                          isActive || isChildActive
+                            ? "text-white bg-primary"
+                            : "text-secondary-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#262626]"
+                        )}
+                      >
+                        <item.icon className="w-5 h-5" />
+                      </Link>
+                    );
+                  }
+
+                  // When expanded: show expandable section with children
                   return (
                     <div key={item.name} className={`sidebar-${item.name.toLowerCase().replace(' ', '-')}`}>
                       <button
@@ -297,33 +356,68 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     key={item.name}
                     to={item.href}
                     onClick={onClose}
+                    title={isCollapsed ? item.name : undefined}
                     className={cn(
                       `sidebar-${item.name.toLowerCase().replace(' ', '-')}`,
-                      "flex items-center px-2 py-2 text-sm font-medium rounded-lg transition-colors",
+                      "flex items-center text-sm font-medium rounded-lg transition-colors",
+                      isCollapsed ? "justify-center p-2" : "px-2 py-2",
                       isActive
                         ? "text-white bg-primary"
                         : "text-secondary-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#262626]"
                     )}
                   >
-                    <item.icon className="w-5 h-5 mr-3" />
-                    {item.name}
+                    <item.icon className="w-5 h-5" />
+                    {!isCollapsed && <span className="ml-3">{item.name}</span>}
                   </Link>
                 );
               })}
           </nav>
           
+          {/* Collapse toggle - desktop only */}
+          <div className="hidden md:block border-t dark:border-[#2E2E2E]">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleCollapse}
+              className={cn(
+                "w-full flex items-center gap-2 rounded-none h-10",
+                isCollapsed ? "justify-center px-0" : "justify-start px-4"
+              )}
+              title={isCollapsed ? "Expand sidebar (⌘B)" : "Collapse sidebar (⌘B)"}
+            >
+              {isCollapsed ? (
+                <PanelLeft className="w-4 h-4 text-gray-500" />
+              ) : (
+                <>
+                  <PanelLeftClose className="w-4 h-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Collapse</span>
+                </>
+              )}
+            </Button>
+          </div>
+
           {/* User Profile */}
-          <div className="p-4 border-t dark:border-[#2E2E2E]">
-            <div className="flex items-center">
-              <div className="w-8 h-8 bg-secondary-200 dark:bg-[#2E2E2E] rounded-full flex items-center justify-center">
+          <div className={cn(
+            "border-t dark:border-[#2E2E2E]",
+            isCollapsed ? "p-2" : "p-4"
+          )}>
+            <div className={cn(
+              "flex items-center",
+              isCollapsed && "justify-center"
+            )}
+            title={isCollapsed ? `${user?.firstName} ${user?.lastName}` : undefined}
+            >
+              <div className="w-8 h-8 bg-secondary-200 dark:bg-[#2E2E2E] rounded-full flex items-center justify-center flex-shrink-0">
                 <User className="w-4 h-4 text-secondary-600 dark:text-gray-300" />
               </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-secondary-700 dark:text-white">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-xs text-secondary-500 dark:text-gray-400">{user?.position}</p>
-              </div>
+              {!isCollapsed && (
+                <div className="ml-3 min-w-0">
+                  <p className="text-sm font-medium text-secondary-700 dark:text-white truncate">
+                    {user?.firstName} {user?.lastName}
+                  </p>
+                  <p className="text-xs text-secondary-500 dark:text-gray-400 truncate">{user?.position}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
