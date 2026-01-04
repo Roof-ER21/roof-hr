@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
-import { 
-  toolInventory, 
-  toolAssignments, 
+import {
+  toolInventory,
+  toolAssignments,
   toolSignatures,
+  toolAuditLog,
   users,
   inventoryAlerts,
   welcomePackBundles,
@@ -53,6 +54,24 @@ function checkRole(allowedRoles: string[]) {
 // Initialize SendGrid if API key is available
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
+// Helper function to log tool audit trail
+async function logToolAudit(data: {
+  toolId: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'QUANTITY_ADJUST' | 'ASSIGN' | 'RETURN';
+  changedBy: string;
+  previousValues?: any;
+  newValues?: any;
+  quantityChange?: number;
+  notes?: string;
+}) {
+  const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  await db.insert(toolAuditLog).values({
+    id,
+    ...data,
+    createdAt: new Date()
+  });
 }
 
 // Helper function to sync tools inventory with Google Sheets
@@ -246,6 +265,20 @@ router.get('/inventory', async (req, res) => {
   } catch (error) {
     console.error('Error fetching tool inventory:', error);
     res.status(500).json({ error: 'Failed to fetch tool inventory' });
+  }
+});
+
+// Get audit log for a specific tool
+router.get('/inventory/:id/audit-log', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const logs = await db.select().from(toolAuditLog)
+      .where(eq(toolAuditLog.toolId, id))
+      .orderBy(desc(toolAuditLog.createdAt));
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching tool audit log:', error);
+    res.status(500).json({ error: 'Failed to fetch tool audit log' });
   }
 });
 

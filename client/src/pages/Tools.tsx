@@ -22,7 +22,7 @@ import {
   Send, Edit, Trash2, CheckCircle, XCircle, Clock,
   AlertCircle, AlertTriangle, Mail, FileSignature, ArrowLeft, Search,
   Upload, Download, RefreshCw, ChevronDown, ChevronRight, User, PenTool, Bell,
-  ClipboardList, Copy, ExternalLink
+  ClipboardList, Copy, ExternalLink, History
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -114,6 +114,9 @@ const statusColors = {
   DAMAGED: 'bg-orange-100 text-orange-800'
 };
 
+const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', 'XXL', '3X', '4X'] as const;
+const CLOTHING_CATEGORIES = ['POLO', 'OTHER', 'BOOTS'];
+
 export function Tools() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -162,7 +165,8 @@ export function Tools() {
     condition: 'GOOD',
     purchasePrice: '',
     location: '',
-    notes: ''
+    notes: '',
+    size: ''
   });
 
   // Deduplication dialog state
@@ -235,6 +239,11 @@ export function Tools() {
   const [bulkEditCondition, setBulkEditCondition] = useState<string>('');
   const [bulkEditLocation, setBulkEditLocation] = useState<string>('');
   const [bulkEditNotes, setBulkEditNotes] = useState<string>('');
+
+  // History dialog state
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [historyToolId, setHistoryToolId] = useState<string | null>(null);
+  const [historyToolName, setHistoryToolName] = useState('');
 
   // Ahmed always has manager access via email fallback
   const isManager = user?.email === 'ahmed.mahmoud@theroofdocs.com' ||
@@ -355,6 +364,26 @@ export function Tools() {
       return res.json();
     },
     enabled: isManager
+  });
+
+  // Fetch audit log for selected tool
+  const { data: auditLogs = [] } = useQuery({
+    queryKey: ['/api/tools/inventory', historyToolId, 'audit-log'],
+    queryFn: async () => {
+      if (!historyToolId) return [];
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/tools/inventory/${historyToolId}/audit-log`, {
+        headers,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error('Failed to fetch audit logs');
+      return res.json();
+    },
+    enabled: !!historyToolId
   });
 
   // Create tool mutation
@@ -1497,8 +1526,8 @@ export function Tools() {
                     </div>
                     <div>
                       <Label>Condition</Label>
-                      <Select 
-                        value={newTool.condition} 
+                      <Select
+                        value={newTool.condition}
                         onValueChange={(value) => setNewTool({ ...newTool, condition: value })}
                       >
                         <SelectTrigger>
@@ -1513,7 +1542,26 @@ export function Tools() {
                       </Select>
                     </div>
                   </div>
-                  
+
+                  {CLOTHING_CATEGORIES.includes(newTool.category) && (
+                    <div className="space-y-2">
+                      <Label>Size</Label>
+                      <Select
+                        value={newTool.size || ''}
+                        onValueChange={(value) => setNewTool({ ...newTool, size: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select size" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SIZE_OPTIONS.map(size => (
+                            <SelectItem key={size} value={size}>{size}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>Purchase Price</Label>
@@ -2022,6 +2070,18 @@ export function Tools() {
                                         variant="ghost"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          setHistoryToolId(tool.id);
+                                          setHistoryToolName(tool.name);
+                                          setShowHistoryDialog(true);
+                                        }}
+                                      >
+                                        <History className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           setSelectedTool(tool);
                                           setShowEditToolDialog(true);
                                         }}
@@ -2374,6 +2434,25 @@ export function Tools() {
                   />
                 </div>
               </div>
+
+              {CLOTHING_CATEGORIES.includes(selectedTool.category) && (
+                <div className="space-y-2">
+                  <Label>Size</Label>
+                  <Select
+                    value={selectedTool.size || ''}
+                    onValueChange={(value) => setSelectedTool({ ...selectedTool, size: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select size" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SIZE_OPTIONS.map(size => (
+                        <SelectItem key={size} value={size}>{size}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -3230,6 +3309,33 @@ export function Tools() {
                 {bulkEditMutation.isPending ? 'Updating...' : 'Update All'}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>History: {historyToolName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {auditLogs.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">No history recorded yet</p>
+            ) : (
+              auditLogs.map((log: any) => (
+                <div key={log.id} className="border rounded-lg p-3">
+                  <div className="flex justify-between items-start">
+                    <Badge variant={log.action === 'DELETE' ? 'destructive' : log.action === 'CREATE' ? 'default' : 'secondary'}>
+                      {log.action}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</span>
+                  </div>
+                  {log.notes && <p className="mt-2 text-sm">{log.notes}</p>}
+                  {log.quantityChange && <p className="text-sm">Quantity change: {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}</p>}
+                </div>
+              ))
+            )}
           </div>
         </DialogContent>
       </Dialog>

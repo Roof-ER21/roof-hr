@@ -1280,6 +1280,7 @@ export const toolInventory = pgTable('tool_inventory', {
   purchasePrice: integer('purchase_price'),
   location: text('location'),
   notes: text('notes'),
+  size: text('size').$type<'S' | 'M' | 'L' | 'XL' | 'XXL' | '3X' | '4X'>(),
   isActive: boolean('is_active').notNull().default(true),
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -1337,6 +1338,25 @@ export const toolSignatureSchema = createInsertSchema(toolSignatures);
 export const insertToolSignatureSchema = createInsertSchema(toolSignatures).omit({
   id: true,
   signedAt: true,
+});
+
+// Tool Audit Log - track all changes to tool inventory
+export const toolAuditLog = pgTable('tool_audit_log', {
+  id: text('id').primaryKey(),
+  toolId: text('tool_id').notNull(),
+  action: text('action').$type<'CREATE' | 'UPDATE' | 'DELETE' | 'QUANTITY_ADJUST' | 'ASSIGN' | 'RETURN'>().notNull(),
+  changedBy: text('changed_by').notNull(),
+  previousValues: jsonb('previous_values'),
+  newValues: jsonb('new_values'),
+  quantityChange: integer('quantity_change'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const toolAuditLogSchema = createInsertSchema(toolAuditLog);
+export const insertToolAuditLogSchema = createInsertSchema(toolAuditLog).omit({
+  id: true,
+  createdAt: true,
 });
 
 // Equipment Receipts - comprehensive document for new hire tool acknowledgment
@@ -2069,6 +2089,7 @@ export const emailLogsRelations = relations(emailLogs, ({ one }) => ({
 // Tools Management Relations
 export const toolInventoryRelations = relations(toolInventory, ({ many, one }) => ({
   assignments: many(toolAssignments),
+  auditLogs: many(toolAuditLog),
   createdByUser: one(users, {
     fields: [toolInventory.createdBy],
     references: [users.id]
@@ -2100,6 +2121,17 @@ export const toolSignaturesRelations = relations(toolSignatures, ({ one }) => ({
   }),
   employee: one(users, {
     fields: [toolSignatures.employeeId],
+    references: [users.id]
+  })
+}));
+
+export const toolAuditLogRelations = relations(toolAuditLog, ({ one }) => ({
+  tool: one(toolInventory, {
+    fields: [toolAuditLog.toolId],
+    references: [toolInventory.id]
+  }),
+  user: one(users, {
+    fields: [toolAuditLog.changedBy],
     references: [users.id]
   })
 }));
