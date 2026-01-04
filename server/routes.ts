@@ -978,7 +978,7 @@ router.patch('/api/users/:id', requireAuth, requireManager, async (req, res) => 
         });
 
         // Send equipment return email
-        const baseUrl = process.env.APP_URL || 'http://localhost:5050';
+        const baseUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
         const scheduleUrl = `${baseUrl}/equipment-return/${accessToken}`;
         const checklistUrl = `${baseUrl}/equipment-checklist/${accessToken}`;
 
@@ -4206,7 +4206,7 @@ export function registerRoutes(app: express.Application) {
       });
 
       // Generate form URL
-      const baseUrl = process.env.APP_URL || 'http://localhost:5050';
+      const baseUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
       const formUrl = `${baseUrl}/equipment-checklist/${accessToken}`;
 
       res.json({
@@ -4259,7 +4259,7 @@ export function registerRoutes(app: express.Application) {
       }
 
       // Generate form URL
-      const baseUrl = process.env.APP_URL || 'http://localhost:5050';
+      const baseUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
       const formUrl = `${baseUrl}/equipment-checklist/${checklist.accessToken}`;
 
       // Send email
@@ -4322,7 +4322,7 @@ export function registerRoutes(app: express.Application) {
         });
 
         checklistId = checklist.id;
-        const baseUrl = process.env.APP_URL || 'http://localhost:5050';
+        const baseUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
         scheduleUrl = `${baseUrl}/equipment-return/${accessToken}`;  // Schedule dropoff
         checklistUrl = `${baseUrl}/equipment-checklist/${accessToken}`;  // Sign checklist
       }
