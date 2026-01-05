@@ -365,6 +365,16 @@ app.use((req, res, next) => {
         logger.error('Failed to start onboarding overdue tasks scheduler:', error);
         // Continue - notifications can be triggered manually via API
       }
+
+      // Initialize interview overdue job (runs daily at 9 AM EST)
+      try {
+        const { startInterviewOverdueJob } = await import('./jobs/interview-overdue-job');
+        startInterviewOverdueJob();
+        logger.info('Interview overdue job scheduler started (9 AM EST daily)');
+      } catch (error) {
+        logger.error('Failed to start interview overdue job:', error);
+        // Continue - job can be triggered manually via API
+      }
     } catch (error) {
       logger.error('Error during server initialization:', error);
     }

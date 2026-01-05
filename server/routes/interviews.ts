@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { isBefore, startOfDay } from 'date-fns';
 import { storage } from '../storage';
 import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewReminderSchema } from '@shared/schema';
 import { getConflictDetector } from '../services/calendar-conflict-detector';
@@ -662,7 +663,20 @@ router.post('/check-conflicts', requireAuth, requireManager, async (req, res) =>
 router.get('/', requireAuth, async (req, res) => {
   try {
     const interviews = await storage.getAllInterviews();
-    res.json(interviews);
+    const now = startOfDay(new Date());
+
+    // Add isOverdue computed field to each interview
+    const interviewsWithOverdue = interviews.map((interview: any) => {
+      const scheduledDate = startOfDay(new Date(interview.scheduledDate));
+      const isOverdue = interview.status === 'SCHEDULED' && isBefore(scheduledDate, now);
+
+      return {
+        ...interview,
+        isOverdue
+      };
+    });
+
+    res.json(interviewsWithOverdue);
   } catch (error) {
     console.error('[GET INTERVIEWS ERROR]', error);
     res.status(500).json({ error: 'Failed to fetch interviews' });

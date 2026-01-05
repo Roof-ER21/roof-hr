@@ -285,23 +285,24 @@ class DeadlineTracker extends EventEmitter {
     const alerts: DeadlineAlert[] = [];
 
     try {
-      // Get all interviews and filter for upcoming scheduled ones
+      // Get all interviews and filter for scheduled ones (both upcoming and overdue)
       const allInterviews = await storage.getAllInterviews();
       const today = new Date();
 
-      const upcomingInterviews = allInterviews.filter((interview) => {
-        if (interview.status !== 'SCHEDULED') return false;
-        const scheduledDate = new Date(interview.scheduledDate);
-        return isAfter(scheduledDate, today);
+      const scheduledInterviews = allInterviews.filter((interview) => {
+        return interview.status === 'SCHEDULED';
       });
 
-      for (const interview of upcomingInterviews) {
+      for (const interview of scheduledInterviews) {
         const interviewDate = new Date(interview.scheduledDate);
         const daysUntil = differenceInDays(interviewDate, today);
         const hoursUntil = Math.ceil((interviewDate.getTime() - today.getTime()) / (1000 * 60 * 60));
+        const isOverdue = isBefore(interviewDate, today);
 
-        if (this.alertThresholds.INTERVIEW.includes(daysUntil)) {
+        // Include if within alert threshold OR if overdue
+        if (this.alertThresholds.INTERVIEW.includes(daysUntil) || isOverdue) {
           const candidate = await storage.getCandidateById(interview.candidateId);
+          const daysOverdue = Math.abs(daysUntil);
 
           alerts.push({
             type: 'INTERVIEW',
@@ -309,9 +310,11 @@ class DeadlineTracker extends EventEmitter {
             entityName: `${candidate?.firstName} ${candidate?.lastName} - ${interview.type}`,
             deadline: interviewDate,
             daysUntilDeadline: daysUntil,
-            priority: daysUntil === 0 ? 'HIGH' : daysUntil === 1 ? 'MEDIUM' : 'LOW',
+            priority: isOverdue ? 'HIGH' : daysUntil === 0 ? 'HIGH' : daysUntil === 1 ? 'MEDIUM' : 'LOW',
             assignedTo: interview.interviewerId || undefined,
-            message: daysUntil === 0
+            message: isOverdue
+              ? `OVERDUE: Interview with ${candidate?.firstName} ${candidate?.lastName} was scheduled ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} ago and needs to be completed or rescheduled`
+              : daysUntil === 0
               ? `Interview with ${candidate?.firstName} ${candidate?.lastName} is TODAY in ${hoursUntil} hours`
               : `Interview with ${candidate?.firstName} ${candidate?.lastName} is in ${daysUntil} days`
           });
