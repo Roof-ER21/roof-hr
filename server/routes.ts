@@ -2179,14 +2179,13 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
                           'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
 
     // Import sourcer role checks
-    const { isLeadSourcer, isExtendedSourcer } = await import('../shared/constants/roles');
+    const { isLeadSourcer } = await import('../shared/constants/roles');
 
     // Determine who can see all candidates:
     // - Managers see all
     // - Lead sourcers (Ryan) see all
-    // - Extended sourcers (Sima, Natia) see all - they have interview scheduling powers
-    // - Everyone else (regular sourcers) only see their assigned candidates
-    const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user) || isExtendedSourcer(user);
+    // - Everyone else (including extended sourcers) only see their assigned candidates
+    const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user);
 
     // Log filtering decision for debugging
     console.log(`[Candidates API] User ${user.email} (role: ${user.role}, id: ${user.id}) - canSeeAll: ${canSeeAllCandidates}`);
