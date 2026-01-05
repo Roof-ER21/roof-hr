@@ -15,7 +15,7 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isLeadSourcer } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
@@ -2438,13 +2438,18 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
       return res.status(403).json({ error: 'You can only move candidates assigned to you' });
     }
 
-    // SOURCERs can only move to these stages
-    const allowedStages = ['APPLIED', 'SCREENING', 'INTERVIEW'];
+    // Extended SOURCERs (Sima, Natia) can move to OFFER stage too
+    const isExtended = isExtendedSourcer(user);
+    const allowedStages = isExtended
+      ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER']  // Extended sourcers can go to OFFER
+      : ['APPLIED', 'SCREENING', 'INTERVIEW'];          // Regular sourcers stop at INTERVIEW
+
     if (!allowedStages.includes(newStatus)) {
-      console.log(`[SOURCER-MOVE] Denied: ${user.email} tried to move to ${newStatus} which is not allowed`);
-      return res.status(403).json({
-        error: 'SOURCERs can only move candidates to Application Review, Phone Screening, or Interview Process. Contact a manager to move to later stages.'
-      });
+      console.log(`[SOURCER-MOVE] Denied: ${user.email} tried to move to ${newStatus} which is not allowed (extended: ${isExtended})`);
+      const errorMsg = isExtended
+        ? 'You can only move candidates up to Offer Extended. Contact a manager to hire or reject candidates.'
+        : 'SOURCERs can only move candidates to Application Review, Phone Screening, or Interview Process. Contact a manager to move to later stages.';
+      return res.status(403).json({ error: errorMsg });
     }
 
     // Update the candidate

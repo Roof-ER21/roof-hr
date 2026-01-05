@@ -1008,6 +1008,7 @@ export default function EnhancedRecruiting() {
     isSourcer,
     isSourcerRole,
     isManager,
+    isExtendedSourcer,
     canBulkManageCandidates,
     canAssignCandidates,
     canAccessEmailCampaigns,
@@ -1015,8 +1016,11 @@ export default function EnhancedRecruiting() {
     canSeeAllRecruitmentStats,
   } = usePermissions();
 
-  // Stages that SOURCERs can move candidates to (not OFFER, HIRED, or DEAD)
-  const SOURCER_ALLOWED_STAGES = ['APPLIED', 'SCREENING', 'INTERVIEW'];
+  // Stages that SOURCERs can move candidates to
+  // Extended sourcers (Sima, Natia) can move to OFFER, regular sourcers cannot
+  const SOURCER_ALLOWED_STAGES = isExtendedSourcer()
+    ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER']
+    : ['APPLIED', 'SCREENING', 'INTERVIEW'];
   const userIsSourcerOnly = isSourcerRole() && !isManager();
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');

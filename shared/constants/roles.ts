@@ -278,10 +278,17 @@ export const LEAD_SOURCER_EMAILS = [
   'careers@theroofdocs.com',     // Ryan Ferguson
 ];
 
+// Extended Sourcers - can move candidates to OFFER stage (but not HIRED)
+export const EXTENDED_SOURCER_EMAILS = [
+  'sima.popal@theroofdocs.com',  // Sima Popal
+  'jobs@theroofdocs.com',        // Natia Tutberidze
+];
+
 // All sourcers combined (kept for backward compatibility)
 export const ALL_SOURCER_EMAILS = [
   ...LIMITED_SOURCER_EMAILS,
   ...LEAD_SOURCER_EMAILS,
+  ...EXTENDED_SOURCER_EMAILS,
 ];
 
 /**
@@ -298,6 +305,15 @@ export function isLimitedSourcer(user: { email?: string } | null): boolean {
 export function isLeadSourcer(user: { email?: string } | null): boolean {
   if (!user?.email) return false;
   return LEAD_SOURCER_EMAILS.includes(user.email.toLowerCase());
+}
+
+/**
+ * Check if user is an extended sourcer (can move to OFFER stage)
+ * Extended sourcers: Sima Popal, Natia Tutberidze
+ */
+export function isExtendedSourcer(user: { email?: string } | null): boolean {
+  if (!user?.email) return false;
+  return EXTENDED_SOURCER_EMAILS.includes(user.email.toLowerCase());
 }
 
 /**

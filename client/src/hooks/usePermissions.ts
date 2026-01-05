@@ -9,10 +9,12 @@ import {
   LIMITED_SOURCER_EMAILS,
   LEAD_SOURCER_EMAILS,
   ALL_SOURCER_EMAILS,
+  EXTENDED_SOURCER_EMAILS,
   isLimitedSourcer as isLimitedSourcerFn,
   isLeadSourcer as isLeadSourcerFn,
   isSourcer as isSourcerFn,
   isSourcerRole as isSourcerRoleFn,
+  isExtendedSourcer as isExtendedSourcerFn,
 } from '@shared/constants/roles';
 
 export interface Permission {
@@ -154,6 +156,15 @@ export const usePermissions = () => {
   };
 
   /**
+   * Check if user is an extended sourcer (Sima, Natia)
+   * Extended sourcers can move candidates to OFFER stage
+   */
+  const isExtendedSourcer = (): boolean => {
+    if (!user) return false;
+    return isExtendedSourcerFn(user);
+  };
+
+  /**
    * Check if user is any type of sourcer (email-based)
    */
   const isSourcer = (): boolean => {
@@ -251,6 +262,7 @@ export const usePermissions = () => {
     // Sourcer role checks
     isLimitedSourcer,
     isLeadSourcer,
+    isExtendedSourcer, // Sima, Natia - can move to OFFER
     isSourcer,
     isSourcerRole, // Role-based check for Sima/Jobs
     // Sourcer permission helpers
