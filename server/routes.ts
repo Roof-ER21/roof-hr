@@ -2179,13 +2179,14 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
                           'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
 
     // Import sourcer role checks
-    const { isLeadSourcer } = await import('../shared/constants/roles');
+    const { isLeadSourcer, isExtendedSourcer } = await import('../shared/constants/roles');
 
     // Determine who can see all candidates:
     // - Managers see all
     // - Lead sourcers (Ryan) see all
-    // - Everyone else (including assigned sourcers) only see their assigned candidates
-    const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user);
+    // - Extended sourcers (Sima, Natia) see all - they have interview scheduling powers
+    // - Everyone else (regular sourcers) only see their assigned candidates
+    const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user) || isExtendedSourcer(user);
 
     // Log filtering decision for debugging
     console.log(`[Candidates API] User ${user.email} (role: ${user.role}, id: ${user.id}) - canSeeAll: ${canSeeAllCandidates}`);
@@ -2438,17 +2439,18 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
       return res.status(403).json({ error: 'You can only move candidates assigned to you' });
     }
 
-    // Extended SOURCERs (Sima, Natia) can move to OFFER stage too
+    // Extended SOURCERs (Sima, Natia) can move to OFFER stage and DEAD/NO_SHOW statuses
+    // All SOURCERs can now move candidates to DEAD/NO_SHOW statuses when needed
     const isExtended = isExtendedSourcer(user);
     const allowedStages = isExtended
-      ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER']  // Extended sourcers can go to OFFER
-      : ['APPLIED', 'SCREENING', 'INTERVIEW'];          // Regular sourcers stop at INTERVIEW
+      ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']  // Extended sourcers: full pipeline + dead/no-show
+      : ['APPLIED', 'SCREENING', 'INTERVIEW', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'];          // Regular sourcers: early stages + dead/no-show
 
     if (!allowedStages.includes(newStatus)) {
       console.log(`[SOURCER-MOVE] Denied: ${user.email} tried to move to ${newStatus} which is not allowed (extended: ${isExtended})`);
       const errorMsg = isExtended
-        ? 'You can only move candidates up to Offer Extended. Contact a manager to hire or reject candidates.'
-        : 'SOURCERs can only move candidates to Application Review, Phone Screening, or Interview Process. Contact a manager to move to later stages.';
+        ? 'You can only move candidates up to Offer or mark as Dead/No-Show. Contact a manager to hire candidates.'
+        : 'SOURCERs can only move candidates to early stages or mark as Dead/No-Show. Contact a manager to move to Offer or Hired.';
       return res.status(403).json({ error: errorMsg });
     }
 
