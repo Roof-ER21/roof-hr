@@ -463,6 +463,7 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSour
 // Priority sourcer emails - these appear first in the list
 const PRIORITY_SOURCER_EMAILS = [
   'jobs@theroofdocs.com',
+  'recruiting@theroofdocs.com',
   'sima.popal@theroofdocs.com',
 ];
 
