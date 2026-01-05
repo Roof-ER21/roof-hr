@@ -7,7 +7,7 @@ import { storage } from './storage';
 import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { db } from './db';
-import { eq, and, ne, or, lte, gte, inArray } from 'drizzle-orm';
+import { eq, and, ne, or, lte, gte, inArray, ilike } from 'drizzle-orm';
 import {
   loginSchema, registerSchema, insertPtoRequestSchema,
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
@@ -318,7 +318,67 @@ router.post('/api/public/equipment-checklist/:token', async (req, res) => {
       status: 'SIGNED',
     });
 
-    // If this is for a RETURNED type, update the termination reminder
+    // Map checklist items to inventory names for tracking
+    const checklistItemsToInventory = [
+      { field: 'grayPoloReceived', received: grayPoloReceived, name: 'Gray Polo', category: 'POLO' },
+      { field: 'blackPoloReceived', received: blackPoloReceived, name: 'Black Polo', category: 'POLO' },
+      { field: 'grayZipReceived', received: grayZipReceived, name: 'Gray Quarter Zip', category: 'POLO' },
+      { field: 'blackZipReceived', received: blackZipReceived, name: 'Black Quarter Zip', category: 'POLO' },
+      { field: 'ipadWithKeyboardReceived', received: ipadWithKeyboardReceived, name: 'iPad with Keyboard', category: 'IPAD' },
+      { field: 'ipadOnlyReceived', received: ipadOnlyReceived, name: 'iPad', category: 'IPAD' },
+      { field: 'keyboardOnlyReceived', received: keyboardOnlyReceived, name: 'Keyboard', category: 'OTHER' },
+      { field: 'flashlightSetReceived', received: flashlightSetReceived, name: 'Flashlight Set', category: 'OTHER' },
+      { field: 'flashlightOnlyReceived', received: flashlightOnlyReceived, name: 'Flashlight', category: 'OTHER' },
+      { field: 'ladderReceived', received: ladderReceived, name: 'Ladder', category: 'LADDER' },
+    ];
+
+    // Handle inventory based on checklist type
+    if (checklist.type === 'ISSUED' && checklist.employeeId) {
+      // ISSUED: Create tool assignments and decrease inventory
+      for (const item of checklistItemsToInventory) {
+        if (item.received) {
+          // Find matching inventory item
+          const inventoryItems = await db
+            .select()
+            .from(toolInventory)
+            .where(
+              or(
+                ilike(toolInventory.name, `%${item.name}%`),
+                and(
+                  eq(toolInventory.category, item.category as any),
+                  ilike(toolInventory.name, `%${item.name.split(' ')[0]}%`)
+                )
+              )
+            )
+            .limit(1);
+
+          if (inventoryItems[0] && inventoryItems[0].availableQuantity > 0) {
+            // Create tool assignment
+            await db.insert(toolAssignments).values({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              toolId: inventoryItems[0].id,
+              employeeId: checklist.employeeId,
+              assignedBy: 'system',
+              assignedDate: new Date(),
+              status: 'ASSIGNED',
+              condition: inventoryItems[0].condition,
+              notes: `Assigned via equipment checklist signing`
+            });
+
+            // Decrease inventory
+            await db
+              .update(toolInventory)
+              .set({
+                availableQuantity: inventoryItems[0].availableQuantity - 1,
+                updatedAt: new Date()
+              })
+              .where(eq(toolInventory.id, inventoryItems[0].id));
+          }
+        }
+      }
+    }
+
+    // If this is for a RETURNED type, update the termination reminder AND close assignments
     if (checklist.type === 'RETURNED' && checklist.employeeId) {
       const reminder = await storage.getTerminationReminderByEmployee(checklist.employeeId);
       if (reminder) {
@@ -328,6 +388,55 @@ router.post('/api/public/equipment-checklist/:token', async (req, res) => {
           itemsReturned,
           resolvedAt: itemsReturned ? new Date() : null,
         });
+      }
+
+      // For RETURNED: Close out tool assignments and increase inventory
+      for (const item of checklistItemsToInventory) {
+        if (item.received) {
+          // Find active assignment for this employee matching the item
+          const activeAssignments = await db
+            .select({
+              assignment: toolAssignments,
+              tool: toolInventory
+            })
+            .from(toolAssignments)
+            .innerJoin(toolInventory, eq(toolAssignments.toolId, toolInventory.id))
+            .where(
+              and(
+                eq(toolAssignments.employeeId, checklist.employeeId),
+                eq(toolAssignments.status, 'ASSIGNED'),
+                or(
+                  ilike(toolInventory.name, `%${item.name}%`),
+                  eq(toolInventory.category, item.category as any)
+                )
+              )
+            )
+            .limit(1);
+
+          if (activeAssignments[0]) {
+            const { assignment, tool } = activeAssignments[0];
+
+            // Mark assignment as returned
+            await db
+              .update(toolAssignments)
+              .set({
+                status: 'RETURNED',
+                returnedDate: new Date(),
+                returnCondition: 'GOOD',
+                returnNotes: `Returned via termination checklist`
+              })
+              .where(eq(toolAssignments.id, assignment.id));
+
+            // Increase inventory
+            await db
+              .update(toolInventory)
+              .set({
+                availableQuantity: tool.availableQuantity + 1,
+                updatedAt: new Date()
+              })
+              .where(eq(toolInventory.id, tool.id));
+          }
+        }
       }
     }
 
@@ -3286,27 +3395,61 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
             status: 'ASSIGNED'
           });
           
-          // Update inventory for clothing items
-          if (item.itemCategory === 'CLOTHING') {
-            const inventoryItems = await db
-              .select()
-              .from(toolInventory)
-              .where(
+          // Update inventory for ALL bundle items (not just clothing)
+          // Map bundle item categories to tool inventory categories
+          const categoryMap: Record<string, string> = {
+            'CLOTHING': 'POLO',
+            'POLO': 'POLO',
+            'QUARTER_ZIP': 'POLO',
+            'LAPTOP': 'LAPTOP',
+            'IPAD': 'IPAD',
+            'LADDER': 'LADDER',
+            'BOOTS': 'BOOTS',
+            'TECHNOLOGY': 'OTHER',
+            'TOOLS': 'OTHER',
+            'FLASHLIGHT': 'OTHER',
+            'KEYBOARD': 'OTHER',
+            'CHARGER': 'OTHER',
+            'OTHER': 'OTHER'
+          };
+
+          const toolCategory = categoryMap[item.itemCategory] || 'OTHER';
+
+          // Find matching inventory item by name or category
+          const inventoryItems = await db
+            .select()
+            .from(toolInventory)
+            .where(
+              or(
+                eq(toolInventory.name, item.itemName),
                 and(
-                  eq(toolInventory.name, item.itemName),
-                  eq(toolInventory.category, 'POLO' as const)
+                  ilike(toolInventory.name, `%${item.itemName}%`),
+                  eq(toolInventory.category, toolCategory as any)
                 )
-              );
-            
-            if (inventoryItems[0] && inventoryItems[0].availableQuantity >= item.quantity) {
-              await db
-                .update(toolInventory)
-                .set({
-                  availableQuantity: inventoryItems[0].availableQuantity - item.quantity,
-                  updatedAt: new Date()
-                })
-                .where(eq(toolInventory.id, inventoryItems[0].id));
-            }
+              )
+            );
+
+          if (inventoryItems[0] && inventoryItems[0].availableQuantity >= item.quantity) {
+            // Create tool assignment record
+            await db.insert(toolAssignments).values({
+              id: uuidv4(),
+              toolId: inventoryItems[0].id,
+              employeeId: newEmployee.id,
+              assignedBy: user.id,
+              assignedDate: new Date(),
+              status: 'ASSIGNED',
+              condition: inventoryItems[0].condition,
+              notes: `Assigned via welcome package during onboarding`
+            });
+
+            // Decrease available quantity
+            await db
+              .update(toolInventory)
+              .set({
+                availableQuantity: inventoryItems[0].availableQuantity - item.quantity,
+                updatedAt: new Date()
+              })
+              .where(eq(toolInventory.id, inventoryItems[0].id));
           }
         }
         welcomePackageAssigned = true;
