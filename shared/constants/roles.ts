@@ -280,8 +280,7 @@ export const LEAD_SOURCER_EMAILS = [
 
 // Extended Sourcers - can move candidates to OFFER stage (but not HIRED)
 export const EXTENDED_SOURCER_EMAILS = [
-  'sima.popal@theroofdocs.com',  // Sima Popal (legacy)
-  'recruiting@theroofdocs.com',  // Sima Popal (active)
+  'recruiting@theroofdocs.com',  // Sima Popal
   'jobs@theroofdocs.com',        // Natia Tutberidze
 ];
 

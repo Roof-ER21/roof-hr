@@ -689,7 +689,7 @@ export default function ResumeUploaderPage() {
                       <CommandGroup heading="Priority Sourcers">
                         {sourcers?.filter(s =>
                           s.email?.toLowerCase() === 'jobs@theroofdocs.com' ||
-                          s.email?.toLowerCase() === 'sima.popal@theroofdocs.com'
+                          s.email?.toLowerCase() === 'recruiting@theroofdocs.com'
                         ).map((sourcer) => (
                           <CommandItem
                             key={sourcer.id}
@@ -716,7 +716,7 @@ export default function ResumeUploaderPage() {
                       <CommandGroup heading="All Sourcers">
                         {sourcers?.filter(s =>
                           s.email?.toLowerCase() !== 'jobs@theroofdocs.com' &&
-                          s.email?.toLowerCase() !== 'sima.popal@theroofdocs.com'
+                          s.email?.toLowerCase() !== 'recruiting@theroofdocs.com'
                         ).map((sourcer) => (
                           <CommandItem
                             key={sourcer.id}
