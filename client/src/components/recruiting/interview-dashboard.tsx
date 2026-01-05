@@ -18,6 +18,7 @@ interface Interview {
   notes?: string;
   rating?: number;
   feedback?: string;
+  daysOverdue?: number;
 }
 
 export function InterviewDashboard() {
@@ -56,6 +57,13 @@ export function InterviewDashboard() {
   const averageRating = completedInterviews.length > 0
     ? completedInterviews.reduce((sum, i) => sum + (i.rating || 0), 0) / completedInterviews.length
     : 0;
+
+  const getOverdueClass = (daysOverdue: number) => {
+    if (daysOverdue >= 7) return 'text-red-600 font-semibold';
+    if (daysOverdue >= 4) return 'text-yellow-600';
+    if (daysOverdue >= 1) return 'text-gray-500';
+    return '';
+  };
 
   const getInterviewTypeIcon = (type: string) => {
     switch (type) {
@@ -200,7 +208,7 @@ export function InterviewDashboard() {
                         {getInterviewTypeIcon(interview.type)}
                       </div>
                       <div className="space-y-1">
-                        <div className="font-medium">
+                        <div className={`font-medium ${interview.daysOverdue ? getOverdueClass(interview.daysOverdue) : ''}`}>
                           {getCandidateName(interview.candidateId)}
                         </div>
                         <div className="text-sm text-muted-foreground">
@@ -262,7 +270,7 @@ export function InterviewDashboard() {
                 .map((interview) => (
                   <div key={interview.id} className="border-l-4 border-primary pl-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="font-medium">
+                      <div className={`font-medium ${interview.daysOverdue ? getOverdueClass(interview.daysOverdue) : ''}`}>
                         {getCandidateName(interview.candidateId)}
                       </div>
                       <div className="flex items-center gap-2">

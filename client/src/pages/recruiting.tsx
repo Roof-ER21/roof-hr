@@ -310,6 +310,13 @@ function Recruiting() {
     }
   };
 
+  const getOverdueClass = (daysOverdue: number) => {
+    if (daysOverdue >= 7) return 'text-red-600 font-semibold';
+    if (daysOverdue >= 4) return 'text-yellow-600';
+    if (daysOverdue >= 1) return 'text-gray-500';
+    return '';
+  };
+
   const isLoading = candidatesLoading || interviewsLoading;
 
   if (isLoading) {
@@ -768,7 +775,9 @@ function Recruiting() {
                                 </span>
                               </div>
                               <div>
-                                <div className="font-medium">{candidate?.firstName} {candidate?.lastName}</div>
+                                <div className={`font-medium ${getOverdueClass(interview.daysOverdue || 0)}`}>
+                                  {candidate?.firstName} {candidate?.lastName}
+                                </div>
                                 <div className="text-sm text-secondary-500">{candidate?.position}</div>
                               </div>
                             </div>

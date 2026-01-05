@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { isBefore, startOfDay } from 'date-fns';
+import { isBefore, startOfDay, differenceInDays } from 'date-fns';
 import { storage } from '../storage';
 import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewReminderSchema } from '@shared/schema';
 import { getConflictDetector } from '../services/calendar-conflict-detector';
@@ -665,14 +665,20 @@ router.get('/', requireAuth, async (req, res) => {
     const interviews = await storage.getAllInterviews();
     const now = startOfDay(new Date());
 
-    // Add isOverdue computed field to each interview
+    // Add isOverdue and daysOverdue computed fields to each interview
     const interviewsWithOverdue = interviews.map((interview: any) => {
       const scheduledDate = startOfDay(new Date(interview.scheduledDate));
       const isOverdue = interview.status === 'SCHEDULED' && isBefore(scheduledDate, now);
 
+      // Calculate days overdue: only set > 0 when status is SCHEDULED and date has passed
+      const daysOverdue = interview.status === 'SCHEDULED' && isBefore(scheduledDate, now)
+        ? differenceInDays(now, scheduledDate)
+        : 0;
+
       return {
         ...interview,
-        isOverdue
+        isOverdue,
+        daysOverdue
       };
     });
 
