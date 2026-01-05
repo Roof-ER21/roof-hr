@@ -2562,6 +2562,9 @@ export default function EnhancedRecruiting() {
                 }),
               });
 
+              // Invalidate notes cache so the notes section refreshes
+              queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateForOfferNotes.candidate.id}/notes`] });
+
               // 2. Update the candidate status
               await updateCandidateMutation.mutateAsync({
                 id: candidateForOfferNotes.candidate.id,
@@ -2766,44 +2769,61 @@ export default function EnhancedRecruiting() {
             setCandidateForInterviewScreening(null);
           }}
           candidate={candidateForInterviewScreening.candidate}
-          onProceed={(screeningData) => {
-            // Only proceed if all requirements are met or manager approves despite failures
-            if (screeningData.allPassed) {
-              // All requirements met - proceed normally
-              updateCandidateMutation.mutate({
-                id: candidateForInterviewScreening.candidate.id,
-                data: { 
-                  status: 'INTERVIEW',
-                  notes: screeningData.notes 
-                    ? `${candidateForInterviewScreening.candidate.notes || ''}\n\nInterview Screening: ${screeningData.notes}`.trim()
-                    : candidateForInterviewScreening.candidate.notes
-                }
-              });
-              toast({
-                title: 'Screening Complete',
-                description: 'Candidate passed all requirements. Now schedule the interview.'
-              });
-            } else {
-              // Requirements not met but manager wants to proceed
+          onProceed={async (screeningData) => {
+            const candidateId = candidateForInterviewScreening.candidate.id;
+
+            // Build screening note content
+            let noteContent = '[INTERVIEW SCREENING]\n';
+            noteContent += `Driver's License: ${screeningData.hasDriversLicense ? '✓ Yes' : '✗ No'}\n`;
+            noteContent += `Reliable Vehicle: ${screeningData.hasReliableVehicle ? '✓ Yes' : '✗ No'}\n`;
+            noteContent += `Clear Communication: ${screeningData.hasClearCommunication ? '✓ Yes' : '✗ No'}\n`;
+
+            if (!screeningData.allPassed) {
               const failedRequirements = [];
               if (!screeningData.hasDriversLicense) failedRequirements.push('No Driver\'s License');
               if (!screeningData.hasReliableVehicle) failedRequirements.push('No Reliable Vehicle');
               if (!screeningData.hasClearCommunication) failedRequirements.push('Communication Issues');
-              
-              updateCandidateMutation.mutate({
-                id: candidateForInterviewScreening.candidate.id,
-                data: { 
-                  status: 'INTERVIEW',
-                  notes: `${candidateForInterviewScreening.candidate.notes || ''}\n\nInterview Screening Alert: ${failedRequirements.join(', ')}\nNotes: ${screeningData.notes}`.trim()
-                }
+              noteContent += `\n⚠️ ALERT: ${failedRequirements.join(', ')}\n`;
+            }
+
+            if (screeningData.notes) {
+              noteContent += `\nNotes: ${screeningData.notes}`;
+            }
+
+            try {
+              // 1. Update candidate status
+              await updateCandidateMutation.mutateAsync({
+                id: candidateId,
+                data: { status: 'INTERVIEW' }
               });
+
+              // 2. Save screening results to notes API (so they show in notes section)
+              await apiRequest(`/api/candidates/${candidateId}/notes`, {
+                method: 'POST',
+                body: JSON.stringify({
+                  content: noteContent,
+                  type: 'INTERVIEW'
+                }),
+              });
+
+              // 3. Invalidate notes cache so the notes section refreshes
+              queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/notes`] });
+
               toast({
-                title: 'Screening Complete with Warnings',
-                description: 'Managers have been alerted. Now schedule the interview.',
+                title: screeningData.allPassed ? 'Screening Complete' : 'Screening Complete with Warnings',
+                description: screeningData.allPassed
+                  ? 'Candidate passed all requirements. Now schedule the interview.'
+                  : 'Managers have been alerted. Now schedule the interview.',
+                variant: screeningData.allPassed ? 'default' : 'destructive'
+              });
+            } catch (error) {
+              toast({
+                title: 'Error',
+                description: 'Failed to save screening results.',
                 variant: 'destructive'
               });
             }
-            
+
             // Close screening dialog
             const candidateToSchedule = candidateForInterviewScreening.candidate;
             setShowInterviewScreening(false);
