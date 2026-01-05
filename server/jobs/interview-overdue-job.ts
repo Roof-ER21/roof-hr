@@ -59,8 +59,14 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
 
     logger.info(`[Interview Overdue Job] Found ${overdueInterviews.length} overdue interviews`);
 
-    // Initialize Gmail service
-    await gmailService.initialize();
+    // Try to initialize Gmail service (non-fatal if it fails)
+    let gmailReady = false;
+    try {
+      await gmailService.initialize();
+      gmailReady = true;
+    } catch (gmailError) {
+      logger.warn('[Interview Overdue Job] Gmail not available, will update statuses but skip emails:', gmailError);
+    }
 
     for (const record of overdueInterviews) {
       try {
@@ -109,8 +115,9 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
             })
             .where(eq(candidates.id, candidate.id));
 
-          // Send notification to HR and interviewer
-          await gmailService.sendEmail({
+          // Send notification to HR and interviewer (if Gmail is available)
+          if (gmailReady) {
+            await gmailService.sendEmail({
             to: 'careers@theroofdocs.com',
             cc: interviewerEmail ? [interviewerEmail, 'support@theroofdocs.com'] : ['support@theroofdocs.com'],
             subject: `Interview Auto-Closed: ${candidateName} - No Feedback After 7 Days`,
@@ -143,7 +150,8 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
                 </p>
               </div>
             `,
-          });
+            });
+          }
 
           autoMarkedNoShow++;
           logger.info(
@@ -160,7 +168,8 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
             `[Interview Overdue Job] 3+ days overdue - sending escalation: ${candidateName}`
           );
 
-          await gmailService.sendEmail({
+          if (gmailReady) {
+            await gmailService.sendEmail({
             to: 'careers@theroofdocs.com',
             cc: interviewerEmail ? [interviewerEmail, 'support@theroofdocs.com', 'info@theroofdocs.com'] : ['support@theroofdocs.com', 'info@theroofdocs.com'],
             subject: `URGENT: Interview Feedback Overdue - ${candidateName} (${daysOverdue} Days)`,
@@ -203,7 +212,8 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
                 </p>
               </div>
             `,
-          });
+            });
+          }
 
           escalationsSent++;
           logger.info(`[Interview Overdue Job] Escalation sent for: ${candidateName}`);
@@ -213,7 +223,7 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
         // ========================================
         // DAY 1+: FEEDBACK REMINDER
         // ========================================
-        if (daysOverdue >= 1 && interviewerEmail) {
+        if (daysOverdue >= 1 && interviewerEmail && gmailReady) {
           logger.info(
             `[Interview Overdue Job] 1+ days overdue - sending reminder: ${candidateName}`
           );
