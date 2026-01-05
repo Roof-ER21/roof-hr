@@ -1,37 +1,9 @@
 import express from 'express';
 import { storage } from '../storage';
 import { z } from 'zod';
+import { requireAuth, requireManager } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
-
-function requireManager(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  // Ahmed always has manager access (super admin email fallback)
-  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
-    return next();
-  }
-
-  const managerRoles = [
-    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
-    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER', 'HR'
-  ];
-
-  if (!managerRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Manager or HR access required' });
-  }
-  next();
-}
 
 // Schema for email templates
 const createEmailTemplateSchema = z.object({

@@ -2,16 +2,9 @@ import express from 'express';
 import { emailService } from '../email-service';
 import { aiEnhancementService } from '../services/ai-enhancement';
 import { storage } from '../storage';
+import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
 
 // Test email sending
 router.post('/api/test/send-email', requireAuth, async (req: any, res) => {

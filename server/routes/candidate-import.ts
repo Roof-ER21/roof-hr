@@ -2,42 +2,38 @@ import express, { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
 import { insertCandidateSchema, insertCandidateSourceSchema } from '../../shared/schema';
 import { v4 as uuidv4 } from 'uuid';
+import { requireAuth, requireManager } from '../middleware/auth';
+import { z } from 'zod';
 
 const router = express.Router();
+
+// Zod schema for candidate import
+const importCandidateItemSchema = z.object({
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  email: z.string().email('Invalid email format'),
+  phone: z.string().optional(),
+  position: z.string().optional(),
+  resumeUrl: z.string().url().optional().or(z.literal('')).or(z.null()),
+  sourceUrl: z.string().url().optional().or(z.literal('')).or(z.null()),
+  appliedDate: z.union([z.string(), z.date()]).optional(),
+  notes: z.string().optional().nullable(),
+  referralName: z.string().optional().nullable(),
+});
+
+const importCandidatesSchema = z.object({
+  source: z.enum(['INDEED', 'GOOGLE_JOBS', 'LINKEDIN', 'CSV', 'MANUAL', 'WEBSITE', 'REFERRAL', 'OTHER']),
+  jobPostingId: z.string().optional(),
+  candidates: z.array(importCandidateItemSchema).min(1, 'At least one candidate required'),
+});
+
+const importIndeedSchema = z.object({
+  jobPostingId: z.string().min(1, 'Job posting ID is required'),
+});
 
 // Extend Request type to include user
 interface AuthRequest extends Request {
   user?: Express.User;
-}
-
-// Middleware to check authentication
-function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
-
-function requireManager(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  // Ahmed always has manager access (super admin email fallback)
-  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
-    return next();
-  }
-
-  const managerRoles = [
-    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
-    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'
-  ];
-
-  if (!managerRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Manager access required' });
-  }
-
-  next();
 }
 
 // Import candidates from external source
@@ -47,11 +43,7 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const { source, jobPostingId, candidates } = req.body;
-
-    if (!source || !candidates || !Array.isArray(candidates)) {
-      return res.status(400).json({ error: 'Invalid import data' });
-    }
+    const { source, jobPostingId, candidates } = importCandidatesSchema.parse(req.body);
 
     const batchId = uuidv4();
     const importResults = {
@@ -146,7 +138,11 @@ router.post('/api/candidates/import', requireManager, async (req: AuthRequest, r
     res.json(importResults);
   } catch (error) {
     console.error('Error importing candidates:', error);
-    res.status(500).json({ error: 'Failed to import candidates' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid import data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to import candidates' });
+    }
   }
 });
 
@@ -179,11 +175,7 @@ router.post('/api/candidates/import-indeed', requireManager, async (req: AuthReq
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const { jobPostingId } = req.body;
-
-    if (!jobPostingId) {
-      return res.status(400).json({ error: 'Job posting ID required' });
-    }
+    const { jobPostingId } = importIndeedSchema.parse(req.body);
     
     // TODO: Integrate with Indeed API
     // For now, we'll simulate importing some candidates
@@ -294,7 +286,11 @@ router.post('/api/candidates/import-indeed', requireManager, async (req: AuthReq
     res.json(importResults);
   } catch (error) {
     console.error('Error simulating Indeed import:', error);
-    res.status(500).json({ error: 'Failed to simulate Indeed import' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid request data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to simulate Indeed import' });
+    }
   }
 });
 

@@ -32,6 +32,8 @@ const CATEGORY_POSITIONS: Record<string, string> = {
   'field-tech': 'Field Tech'
 };
 
+import { requireAuth, requireManager } from '../middleware/auth';
+
 const router = express.Router();
 
 // Configure multer for file upload
@@ -53,26 +55,8 @@ const upload = multer({
   }
 });
 
-// Middleware
-function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
-
-function requireHROrManager(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  // HR, Managers, and Territory Managers can manage documents
-  if (!['TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER', 'MANAGER', 'TERRITORY_SALES_MANAGER'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'HR or Manager access required' });
-  }
-
-  next();
-}
+// Alias for backward compatibility
+const requireHROrManager = requireManager;
 
 // Upload candidate with resume to Google Drive
 router.post('/api/candidates/upload-with-resume', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {

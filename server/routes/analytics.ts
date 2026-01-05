@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage';
+import { requireAuth, requireManager } from '../middleware/auth';
 
 const router = Router();
 
@@ -10,23 +11,8 @@ const analyticsQuerySchema = z.object({
   department: z.string().optional(),
 });
 
-// Middleware function for authentication
-function requireAuth(roles: string[]) {
-  return async (req: any, res: any, next: any) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
-    
-    next();
-  };
-}
-
 // Get comprehensive analytics metrics
-router.get('/metrics', requireAuth(['ADMIN', 'MANAGER']), async (req: any, res: any) => {
+router.get('/metrics', requireAuth, requireManager, async (req: any, res: any) => {
   try {
     const { timeRange = 'last30days', department = 'all' } = analyticsQuerySchema.parse(req.query);
 
@@ -262,7 +248,7 @@ router.get('/metrics', requireAuth(['ADMIN', 'MANAGER']), async (req: any, res: 
 });
 
 // Export analytics report
-router.post('/export', requireAuth(['ADMIN', 'MANAGER']), async (req: any, res: any) => {
+router.post('/export', requireAuth, requireManager, async (req: any, res: any) => {
   try {
     // In a real implementation, this would generate a PDF or Excel report
     // For now, we'll just return a success message

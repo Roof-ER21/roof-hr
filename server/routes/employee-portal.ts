@@ -5,16 +5,9 @@ import { users, ptoRequests, documents, tasks, employeeReviews, ptoPolicies, doc
 import { eq, and, or, gte, lte, desc, notInArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { PTO_POLICY, getPtoAllocation } from '../../shared/constants/pto-policy';
+import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
 
 // Get employee portal dashboard data
 router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) => {

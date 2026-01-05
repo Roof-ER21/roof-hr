@@ -1,51 +1,9 @@
 import express from 'express';
 import { storage } from '../storage';
 import { z } from 'zod';
+import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware
-async function requireAuth(req: any, res: any, next: any) {
-  // Check if user is already set by main auth middleware
-  if (req.user) {
-    return next();
-  }
-
-  // Check for Bearer token
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (token) {
-    try {
-      const { storage } = await import('../storage');
-      const session = await storage.getSessionByToken(token);
-      if (session && new Date(session.expiresAt) > new Date()) {
-        const user = await storage.getUserById(session.userId);
-        if (user) {
-          req.user = user;
-          return next();
-        }
-      }
-    } catch (error) {
-      // Invalid token, continue to check session
-    }
-  }
-
-  // For session-based auth, check if there's a user in the session
-  // This would be set by the login route
-  if (req.session && req.session.userId) {
-    try {
-      const { storage } = await import('../storage');
-      const user = await storage.getUserById(req.session.userId);
-      if (user) {
-        req.user = user;
-        return next();
-      }
-    } catch (error) {
-      // Session user not found
-    }
-  }
-
-  return res.status(401).json({ error: 'Authentication required' });
-}
 
 // Schema for creating workflows
 const createWorkflowSchema = z.object({

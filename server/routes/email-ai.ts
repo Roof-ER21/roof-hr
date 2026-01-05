@@ -2,16 +2,9 @@ import express from 'express';
 import { z } from 'zod';
 import { llmRouter } from '../services/llm/router';
 import type { LLMTaskContext } from '../services/llm/types';
+import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware for authentication
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
 
 // Schema for AI generation request
 const aiGenerateSchema = z.object({

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { requireAuth, checkRole, requireManager, requireAdmin } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
 import {
@@ -29,27 +30,88 @@ import { googleDriveService } from '../services/google-drive-service';
 
 const router = Router();
 
-// Authentication middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
+// ============================================================================
+// ZOD VALIDATION SCHEMAS
+// ============================================================================
 
-function checkRole(allowedRoles: string[]) {
-  return (req: any, res: any, next: any) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
-    
-    next();
-  };
-}
+// Schema for updating inventory item
+const updateInventorySchema = z.object({
+  name: z.string().min(1).optional(),
+  category: z.enum(['TOOL', 'PPE', 'VEHICLE_ACCESSORY', 'OFFICE', 'POLO', 'OTHER']).optional(),
+  description: z.string().optional(),
+  quantity: z.number().int().min(0).optional(),
+  availableQuantity: z.number().int().min(0).optional(),
+  condition: z.enum(['NEW', 'GOOD', 'FAIR', 'POOR', 'NEEDS_REPAIR']).optional(),
+  location: z.string().optional(),
+  minQuantity: z.number().int().min(0).optional(),
+  maxQuantity: z.number().int().min(0).optional(),
+  unitPrice: z.number().min(0).optional(),
+  isActive: z.boolean().optional(),
+  notes: z.string().optional(),
+}).strict();
+
+// Schema for returning an assignment
+const returnAssignmentSchema = z.object({
+  condition: z.enum(['NEW', 'GOOD', 'FAIR', 'POOR', 'NEEDS_REPAIR']).optional(),
+  notes: z.string().optional(),
+}).strict();
+
+// Schema for reporting an issue
+const reportIssueSchema = z.object({
+  status: z.enum(['DAMAGED', 'LOST', 'NEEDS_REPAIR']),
+  notes: z.string().min(1, 'Notes are required when reporting an issue'),
+}).strict();
+
+// Schema for creating/updating inventory alerts
+const createAlertSchema = z.object({
+  toolId: z.string().uuid(),
+  thresholdQuantity: z.number().int().min(0),
+  alertRecipients: z.array(z.string().email()).min(1, 'At least one recipient required'),
+}).strict();
+
+// Schema for creating a bundle
+const createBundleSchema = z.object({
+  name: z.string().min(1, 'Bundle name is required'),
+  description: z.string().optional(),
+  items: z.array(z.object({
+    itemName: z.string().min(1),
+    itemCategory: z.string().min(1),
+    quantity: z.number().int().min(1).default(1),
+    requiresSize: z.boolean().default(false),
+    notes: z.string().optional(),
+  })).optional(),
+}).strict();
+
+// Schema for assigning a bundle
+const assignBundleSchema = z.object({
+  bundleId: z.string().uuid(),
+  employeeId: z.string().uuid(),
+  itemSelections: z.record(z.string(), z.object({
+    size: z.string().optional(),
+    notes: z.string().optional(),
+  })).optional(),
+}).strict();
+
+// Schema for bulk return
+const bulkReturnSchema = z.object({
+  assignmentIds: z.array(z.string().uuid()).min(1, 'At least one assignment required'),
+  condition: z.enum(['NEW', 'GOOD', 'FAIR', 'POOR', 'NEEDS_REPAIR']).optional(),
+  notes: z.string().optional(),
+}).strict();
+
+// Schema for bulk edit
+const bulkEditSchema = z.object({
+  toolIds: z.array(z.string().uuid()).min(1, 'At least one tool required'),
+  updates: z.object({
+    category: z.enum(['TOOL', 'PPE', 'VEHICLE_ACCESSORY', 'OFFICE', 'POLO', 'OTHER']).optional(),
+    condition: z.enum(['NEW', 'GOOD', 'FAIR', 'POOR', 'NEEDS_REPAIR']).optional(),
+    location: z.string().optional(),
+    isActive: z.boolean().optional(),
+    notesToAppend: z.string().optional(),
+  }).refine(data => Object.keys(data).length > 0, 'At least one update field required'),
+}).strict();
+
+// ============================================================================
 
 // Initialize SendGrid if API key is available
 if (process.env.SENDGRID_API_KEY) {
@@ -349,7 +411,7 @@ router.post('/inventory', checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
 router.patch('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = updateInventorySchema.parse(req.body);
 
     // If name is being changed, check for duplicates (case-insensitive)
     if (updates.name) {
@@ -391,7 +453,11 @@ router.patch('/inventory/:id', checkRole(['ADMIN', 'MANAGER']), async (req, res)
     res.json(updatedTool[0]);
   } catch (error) {
     console.error('Error updating tool:', error);
-    res.status(500).json({ error: 'Failed to update tool' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to update tool' });
+    }
   }
 });
 
@@ -792,10 +858,10 @@ ROOF-ER HR Team`,
 });
 
 // Return tool
-router.post('/assignments/:id/return', async (req, res) => {
+router.post('/assignments/:id/return', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { condition, notes } = req.body;
+    const { condition, notes } = returnAssignmentSchema.parse(req.body);
 
     // Get assignment details
     const [assignment] = await db
@@ -843,19 +909,19 @@ router.post('/assignments/:id/return', async (req, res) => {
     res.json({ message: 'Tool returned successfully' });
   } catch (error) {
     console.error('Error returning tool:', error);
-    res.status(500).json({ error: 'Failed to return tool' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to return tool' });
+    }
   }
 });
 
 // Report tool as damaged or lost
-router.post('/assignments/:id/report-issue', async (req, res) => {
+router.post('/assignments/:id/report-issue', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
-
-    if (!status || !['DAMAGED', 'LOST'].includes(status)) {
-      return res.status(400).json({ error: 'Status must be DAMAGED or LOST' });
-    }
+    const { status, notes } = reportIssueSchema.parse(req.body);
 
     // Get assignment details
     const [assignment] = await db
@@ -930,22 +996,18 @@ router.post('/assignments/:id/report-issue', async (req, res) => {
     }
   } catch (error) {
     console.error('Error reporting issue:', error);
-    res.status(500).json({ error: 'Failed to report issue' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to report issue' });
+    }
   }
 });
 
 // Bulk return tools
-router.post('/assignments/bulk-return', async (req, res) => {
+router.post('/assignments/bulk-return', requireAuth, async (req, res) => {
   try {
-    const { assignmentIds, condition, notes } = req.body;
-
-    if (!assignmentIds || !Array.isArray(assignmentIds) || assignmentIds.length === 0) {
-      return res.status(400).json({ error: 'assignmentIds array is required' });
-    }
-
-    if (!condition) {
-      return res.status(400).json({ error: 'condition is required' });
-    }
+    const { assignmentIds, condition, notes } = bulkReturnSchema.parse(req.body);
 
     const results = {
       success: 0,
@@ -1016,29 +1078,19 @@ router.post('/assignments/bulk-return', async (req, res) => {
     });
   } catch (error) {
     console.error('Error in bulk return:', error);
-    res.status(500).json({ error: 'Failed to process bulk return' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to process bulk return' });
+    }
   }
 });
 
 // Bulk edit inventory items
-router.patch('/inventory/bulk-edit', async (req, res) => {
+router.patch('/inventory/bulk-edit', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
-    const { toolIds, updates } = req.body;
-
-    if (!toolIds || !Array.isArray(toolIds) || toolIds.length === 0) {
-      return res.status(400).json({ error: 'toolIds array is required' });
-    }
-
-    if (!updates || typeof updates !== 'object') {
-      return res.status(400).json({ error: 'updates object is required' });
-    }
-
+    const { toolIds, updates } = bulkEditSchema.parse(req.body);
     const { condition, location, notesToAppend } = updates;
-
-    // Check if there's anything to update
-    if (!condition && !location && !notesToAppend) {
-      return res.status(400).json({ error: 'At least one update field is required' });
-    }
 
     const results = {
       success: 0,
@@ -1099,7 +1151,11 @@ router.patch('/inventory/bulk-edit', async (req, res) => {
     });
   } catch (error) {
     console.error('Error in bulk edit:', error);
-    res.status(500).json({ error: 'Failed to process bulk edit' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to process bulk edit' });
+    }
   }
 });
 
@@ -1245,7 +1301,7 @@ router.get('/alerts', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'])
 router.post('/alerts', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']), async (req, res) => {
   try {
     const user = req.user!;
-    const { toolId, thresholdQuantity, alertRecipients } = req.body;
+    const { toolId, thresholdQuantity, alertRecipients } = createAlertSchema.parse(req.body);
 
     // Check if alert already exists for this tool
     const existingAlert = await db
@@ -1285,7 +1341,11 @@ router.post('/alerts', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']
     }
   } catch (error) {
     console.error('Error creating/updating inventory alert:', error);
-    res.status(500).json({ error: 'Failed to create/update inventory alert' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to create/update inventory alert' });
+    }
   }
 });
 
@@ -1454,7 +1514,7 @@ router.get('/bundles', requireAuth, async (req, res) => {
 router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']), async (req, res) => {
   try {
     const user = req.user!;
-    const { name, description, items } = req.body;
+    const { name, description, items } = createBundleSchema.parse(req.body);
 
     // Create bundle
     const [bundle] = await db
@@ -1472,7 +1532,7 @@ router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'
       await db
         .insert(bundleItems)
         .values(
-          items.map((item: any) => ({
+          items.map((item) => ({
             id: uuidv4(),
             bundleId: bundle.id,
             itemName: item.itemName,
@@ -1487,7 +1547,11 @@ router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'
     res.json(bundle);
   } catch (error) {
     console.error('Error creating bundle:', error);
-    res.status(500).json({ error: 'Failed to create bundle' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to create bundle' });
+    }
   }
 });
 
@@ -1495,9 +1559,9 @@ router.post('/bundles', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN'
 router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE_ADMIN']), async (req, res) => {
   try {
     const user = req.user!;
-    const { bundleId, employeeId, itemSelections } = req.body;
+    const { bundleId, employeeId, itemSelections } = assignBundleSchema.parse(req.body);
 
-    // Get employee details including shirt size
+    // Validate employee exists (before transaction)
     const [employee] = await db
       .select()
       .from(users)
@@ -1508,163 +1572,165 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Create bundle assignment
-    const [assignment] = await db
-      .insert(bundleAssignments)
-      .values({
-        id: uuidv4(),
-        bundleId,
-        employeeId,
-        assignedBy: user.id,
-        status: 'PENDING'
-      })
-      .returning();
-
-    // Get bundle items
+    // Get bundle items (before transaction - read-only)
     const items = await db
       .select()
       .from(bundleItems)
       .where(eq(bundleItems.bundleId, bundleId));
 
-    // OPTIMIZED: Pre-fetch all active inventory in one query
+    // Pre-fetch all active inventory (before transaction - read-only)
     const allInventory = await db
       .select()
       .from(toolInventory)
       .where(eq(toolInventory.isActive, true));
 
-    // Process each item in the bundle (in-memory lookups, no N+1)
-    const assignmentItems = [];
-    const inventoryUpdates: { id: string; reduceBy: number }[] = [];
+    // Execute all writes in a transaction
+    const result = await db.transaction(async (tx) => {
+      // Create bundle assignment
+      const [assignment] = await tx
+        .insert(bundleAssignments)
+        .values({
+          id: uuidv4(),
+          bundleId,
+          employeeId,
+          assignedBy: user.id,
+          status: 'PENDING'
+        })
+        .returning();
 
-    for (const item of items) {
-      let toolId = null;
-      let size = null;
+      // Process each item in the bundle (in-memory lookups, no N+1)
+      const assignmentItems: Array<{
+        id: string;
+        assignmentId: string;
+        bundleItemId: string;
+        toolId: string | null;
+        size: string | null;
+        quantity: number;
+        status: string;
+      }> = [];
+      const inventoryUpdates: { id: string; reduceBy: number }[] = [];
 
-      // If item requires size (clothing), use employee's shirt size or provided selection
-      if (item.requiresSize) {
-        size = itemSelections?.[item.id]?.size || employee.shirtSize;
+      for (const item of items) {
+        let toolId: string | null = null;
+        let size: string | null = null;
 
-        if (!size) {
-          continue; // Skip if no size available
+        // If item requires size (clothing), use employee's shirt size or provided selection
+        if (item.requiresSize) {
+          size = itemSelections?.[item.id]?.size || employee.shirtSize;
+
+          if (!size) {
+            continue; // Skip if no size available
+          }
+
+          // Use in-memory lookup (prevents SQL injection)
+          const sizePattern = size.toLowerCase();
+          const inventoryItem = allInventory.find(inv =>
+            inv.category === item.itemCategory &&
+            inv.name.toLowerCase().includes(sizePattern) &&
+            inv.availableQuantity >= item.quantity
+          );
+
+          if (inventoryItem) {
+            toolId = inventoryItem.id;
+            inventoryUpdates.push({ id: inventoryItem.id, reduceBy: item.quantity });
+            inventoryItem.availableQuantity -= item.quantity;
+          }
+        } else {
+          // For non-clothing items, find by category (in-memory)
+          const inventoryItem = allInventory.find(inv =>
+            inv.category === item.itemCategory &&
+            inv.availableQuantity >= item.quantity
+          );
+
+          if (inventoryItem) {
+            toolId = inventoryItem.id;
+            inventoryUpdates.push({ id: inventoryItem.id, reduceBy: item.quantity });
+            inventoryItem.availableQuantity -= item.quantity;
+          }
         }
 
-        // FIXED: Use parameterized ILIKE pattern (prevents SQL injection)
-        const sizePattern = size.toLowerCase();
-        const inventoryItem = allInventory.find(inv =>
-          inv.category === item.itemCategory &&
-          inv.name.toLowerCase().includes(sizePattern) &&
-          inv.availableQuantity >= item.quantity
-        );
-
-        if (inventoryItem) {
-          toolId = inventoryItem.id;
-
-          // Queue inventory update
-          inventoryUpdates.push({
-            id: inventoryItem.id,
-            reduceBy: item.quantity
-          });
-
-          // Reduce in-memory to handle multiple items needing same tool
-          inventoryItem.availableQuantity -= item.quantity;
-        }
-      } else {
-        // For non-clothing items, find by category (in-memory)
-        const inventoryItem = allInventory.find(inv =>
-          inv.category === item.itemCategory &&
-          inv.availableQuantity >= item.quantity
-        );
-
-        if (inventoryItem) {
-          toolId = inventoryItem.id;
-
-          // Queue inventory update
-          inventoryUpdates.push({
-            id: inventoryItem.id,
-            reduceBy: item.quantity
-          });
-
-          // Reduce in-memory to handle multiple items needing same tool
-          inventoryItem.availableQuantity -= item.quantity;
-        }
+        // Create assignment item record
+        assignmentItems.push({
+          id: uuidv4(),
+          assignmentId: assignment.id,
+          bundleItemId: item.id,
+          toolId,
+          size,
+          quantity: item.quantity,
+          status: toolId ? 'ASSIGNED' : 'UNAVAILABLE'
+        });
       }
 
-      // Create assignment item record
-      assignmentItems.push({
-        id: uuidv4(),
-        assignmentId: assignment.id,
-        bundleItemId: item.id,
-        toolId,
-        size,
-        quantity: item.quantity,
-        status: toolId ? 'ASSIGNED' : 'UNAVAILABLE'
-      });
-    }
+      // Insert assignment items
+      if (assignmentItems.length > 0) {
+        await tx.insert(bundleAssignmentItems).values(assignmentItems as any);
+      }
 
-    // Insert assignment items
-    if (assignmentItems.length > 0) {
-      await db.insert(bundleAssignmentItems).values(assignmentItems as any);
-    }
+      // Group updates by tool ID to combine reductions
+      const updatesByToolId = new Map<string, number>();
+      for (const update of inventoryUpdates) {
+        const current = updatesByToolId.get(update.id) || 0;
+        updatesByToolId.set(update.id, current + update.reduceBy);
+      }
 
-    // OPTIMIZED: Batch update all inventory quantities
-    // Group updates by tool ID to combine reductions
-    const updatesByToolId = new Map<string, number>();
-    for (const update of inventoryUpdates) {
-      const current = updatesByToolId.get(update.id) || 0;
-      updatesByToolId.set(update.id, current + update.reduceBy);
-    }
+      if (updatesByToolId.size > 0) {
+        // Batch inventory update
+        const updateCases = Array.from(updatesByToolId.entries()).map(([id, reduceBy]) =>
+          sql`WHEN ${toolInventory.id} = ${id} THEN ${toolInventory.availableQuantity} - ${reduceBy}`
+        );
+        const updateIds = Array.from(updatesByToolId.keys());
 
-    if (updatesByToolId.size > 0) {
-      // Batch inventory update
-      const updateCases = Array.from(updatesByToolId.entries()).map(([id, reduceBy]) =>
-        sql`WHEN ${toolInventory.id} = ${id} THEN ${toolInventory.availableQuantity} - ${reduceBy}`
-      );
-      const updateIds = Array.from(updatesByToolId.keys());
+        await tx.execute(sql`
+          UPDATE tool_inventory
+          SET available_quantity = CASE ${sql.join(updateCases, sql` `)} END,
+              updated_at = NOW()
+          WHERE id IN (${sql.join(updateIds.map(id => sql`${id}`), sql`, `)})
+        `);
 
-      await db.execute(sql`
-        UPDATE tool_inventory
-        SET available_quantity = CASE ${sql.join(updateCases, sql` `)} END,
-            updated_at = NOW()
-        WHERE id IN (${sql.join(updateIds.map(id => sql`${id}`), sql`, `)})
-      `);
+        // Batch insert all tool assignments
+        const toolAssignmentValues = inventoryUpdates.map(update => ({
+          id: uuidv4(),
+          toolId: update.id,
+          employeeId,
+          assignedBy: user.id,
+          condition: 'NEW' as const,
+          notes: `Assigned as part of bundle: ${bundleId}`
+        }));
 
-      // Batch insert all tool assignments
-      const toolAssignmentValues = inventoryUpdates.map(update => ({
-        id: uuidv4(),
-        toolId: update.id,
-        employeeId,
-        assignedBy: user.id,
-        condition: 'NEW' as const,
-        notes: `Assigned as part of bundle: ${bundleId}`
-      }));
+        await tx.insert(toolAssignments).values(toolAssignmentValues);
+      }
 
-      await db.insert(toolAssignments).values(toolAssignmentValues);
-    }
+      // Update assignment status
+      const allAssigned = assignmentItems.every(item => item.status === 'ASSIGNED');
+      const someAssigned = assignmentItems.some(item => item.status === 'ASSIGNED');
 
-    // Update assignment status
-    const allAssigned = assignmentItems.every(item => item.status === 'ASSIGNED');
-    const someAssigned = assignmentItems.some(item => item.status === 'ASSIGNED');
+      await tx
+        .update(bundleAssignments)
+        .set({
+          status: allAssigned ? 'FULFILLED' : someAssigned ? 'PARTIALLY_FULFILLED' : 'PENDING',
+          updatedAt: new Date()
+        })
+        .where(eq(bundleAssignments.id, assignment.id));
 
-    await db
-      .update(bundleAssignments)
-      .set({
-        status: allAssigned ? 'FULFILLED' : someAssigned ? 'PARTIALLY_FULFILLED' : 'PENDING',
-        updatedAt: new Date()
-      })
-      .where(eq(bundleAssignments.id, assignment.id));
+      return { assignment, assignmentItems, allAssigned, someAssigned };
+    });
 
-    res.json({ 
-      assignment, 
-      items: assignmentItems,
-      message: allAssigned 
-        ? 'Bundle fully assigned' 
-        : someAssigned 
+    res.json({
+      assignment: result.assignment,
+      items: result.assignmentItems,
+      message: result.allAssigned
+        ? 'Bundle fully assigned'
+        : result.someAssigned
           ? 'Bundle partially assigned - some items unavailable'
           : 'Bundle assignment pending - items unavailable'
     });
   } catch (error) {
     console.error('Error assigning bundle:', error);
-    res.status(500).json({ error: 'Failed to assign bundle' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid data', details: error.errors });
+    } else {
+      res.status(500).json({ error: 'Failed to assign bundle' });
+    }
   }
 });
 

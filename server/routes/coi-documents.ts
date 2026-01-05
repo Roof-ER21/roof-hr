@@ -21,6 +21,8 @@ function ensureLocalStorageDir(): void {
   }
 }
 
+import { requireAuth, requireManager } from '../middleware/auth';
+
 const router = express.Router();
 
 // Configure multer for file upload
@@ -31,7 +33,7 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     // Accept PDFs and images
-    if (file.mimetype === 'application/pdf' || 
+    if (file.mimetype === 'application/pdf' ||
         file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
@@ -40,35 +42,8 @@ const upload = multer({
   }
 });
 
-// Middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
-
-function requireHROrManager(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  // Ahmed always has access (super admin email fallback)
-  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
-    return next();
-  }
-
-  // HR, Managers, and Territory Managers can manage COI documents
-  const allowedRoles = [
-    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
-    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'  // Legacy
-  ];
-  if (!allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'HR or Manager access required' });
-  }
-
-  next();
-}
+// Alias for backward compatibility
+const requireHROrManager = requireManager;
 
 // Helper function to auto-calculate COI expiration status based on current date
 function calculateCoiStatus(expirationDate: string | null): 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' {

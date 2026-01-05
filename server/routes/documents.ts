@@ -5,70 +5,9 @@ import { storage } from '../storage';
 import { insertDocumentSchema, insertDocumentVersionSchema, insertDocumentAccessLogSchema, insertDocumentAcknowledgmentSchema } from '@shared/schema';
 import { googleDriveService } from '../services/google-drive-service';
 import { googleDocsService } from '../services/google-docs-service';
+import { requireAuth, requireManager, requireAdmin } from '../middleware/auth';
 
 const router = Router();
-
-// Middleware functions
-async function requireAuth(req: any, res: any, next: any) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  const session = await storage.getSessionByToken(token);
-  if (!session || new Date(session.expiresAt) < new Date()) {
-    return res.status(401).json({ error: 'Invalid or expired session' });
-  }
-
-  const user = await storage.getUserById(session.userId);
-  if (!user) {
-    return res.status(401).json({ error: 'User not found' });
-  }
-
-  req.user = user;
-  next();
-}
-
-function requireManager(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  // Ahmed always has manager access (super admin email fallback)
-  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
-    return next();
-  }
-
-  const managerRoles = [
-    'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER',
-    'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'
-  ];
-
-  if (!managerRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Manager access required' });
-  }
-
-  next();
-}
-
-function requireAdmin(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  // Ahmed always has admin access (super admin email fallback)
-  if (req.user.email === 'ahmed.mahmoud@theroofdocs.com') {
-    return next();
-  }
-
-  const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN'];
-
-  if (!adminRoles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-
-  next();
-}
 
 // Get all documents with filtering and role-based access
 router.get('/', requireAuth, async (req, res) => {

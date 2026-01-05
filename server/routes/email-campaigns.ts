@@ -2,16 +2,9 @@ import express from 'express';
 import { storage } from '../storage';
 import { z } from 'zod';
 import { LLMRouter } from '../services/llm/router';
+import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
 
 // Schema for creating email campaigns
 const createEmailCampaignSchema = z.object({

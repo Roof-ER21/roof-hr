@@ -3,16 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
 import { userEmailPreferences, insertUserEmailPreferencesSchema } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
+import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
-
-// Middleware for auth
-function requireAuth(req: any, res: any, next: any) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-}
 
 // GET /api/email-preferences/:userId - Get user's email preferences
 router.get('/api/email-preferences/:userId', requireAuth, async (req: any, res) => {
