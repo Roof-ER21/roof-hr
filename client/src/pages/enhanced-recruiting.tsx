@@ -1795,17 +1795,21 @@ export default function EnhancedRecruiting() {
 
         {/* Pipeline Overview */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          {Object.entries(candidatesByStatus).map(([status, candidates]) => (
+          {Object.entries(candidatesByStatus).map(([status, candidates]) => {
+            const stage = stages[status as keyof typeof stages];
+            const stageColor = stage?.color || 'bg-gray-500';
+            const stageName = stage?.name || status;
+            return (
             <Card key={status} className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 border-l-4"
-                  style={{ borderLeftColor: stages[status as keyof typeof stages].color.includes('bg-') 
-                    ? stages[status as keyof typeof stages].color.replace('bg-', '#') 
+                  style={{ borderLeftColor: stageColor.includes('bg-')
+                    ? stageColor.replace('bg-', '#')
                     : '#3b82f6' }}
                   onClick={() => setFilterStatus(status)}>
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">
-                      {stages[status as keyof typeof stages].name}
+                      {stageName}
                     </p>
                     <p className="text-xl font-bold text-gray-900 mt-1">{candidates.length}</p>
                   </div>
@@ -1820,7 +1824,8 @@ export default function EnhancedRecruiting() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+          );
+          })}
         </div>
 
         {/* Filters */}
@@ -2077,12 +2082,15 @@ export default function EnhancedRecruiting() {
                 {kanbanStages.map(status => {
                   // SOURCERs can only drop into allowed stages
                   const isDropDisabled = userIsSourcerOnly && !SOURCER_ALLOWED_STAGES.includes(status);
+                  const stage = stages[status as keyof typeof stages];
+                  const stageName = stage?.name || status;
+                  const stageColor = stage?.color || 'bg-gray-100';
                   return (
                   <DroppableColumn key={status} status={status} disabled={isDropDisabled}>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-medium text-gray-900 dark:text-white">
-                          {stages[status].name}
+                          {stageName}
                         </h3>
                         <div className="flex items-center gap-2">
                           <Button
@@ -2093,7 +2101,7 @@ export default function EnhancedRecruiting() {
                           >
                             Select All
                           </Button>
-                          <Badge className={stages[status].color}>
+                          <Badge className={stageColor}>
                             {candidatesByStatus[status as keyof typeof candidatesByStatus]?.length || 0}
                           </Badge>
                         </div>
