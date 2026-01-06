@@ -509,10 +509,67 @@ export function CandidateDetailsDialog({
 
             {/* Main Content - Side by Side */}
             <div className="flex flex-1 overflow-hidden">
-              {/* LEFT PANEL - Candidate Info & Activity */}
-              <div className="w-[450px] flex-shrink-0 border-r overflow-y-auto">
+              {/* LEFT PANEL - Resume, Candidate Info */}
+              <div className="w-[400px] flex-shrink-0 border-r overflow-y-auto">
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-4">
+                    {/* Resume Preview - Embedded PDF */}
+                    {candidate.resumeUrl && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                          Resume
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (resumeBlobUrl) {
+                                window.open(resumeBlobUrl, '_blank');
+                              } else {
+                                window.open(getResumeViewUrl(candidate.resumeUrl), '_blank');
+                              }
+                            }}
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            New Tab
+                          </Button>
+                        </h4>
+                        <div className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900">
+                          {resumeLoading ? (
+                            <div className="w-full min-h-[400px] flex items-center justify-center">
+                              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                              <span className="ml-2 text-muted-foreground">Loading resume...</span>
+                            </div>
+                          ) : resumeError ? (
+                            <div className="w-full min-h-[400px] flex flex-col items-center justify-center text-muted-foreground">
+                              <AlertCircle className="h-8 w-8 mb-2" />
+                              <span>{resumeError}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => window.open(candidate.resumeUrl, '_blank')}
+                              >
+                                Open Original Link
+                              </Button>
+                            </div>
+                          ) : resumeBlobUrl ? (
+                            <iframe
+                              src={resumeBlobUrl}
+                              className="w-full min-h-[400px]"
+                              title="Resume Preview"
+                            />
+                          ) : (
+                            <div className="w-full min-h-[400px] flex items-center justify-center text-muted-foreground">
+                              <FileText className="h-8 w-8 mr-2" />
+                              <span>No preview available</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <Separator />
+
                     {/* Contact Info */}
                     <div className="space-y-2">
                       <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -579,15 +636,68 @@ export function CandidateDetailsDialog({
 
                     <Separator />
 
-                    {/* Activity Timeline (Notes + Interview Q&A) */}
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4" />
-                        Activity ({notes.length})
+                    {/* Interview Screening (if completed) */}
+                    {screeningData && (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                            Interview Screening
+                          </h4>
+                          <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-3 space-y-1">
+                            <YesNoIndicator value={screeningData.hasDriversLicense} label="License Verified" />
+                            <YesNoIndicator value={screeningData.hasReliableVehicle} label="Vehicle Verified" />
+                            <YesNoIndicator value={screeningData.hasClearCommunication} label="Clear Communication" />
+                            {candidate.interviewScreeningDate && (
+                              <div className="pt-2 border-t mt-2 text-xs text-muted-foreground">
+                                Screened: {format(new Date(candidate.interviewScreeningDate), 'MMM d, yyyy')}
+                              </div>
+                            )}
+                            {candidate.interviewScreeningNotes && (
+                              <div className="pt-2">
+                                <span className="text-xs text-muted-foreground">Notes:</span>
+                                <p className="text-sm">{candidate.interviewScreeningNotes}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Separator />
+                      </>
+                    )}
+
+                    {/* Custom Tags */}
+                    {candidate.customTags && candidate.customTags.length > 0 && (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                            Tags
+                          </h4>
+                          <div className="flex flex-wrap gap-1">
+                            {candidate.customTags.map((tag: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* RIGHT PANEL - Notes/Activity (PROMINENT), AI Insights, Interviews */}
+              <div className="flex-1 overflow-y-auto">
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-4">
+                    {/* Activity Timeline (Notes + Interview Q&A) - NOW PROMINENT */}
+                    <div className="space-y-3 bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-950/30 dark:to-purple-950/30 p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                      <h4 className="text-base font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+                        <MessageSquare className="h-5 w-5" />
+                        Activity & Notes ({notes.length})
                       </h4>
 
                       {/* Add Note Form */}
-                      <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                      <div className="space-y-2 p-3 bg-background rounded-lg border">
                         <div className="flex gap-2">
                           <Select
                             value={noteType}
@@ -634,7 +744,7 @@ export function CandidateDetailsDialog({
                           No activity yet
                         </div>
                       ) : (
-                        <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                           {notesWithAuthors
                             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                             .map((note) => {
@@ -693,60 +803,8 @@ export function CandidateDetailsDialog({
                       )}
                     </div>
 
-                    {/* Interview Screening (if completed) */}
-                    {screeningData && (
-                      <>
-                        <Separator />
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                            Interview Screening
-                          </h4>
-                          <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-3 space-y-1">
-                            <YesNoIndicator value={screeningData.hasDriversLicense} label="License Verified" />
-                            <YesNoIndicator value={screeningData.hasReliableVehicle} label="Vehicle Verified" />
-                            <YesNoIndicator value={screeningData.hasClearCommunication} label="Clear Communication" />
-                            {candidate.interviewScreeningDate && (
-                              <div className="pt-2 border-t mt-2 text-xs text-muted-foreground">
-                                Screened: {format(new Date(candidate.interviewScreeningDate), 'MMM d, yyyy')}
-                              </div>
-                            )}
-                            {candidate.interviewScreeningNotes && (
-                              <div className="pt-2">
-                                <span className="text-xs text-muted-foreground">Notes:</span>
-                                <p className="text-sm">{candidate.interviewScreeningNotes}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
+                    <Separator />
 
-                    {/* Custom Tags */}
-                    {candidate.customTags && candidate.customTags.length > 0 && (
-                      <>
-                        <Separator />
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                            Tags
-                          </h4>
-                          <div className="flex flex-wrap gap-1">
-                            {candidate.customTags.map((tag: string, i: number) => (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              {/* RIGHT PANEL - AI Insights, Resume, Notes */}
-              <div className="flex-1 overflow-y-auto">
-                <ScrollArea className="h-full">
-                  <div className="p-4 space-y-4">
                     {/* AI Insights Summary */}
                     <AIInsightsSummary candidate={candidate} />
 
@@ -841,61 +899,6 @@ export function CandidateDetailsDialog({
                           </div>
                         </div>
                       </>
-                    )}
-
-                    {/* Resume Preview - Embedded PDF */}
-                    {candidate.resumeUrl && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                          Resume
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (resumeBlobUrl) {
-                                window.open(resumeBlobUrl, '_blank');
-                              } else {
-                                window.open(getResumeViewUrl(candidate.resumeUrl), '_blank');
-                              }
-                            }}
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            New Tab
-                          </Button>
-                        </h4>
-                        <div className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900">
-                          {resumeLoading ? (
-                            <div className="w-full h-[300px] flex items-center justify-center">
-                              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                              <span className="ml-2 text-muted-foreground">Loading resume...</span>
-                            </div>
-                          ) : resumeError ? (
-                            <div className="w-full h-[300px] flex flex-col items-center justify-center text-muted-foreground">
-                              <AlertCircle className="h-8 w-8 mb-2" />
-                              <span>{resumeError}</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-2"
-                                onClick={() => window.open(candidate.resumeUrl, '_blank')}
-                              >
-                                Open Original Link
-                              </Button>
-                            </div>
-                          ) : resumeBlobUrl ? (
-                            <iframe
-                              src={resumeBlobUrl}
-                              className="w-full h-[300px]"
-                              title="Resume Preview"
-                            />
-                          ) : (
-                            <div className="w-full h-[300px] flex items-center justify-center text-muted-foreground">
-                              <FileText className="h-8 w-8 mr-2" />
-                              <span>No preview available</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
                     )}
 
                   </div>

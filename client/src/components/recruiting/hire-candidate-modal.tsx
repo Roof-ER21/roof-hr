@@ -86,6 +86,12 @@ function getNextMonday(): string {
   return nextMonday.toISOString().split('T')[0];
 }
 
+// Parse YYYY-MM-DD as local date (not UTC)
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function HireCandidateModal({
   candidate,
   onConfirm,
@@ -340,7 +346,7 @@ export function HireCandidateModal({
                   <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-2">
                     <div className="font-medium text-gray-700">
                       Subject: Welcome to Roof-ER! Your Start Date is{' '}
-                      {new Date(startDate).toLocaleDateString()}
+                      {parseLocalDate(startDate).toLocaleDateString()}
                     </div>
                     <Separator />
                     <div className="text-gray-600 space-y-2">
@@ -351,7 +357,7 @@ export function HireCandidateModal({
                       </p>
                       <p>
                         Your first day is{' '}
-                        {new Date(startDate).toLocaleDateString('en-US', {
+                        {parseLocalDate(startDate).toLocaleDateString('en-US', {
                           weekday: 'long',
                           year: 'numeric',
                           month: 'long',
