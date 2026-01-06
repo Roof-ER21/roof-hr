@@ -1037,13 +1037,15 @@ router.get('/api/users', requireAuth, async (req: any, res) => {
     }
 
     // SOURCER and other roles: Only return minimal info needed for recruiting UI
-    // (display names and screener colors for assignment UI, no sensitive data)
+    // (display names, screener colors for assignment UI, role/position for interviewer selection)
     const limitedUsers = users.map(u => ({
       id: u.id,
       firstName: u.firstName,
       lastName: u.lastName,
+      role: u.role,           // Needed for interviewer dropdown filter
+      position: u.position,   // Displayed in interviewer dropdown
       screenerColor: (u as any).screenerColor,
-      // Exclude: email, role, department, phone, hireDate, etc.
+      // Exclude: email, department, phone, hireDate, employmentType, etc.
     }));
     res.json(limitedUsers);
   } catch (error) {
