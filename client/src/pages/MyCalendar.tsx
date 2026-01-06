@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,8 @@ import {
   Clock,
   User,
   ExternalLink,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import {
   format,
@@ -70,19 +72,41 @@ export default function MyCalendar() {
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   // Fetch my calendar events
-  const { data: myEvents = [], isLoading: myEventsLoading } = useQuery<CalendarEvent[]>({
-    queryKey: ['/api/google/calendar/my-events', {
-      timeMin: monthStart.toISOString(),
-      timeMax: monthEnd.toISOString()
-    }]
+  const {
+    data: myEvents = [],
+    isLoading: myEventsLoading,
+    isFetching: myEventsFetching,
+    refetch: refetchMyEvents,
+    dataUpdatedAt: myEventsUpdatedAt
+  } = useQuery<CalendarEvent[]>({
+    queryKey: ['/api/google/calendar/my-events', monthStart.toISOString(), monthEnd.toISOString()],
+    queryFn: async () => {
+      return await apiRequest<CalendarEvent[]>(
+        `/api/google/calendar/my-events?timeMin=${monthStart.toISOString()}&timeMax=${monthEnd.toISOString()}`,
+        'GET'
+      );
+    }
   });
 
   // Fetch team PTO (for managers)
-  const { data: teamPto = [], isLoading: teamPtoLoading } = useQuery<CalendarEvent[]>({
-    queryKey: ['/api/google/calendar/team-pto', {
-      timeMin: monthStart.toISOString(),
-      timeMax: monthEnd.toISOString()
-    }]
+  const {
+    data: teamPto = [],
+    isLoading: teamPtoLoading,
+    isFetching: teamPtoFetching,
+    refetch: refetchTeamPto,
+    dataUpdatedAt: teamPtoUpdatedAt
+  } = useQuery<CalendarEvent[]>({
+    queryKey: ['/api/google/calendar/team-pto', monthStart.toISOString(), monthEnd.toISOString()],
+    queryFn: async () => {
+      return await apiRequest<CalendarEvent[]>(
+        `/api/google/calendar/team-pto?timeMin=${monthStart.toISOString()}&timeMax=${monthEnd.toISOString()}`,
+        'GET'
+      );
+    }
+  });
+
+  const { data: serviceAccountStatus } = useQuery<{ isConfigured: boolean }>({
+    queryKey: ['/api/google/service-account-status']
   });
 
   // Combine and filter events
@@ -134,6 +158,9 @@ export default function MyCalendar() {
   }, [allEvents]);
 
   const isLoading = myEventsLoading || teamPtoLoading;
+  const isSyncing = myEventsFetching || teamPtoFetching;
+  const lastSyncMs = Math.max(myEventsUpdatedAt || 0, teamPtoUpdatedAt || 0);
+  const lastSyncLabel = lastSyncMs > 0 ? format(new Date(lastSyncMs), 'MMM d, h:mm a') : 'Never';
 
   if (isLoading) {
     return (
@@ -164,11 +191,24 @@ export default function MyCalendar() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant={serviceAccountStatus?.isConfigured ? 'default' : 'secondary'}>
+            {serviceAccountStatus?.isConfigured ? 'Google Calendar Connected' : 'Google Calendar Not Connected'}
+          </Badge>
+          <span className="text-xs text-muted-foreground">Last sync: {lastSyncLabel}</span>
           <Button variant="outline" size="sm" onClick={previousMonth}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={goToToday}>
             Today
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => Promise.all([refetchMyEvents(), refetchTeamPto()])}
+            disabled={isSyncing}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {isSyncing ? 'Syncing...' : 'Sync'}
           </Button>
           <Button variant="outline" size="sm" onClick={nextMonth}>
             <ChevronRight className="h-4 w-4" />

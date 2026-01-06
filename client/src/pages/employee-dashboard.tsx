@@ -26,6 +26,7 @@ import {
   CheckCircle,
   AlertCircle,
   CalendarDays,
+  RefreshCw,
   TrendingUp,
   Award,
   Users,
@@ -161,7 +162,13 @@ function EmployeeDashboard() {
   };
 
   // Fetch calendar events
-  const { data: calendarEvents = [], isLoading: calendarLoading } = useQuery<CalendarEvent[]>({
+  const {
+    data: calendarEvents = [],
+    isLoading: calendarLoading,
+    isFetching: calendarRefreshing,
+    refetch: refetchCalendarEvents,
+    dataUpdatedAt: calendarUpdatedAt
+  } = useQuery<CalendarEvent[]>({
     queryKey: ['/api/google/calendar/my-events', currentMonth.toISOString()],
     queryFn: async () => {
       const start = startOfMonth(currentMonth);
@@ -174,6 +181,9 @@ function EmployeeDashboard() {
       return response.json();
     }
   });
+  const calendarLastSyncLabel = calendarUpdatedAt
+    ? format(new Date(calendarUpdatedAt), 'MMM d, h:mm a')
+    : 'Never';
 
   // Calendar helpers
   const calendarDays = useMemo(() => {
@@ -587,6 +597,7 @@ function EmployeeDashboard() {
                   <div>
                     <CardTitle>My Calendar</CardTitle>
                     <CardDescription>View your schedule, PTO, and events</CardDescription>
+                    <div className="text-xs text-muted-foreground mt-1">Last sync: {calendarLastSyncLabel}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -599,6 +610,15 @@ function EmployeeDashboard() {
                     >
                       <Plus className="w-4 h-4 mr-1" />
                       Add Event
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetchCalendarEvents()}
+                      disabled={calendarRefreshing}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      {calendarRefreshing ? 'Syncing...' : 'Sync'}
                     </Button>
                     <Button
                       variant="outline"
