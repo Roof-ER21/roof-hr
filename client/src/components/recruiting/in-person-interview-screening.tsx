@@ -11,6 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { parseScreeningData } from '@/lib/parse-screening-data';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useAuth } from '@/lib/auth';
+import { isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 import type { Candidate } from '@shared/schema';
 import { format } from 'date-fns';
 
@@ -46,6 +48,18 @@ export function InPersonInterviewScreening({
   onCancel
 }: InPersonInterviewScreeningProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Determine which endpoint to use - sourcers use special endpoint
+  const isSourcerUser = user && (
+    user.role === 'SOURCER' ||
+    isSourcer(user) ||
+    isLeadSourcer(user) ||
+    isExtendedSourcer(user)
+  );
+  const updateEndpoint = isSourcerUser
+    ? `/api/candidates/${candidate.id}/sourcer-update`
+    : `/api/candidates/${candidate.id}`;
   const [responses, setResponses] = useState({
     driversLicense: '',
     reliableVehicle: '',
@@ -83,9 +97,10 @@ export function InPersonInterviewScreening({
   }, [candidate]);
 
   // Mutation to save screening data to candidate
+  // Uses sourcer-update endpoint for sourcers, regular endpoint for managers
   const saveScreeningMutation = useMutation({
     mutationFn: async (screeningData: ScreeningData) => {
-      return apiRequest(`/api/candidates/${candidate.id}`, {
+      return apiRequest(updateEndpoint, {
         method: 'PATCH',
         body: JSON.stringify({
           interviewScreeningData: JSON.stringify({

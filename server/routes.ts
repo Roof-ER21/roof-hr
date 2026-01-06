@@ -2475,6 +2475,61 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
   }
 });
 
+// SOURCER screening update - allows SOURCERs to save screening data for their assigned candidates
+router.patch('/api/candidates/:id/sourcer-update', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user!;
+    const candidateId = req.params.id;
+
+    // Must be a sourcer (role or email-based check)
+    const isSourcerUser = user.role === 'SOURCER' ||
+      isLeadSourcer(user) ||
+      isExtendedSourcer(user);
+
+    if (!isSourcerUser) {
+      return res.status(403).json({ error: 'Sourcer access required' });
+    }
+
+    // Get the candidate
+    const candidate = await storage.getCandidateById(candidateId);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    // Lead sourcers can update any candidate, others only their assigned
+    if (!isLeadSourcer(user) && candidate.assignedTo !== user.id) {
+      console.log(`[SOURCER-UPDATE] Denied: ${user.email} tried to update candidate ${candidateId} but is not assigned (assigned to: ${candidate.assignedTo})`);
+      return res.status(403).json({ error: 'You can only update candidates assigned to you' });
+    }
+
+    // Only allow specific screening-related fields
+    const allowedFields = [
+      'interviewScreeningData', 'interviewScreeningDate', 'interviewScreeningNotes',
+      'hasDriversLicense', 'hasReliableVehicle', 'canGetOnRoof', 'isOutgoing',
+      'availability', 'customTags', 'notes', 'phoneScreeningNotes'
+    ];
+
+    const updates: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const updatedCandidate = await storage.updateCandidate(candidateId, updates);
+    console.log(`[SOURCER-UPDATE] ${user.email} updated screening data for candidate ${candidate.firstName} ${candidate.lastName}`);
+
+    res.json(updatedCandidate);
+  } catch (error: any) {
+    console.error('[SOURCER-UPDATE] Error:', error);
+    res.status(400).json({ error: 'Failed to update candidate', details: error.message });
+  }
+});
+
 // Bulk status update for group move
 router.post('/api/candidates/bulk-status', requireAuth, requireManagerOrLeadSourcer, async (req: any, res) => {
   try {
