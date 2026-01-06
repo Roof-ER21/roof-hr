@@ -192,12 +192,17 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
       if (conflictingInterview && !data.forceSchedule) {
         const conflictCandidate = await storage.getCandidateById(conflictingInterview.candidateId);
         const conflictTime = new Date(conflictingInterview.scheduledDate);
+        const conflictTimeStr = timezoneService.formatInTimezone(conflictTime, interviewerTimezone, {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
 
         return res.status(409).json({
           error: 'Interviewer has existing appointment',
-          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled at ${formatTime12Hour(
-            `${conflictTime.getHours().toString().padStart(2, '0')}:${conflictTime.getMinutes().toString().padStart(2, '0')}`
-          )} with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`,
+          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled on ${conflictTimeStr} with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`,
           existingInterview: {
             time: conflictTime.toISOString(),
             candidateName: conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'Unknown',
@@ -1197,10 +1202,17 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
       if (conflictingInterview) {
         const conflictCandidate = await storage.getCandidateById(conflictingInterview.candidateId);
         const conflictTime = new Date(conflictingInterview.scheduledDate);
+        const conflictTimeStr = timezoneService.formatInTimezone(conflictTime, interviewerTimezone, {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
 
         return res.status(409).json({
           error: 'Interviewer has existing appointment',
-          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled at that time with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`
+          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled on ${conflictTimeStr} with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`
         });
       }
     }
