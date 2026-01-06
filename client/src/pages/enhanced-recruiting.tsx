@@ -1256,12 +1256,13 @@ export default function EnhancedRecruiting() {
       });
       if (!response.ok) return [];
       return response.json();
-    }
+    },
+    enabled: canAssignCandidates(),
   });
 
   // Fetch available employees for assignment
   const { data: availableEmployees = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; role: string; isActive: boolean }>>({
-    queryKey: ['/api/users'],
+    queryKey: ['/api/users', 'assignment'],
     queryFn: async () => {
       const response = await fetch('/api/users', {
         headers: {
@@ -1272,7 +1273,8 @@ export default function EnhancedRecruiting() {
       const users = await response.json();
       // Filter to only show active employees/managers/admins
       return users.filter((u: { isActive: boolean; role: string }) => u.isActive && ['EMPLOYEE', 'MANAGER', 'ADMIN'].includes(u.role));
-    }
+    },
+    enabled: canAssignCandidates(),
   });
 
   // Get candidateId from URL params if present

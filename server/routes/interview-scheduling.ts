@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { insertInterviewAvailabilitySchema, insertInterviewPanelMemberSchema } from '@shared/schema';
+import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 import { storage } from '../storage';
 import { requireAuth, checkRole } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
@@ -71,9 +72,40 @@ router.get('/interview-panel-members/:interviewId', requireAuth, async (req, res
 });
 
 // Add panel member to interview
-router.post('/interview-panel-members', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.post('/interview-panel-members', requireAuth, async (req: any, res) => {
   try {
     const data = insertInterviewPanelMemberSchema.parse(req.body);
+    const user = req.user;
+
+    const hasManagerAccess = isAdmin(user) || isManager(user.role);
+
+    if (!hasManagerAccess) {
+      const isSourcerUser = user.role === 'SOURCER' ||
+        isSourcer(user) ||
+        isLeadSourcer(user) ||
+        isExtendedSourcer(user);
+
+      if (!isSourcerUser) {
+        return res.status(403).json({ error: 'Sourcer or manager access required' });
+      }
+
+      const interview = await storage.getInterviewById(data.interviewId);
+      if (!interview) {
+        return res.status(404).json({ error: 'Interview not found' });
+      }
+
+      const candidate = await storage.getCandidateById(interview.candidateId);
+      if (!candidate) {
+        return res.status(404).json({ error: 'Candidate not found' });
+      }
+
+      if (!isLeadSourcer(user) && candidate.assignedTo !== user.id) {
+        return res.status(403).json({
+          error: 'You can only add panel members for candidates assigned to you'
+        });
+      }
+    }
+
     const member = await storage.createInterviewPanelMember(data);
     res.json(member);
   } catch (error) {
