@@ -476,8 +476,10 @@ export default function RecruitingAnalytics() {
             variant="outline"
             size="default"
             onClick={() => {
+              const token = localStorage.getItem('token');
               const params = new URLSearchParams({ period });
               if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+              if (token) params.append('token', token);
               window.open(`/api/recruiting-analytics/export/analytics-report?${params}`, '_blank');
             }}
           >

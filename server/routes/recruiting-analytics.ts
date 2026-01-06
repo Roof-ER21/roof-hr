@@ -875,7 +875,25 @@ router.get('/export/pdf', requireAuthOrAssignments(), async (req: any, res: any)
 
 // GET /api/recruiting-analytics/export/analytics-report
 // Full analytics report with all metrics (printable HTML)
-router.get('/export/analytics-report', requireAuthOrAssignments(), async (req: any, res: any) => {
+// Supports token via query param for window.open() calls
+router.get('/export/analytics-report', async (req: any, res: any, next: any) => {
+  // Check for token in query param (for window.open calls)
+  if (!req.user && req.query.token) {
+    try {
+      const session = await storage.getSessionByToken(req.query.token);
+      if (session && new Date(session.expiresAt) > new Date()) {
+        const user = await storage.getUserById(session.userId);
+        if (user) {
+          req.user = user;
+          req.isManager = MANAGER_ROLES.includes(user.role) || user.email === 'ahmed.mahmoud@theroofdocs.com';
+        }
+      }
+    } catch (e) {
+      console.error('Token auth error:', e);
+    }
+  }
+  next();
+}, requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
     const { period, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period || '30d');
