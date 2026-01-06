@@ -58,6 +58,7 @@ function PTO() {
   const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [adminPtoAutoApprove, setAdminPtoAutoApprove] = useState(true);
+  const [adminEmployeeSearch, setAdminEmployeeSearch] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -109,6 +110,22 @@ function PTO() {
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     }
+  });
+
+  const adminEligibleEmployees = (users || []).filter((u: any) => {
+    if (!u?.isActive) return false;
+    return employeeGetsPto({ department: u.department, employmentType: u.employmentType });
+  });
+
+  const filteredAdminEmployees = adminEligibleEmployees.filter((u: any) => {
+    if (!adminEmployeeSearch.trim()) return true;
+    const search = adminEmployeeSearch.trim().toLowerCase();
+    const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
+    return (
+      fullName.includes(search) ||
+      (u.email || '').toLowerCase().includes(search) ||
+      (u.department || '').toLowerCase().includes(search)
+    );
   });
 
   const { data: settings } = useQuery({
@@ -867,7 +884,15 @@ function PTO() {
 
           {/* Admin: Create PTO for Employee - Only Oliver, Ford, Reese, Ahmed */}
           {canApprovePto && (
-            <Dialog open={adminPtoDialogOpen} onOpenChange={setAdminPtoDialogOpen}>
+            <Dialog
+              open={adminPtoDialogOpen}
+              onOpenChange={(open) => {
+                setAdminPtoDialogOpen(open);
+                if (!open) {
+                  setAdminEmployeeSearch('');
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button variant="outline" className="ml-2">
                   <Users className="w-4 h-4 mr-2" />
@@ -881,6 +906,13 @@ function PTO() {
                 <form onSubmit={adminForm.handleSubmit(onAdminSubmit)} className="space-y-4">
                   <div>
                     <Label htmlFor="admin-employee">Employee</Label>
+                    <Input
+                      id="admin-employee-search"
+                      value={adminEmployeeSearch}
+                      onChange={(e) => setAdminEmployeeSearch(e.target.value)}
+                      placeholder="Search by name, email, or department"
+                      className="mb-2"
+                    />
                     <Select
                       value={adminForm.watch('employeeId')}
                       onValueChange={(value) => adminForm.setValue('employeeId', value)}
@@ -889,11 +921,16 @@ function PTO() {
                         <SelectValue placeholder="Select employee" />
                       </SelectTrigger>
                       <SelectContent>
-                        {users?.filter((u: any) => u.isActive).map((u: any) => (
+                        {filteredAdminEmployees.map((u: any) => (
                           <SelectItem key={u.id} value={u.id}>
                             {u.firstName} {u.lastName} ({u.department || 'No Dept'})
                           </SelectItem>
                         ))}
+                        {filteredAdminEmployees.length === 0 && (
+                          <SelectItem value="__no_results__" disabled>
+                            No eligible employees match your search.
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
