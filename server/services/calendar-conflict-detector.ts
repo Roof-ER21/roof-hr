@@ -166,10 +166,17 @@ export class CalendarConflictDetector {
       
       if (!user) return conflicts;
 
-      // Get interviews where this user is an interviewer
-      const allInterviews = await this.storage.getAllInterviews();
-      const userInterviews = allInterviews.filter(interview =>
-        interview.interviewerId === user.id &&
+      const [primaryInterviews, panelInterviews] = await Promise.all([
+        this.storage.getInterviewsByInterviewer(user.id),
+        this.storage.getInterviewsByPanelMember(user.id)
+      ]);
+
+      const interviewsById = new Map<string, any>();
+      for (const interview of [...primaryInterviews, ...panelInterviews]) {
+        interviewsById.set(interview.id, interview);
+      }
+
+      const userInterviews = Array.from(interviewsById.values()).filter(interview =>
         interview.status === 'SCHEDULED' &&
         interview.id !== excludeEventId
       );

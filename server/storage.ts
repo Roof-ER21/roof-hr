@@ -155,6 +155,7 @@ export interface IStorage {
   getAllInterviews(): Promise<Interview[]>;
   getInterviewsByCandidate(candidateId: string): Promise<Interview[]>;
   getInterviewsByInterviewer(interviewerId: string): Promise<Interview[]>;
+  getInterviewsByPanelMember(userId: string): Promise<Interview[]>;
   updateInterview(id: string, data: Partial<InsertInterview>): Promise<Interview>;
   deleteInterview(id: string): Promise<void>;
 
@@ -802,6 +803,20 @@ class DrizzleStorage implements IStorage {
 
   async getInterviewsByInterviewer(interviewerId: string): Promise<Interview[]> {
     return await db.select().from(interviews).where(eq(interviews.interviewerId, interviewerId));
+  }
+
+  async getInterviewsByPanelMember(userId: string): Promise<Interview[]> {
+    const panelRows = await db
+      .select({ interviewId: interviewPanelMembers.interviewId })
+      .from(interviewPanelMembers)
+      .where(eq(interviewPanelMembers.userId, userId));
+
+    const interviewIds = panelRows.map((row) => row.interviewId);
+    if (interviewIds.length === 0) {
+      return [];
+    }
+
+    return await db.select().from(interviews).where(inArray(interviews.id, interviewIds));
   }
 
   async updateInterview(id: string, data: Partial<InsertInterview>): Promise<Interview> {

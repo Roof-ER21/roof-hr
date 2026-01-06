@@ -158,17 +158,14 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
       // If there are hard conflicts, show override option
       const hardConflicts = data.conflicts?.filter((c: any) => c.severity === 'hard') || [];
-      if (hardConflicts.length > 0) {
-        setShowConflictOverride(true);
-      } else {
-        setShowConflictOverride(false);
-      }
+      setShowConflictOverride(!isSourcerUser && hardConflicts.length > 0);
     },
     onError: (error) => {
       console.error('[CONFLICT CHECK] Error:', error);
       // If conflict check fails, clear conflicts but allow scheduling
       setConflicts([]);
       setWarnings(['Unable to check for conflicts. Please verify availability manually.']);
+      setShowConflictOverride(false);
       setIsCheckingConflicts(false);
       isCheckingRef.current = false; // Reset the in-flight flag
     },
@@ -183,7 +180,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const conflictCheckAutoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Effect to check conflicts when inputs change (debounced to prevent race conditions)
-  // FIXED: Sourcers skip conflict check (they don't have permission), added 10s timeout
   useEffect(() => {
     // Clear any pending conflict check and auto-timeout
     if (conflictCheckTimeoutRef.current) {
@@ -194,18 +190,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     }
 
     if (selectedDate && selectedInterviewer && selectedTime) {
-      // FIXED: Sourcers skip conflict check entirely (they get 403 from backend)
-      if (isSourcerUser) {
-        console.log('[CONFLICT CHECK] Skipping for sourcer user - no permission for conflict API');
-        setIsCheckingConflicts(false);
-        setConflicts([]);
-        setWarnings([]);
-        setSuggestedTimes([]);
-        setShowConflictOverride(false);
-        isCheckingRef.current = false;
-        return;
-      }
-
       setIsCheckingConflicts(true);
 
       // FIXED: Auto-timeout after 10 seconds to prevent infinite hang
@@ -256,7 +240,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       }
     };
     // Use JSON.stringify for panelMembers to prevent reference changes from triggering re-renders
-  }, [selectedDate, selectedTime, selectedInterviewer, duration, JSON.stringify(panelMembers), isSourcerUser]);
+  }, [selectedDate, selectedTime, selectedInterviewer, duration, JSON.stringify(panelMembers)]);
 
   const scheduleMutation = useMutation<
     any,
@@ -272,12 +256,13 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       });
 
       // Add additional interviewers (panel members) for any interview type
-      if (panelMembers.length > 0) {
+      const interviewId = response?.id ?? response?.interview?.id;
+      if (panelMembers.length > 0 && interviewId) {
         await Promise.all(panelMembers.map(memberId =>
           apiRequest('/api/interview-panel-members', {
             method: 'POST',
             body: JSON.stringify({
-              interviewId: response.id,
+              interviewId,
               userId: memberId,
               role: memberId === selectedInterviewer ? 'LEAD' : 'PARTICIPANT',
             }),
@@ -327,14 +312,17 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
           setWarnings([errorData.message]);
         } else {
           // General conflicts (PTO, etc)
+          const canOverride = !isSourcerUser;
           setConflicts(errorData.conflicts || []);
           setSuggestedTimes(errorData.suggestedTimes?.map((t: string) => new Date(t)) || []);
           setWarnings(errorData.warnings || []);
-          setShowConflictOverride(true);
+          setShowConflictOverride(canOverride);
 
           toast({
             title: 'Schedule Conflicts Detected',
-            description: 'There are conflicts with the selected time. Please review and either choose another time or override.',
+            description: canOverride
+              ? 'There are conflicts with the selected time. Please review and either choose another time or override.'
+              : 'There are conflicts with the selected time. Please choose another time.',
             variant: 'destructive',
           });
         }
@@ -510,14 +498,25 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
     // Check if there are hard conflicts and not forcing
     const hardConflicts = conflicts.filter(c => c.severity === 'hard');
-    if (hardConflicts.length > 0 && !forceSchedule && !showConflictOverride) {
-      setShowConflictOverride(true);
-      toast({
-        title: 'Conflicts Detected',
-        description: 'Please review the conflicts before scheduling',
-        variant: 'destructive',
-      });
-      return;
+    if (hardConflicts.length > 0 && !forceSchedule) {
+      if (isSourcerUser) {
+        toast({
+          title: 'Conflicts Detected',
+          description: 'Please choose a different time to avoid conflicts.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!showConflictOverride) {
+        setShowConflictOverride(true);
+        toast({
+          title: 'Conflicts Detected',
+          description: 'Please review the conflicts before scheduling',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     scheduleMutation.mutate({
@@ -533,7 +532,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       status: 'SCHEDULED',
       reminderHours: sendReminder ? parseInt(reminderHours) : undefined,
       sendCalendarInvite,
-      forceSchedule, // Include this to override conflicts
+      panelMemberIds: panelMembers,
+      forceSchedule: !isSourcerUser && forceSchedule, // Include this to override conflicts
     });
   };
 
@@ -1103,7 +1103,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                       className="rounded border-gray-300"
                     />
                     <label htmlFor="calendar-invite" className="text-sm">
-                      Send calendar invite to candidate and interviewer
+                      Send calendar invite to candidate and interviewer(s)
                     </label>
                   </div>
                 </div>

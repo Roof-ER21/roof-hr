@@ -6,7 +6,7 @@ import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewRe
 import { getConflictDetector } from '../services/calendar-conflict-detector';
 import { timezoneService } from '../services/timezone-service';
 import { requireAuth, requireManager } from '../middleware/auth';
-import { isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
+import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 
 const router = Router();
 
@@ -15,6 +15,7 @@ const scheduleInterviewSchema = z.object({
   candidateId: z.string(),
   interviewerId: z.string().optional(), // Optional when using custom interviewer
   customInterviewerName: z.string().optional(), // For interviewers not in system
+  panelMemberIds: z.array(z.string()).optional(),
   scheduledDate: z.string(),
   duration: z.number().min(15).max(480),
   type: z.enum(['PHONE', 'VIDEO', 'IN_PERSON']),
@@ -72,10 +73,14 @@ router.post('/', requireAuth, requireManager, async (req, res) => {
 router.post('/schedule', requireAuth, requireManager, async (req, res) => {
   try {
     const data = scheduleInterviewSchema.parse(req.body);
+    const panelMemberIds = data.panelMemberIds ?? [];
 
     // Get participant emails for conflict checking
     const candidate = await storage.getCandidateById(data.candidateId);
     const interviewer = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
+    const panelMembers = panelMemberIds.length > 0
+      ? await Promise.all(panelMemberIds.map((id) => storage.getUserById(id)))
+      : [];
 
     // Validate: candidate is required, interviewer is optional if customInterviewerName is provided
     if (!candidate) {
@@ -207,10 +212,13 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
     const startTime = new Date(data.scheduledDate);
     const endTime = new Date(startTime.getTime() + data.duration * 60 * 1000);
 
-    const participants = [
-      ...(interviewer?.email ? [interviewer.email] : []),
-      ...(candidate.email ? [candidate.email] : [])
-    ];
+    const participantSet = new Set<string>();
+    if (interviewer?.email) participantSet.add(interviewer.email);
+    if (candidate.email) participantSet.add(candidate.email);
+    for (const member of panelMembers) {
+      if (member?.email) participantSet.add(member.email);
+    }
+    const participants = Array.from(participantSet);
 
     const conflictResult = await conflictDetector.checkConflicts(
       participants,
@@ -242,7 +250,13 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
     if (hardConflicts.length > 0 && !data.forceSchedule) {
       return res.status(409).json({
         error: 'Schedule conflicts detected',
-        conflicts: hardConflicts.map(c => conflictDetector.formatConflictMessage(c)),
+        conflicts: hardConflicts.map(c => ({
+          message: conflictDetector.formatConflictMessage(c),
+          type: c.type,
+          severity: c.severity,
+          start: c.start,
+          end: c.end
+        })),
         suggestedTimes: conflictResult.suggestedTimes,
         warnings: conflictResult.warnings,
         message: 'The selected time has conflicts. Please choose another time or confirm to override.'
@@ -316,37 +330,39 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
 
     // Create Google Calendar event in the interviewer's calendar using impersonation
     let googleEventId: string | undefined;
-    try {
-      // Import and initialize the service account-based calendar service
-      const GoogleCalendarService = (await import('../services/google-calendar-service')).default;
-      const calendarService = new GoogleCalendarService();
+    const shouldSendCalendarInvite = data.sendCalendarInvite !== false;
+    if (shouldSendCalendarInvite) {
+      try {
+        // Import and initialize the service account-based calendar service
+        const GoogleCalendarService = (await import('../services/google-calendar-service')).default;
+        const calendarService = new GoogleCalendarService();
 
-      // Initialize with service account
-      await calendarService.initialize();
-      console.log('[INTERVIEW] Calendar service initialized successfully');
+        // Initialize with service account
+        await calendarService.initialize();
+        console.log('[INTERVIEW] Calendar service initialized successfully');
 
-      // Get candidate and interviewer info for attendees
-      const candidateDetails = await storage.getCandidateById(data.candidateId);
-      const interviewerDetails = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
+        // Get candidate and interviewer info for attendees
+        const candidateDetails = await storage.getCandidateById(data.candidateId);
+        const interviewerDetails = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
 
-      console.log('[INTERVIEW] Calendar event details:', {
-        candidateId: data.candidateId,
-        interviewerId: data.interviewerId,
-        candidateEmail: candidateDetails?.email,
-        interviewerEmail: interviewerDetails?.email,
-        interviewType: data.type,
-        scheduledDate: data.scheduledDate
-      });
+        console.log('[INTERVIEW] Calendar event details:', {
+          candidateId: data.candidateId,
+          interviewerId: data.interviewerId,
+          candidateEmail: candidateDetails?.email,
+          interviewerEmail: interviewerDetails?.email,
+          interviewType: data.type,
+          scheduledDate: data.scheduledDate
+        });
 
-      if (candidateDetails && interviewerDetails && interviewerDetails.email) {
-        const startDateTime = new Date(data.scheduledDate);
-        const endDateTime = new Date(startDateTime.getTime() + data.duration * 60 * 1000);
+        if (candidateDetails && interviewerDetails && interviewerDetails.email) {
+          const startDateTime = new Date(data.scheduledDate);
+          const endDateTime = new Date(startDateTime.getTime() + data.duration * 60 * 1000);
 
-        // Get interviewer's timezone (fallback to 'America/New_York')
-        const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId!);
+          // Get interviewer's timezone (fallback to 'America/New_York')
+          const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId!);
 
-        // Create detailed interview description
-        const description = `
+          // Create detailed interview description
+          const description = `
 Interview Details:
 - Candidate: ${candidateDetails.firstName} ${candidateDetails.lastName}
 - Position: ${candidateDetails.position}
@@ -365,84 +381,89 @@ ${data.notes ? `Notes:\n${data.notes}` : ''}
 Please use the HR system to record interview feedback.
         `.trim();
 
-        // Prepare attendee list (both candidate and interviewer)
-        const attendees: string[] = [];
-        if (candidateDetails.email) attendees.push(candidateDetails.email);
-        if (interviewerDetails.email) attendees.push(interviewerDetails.email);
-
-        let calendarEvent: any;
-        let autoMeetLink: string | undefined;
-
-        // For VIDEO interviews, auto-generate Google Meet link in the interviewer's calendar
-        if (data.type === 'VIDEO') {
-          calendarEvent = await calendarService.createEventWithMeetForUser(
-            interviewerDetails.email, // Create in the interviewer's calendar
-            {
-              summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
-              description,
-              startDateTime,
-              endDateTime,
-              attendees,
-              sendNotifications: true,
-              timeZone: interviewerTimezone
-            }
-          );
-
-          // Extract the auto-generated Meet link
-          autoMeetLink = calendarEvent.meetLink || calendarEvent.hangoutLink;
-          if (autoMeetLink) {
-            console.log('[INTERVIEW] Auto-generated Google Meet link:', autoMeetLink);
+          // Prepare attendee list (candidate, interviewer, panel members)
+          const attendeeSet = new Set<string>();
+          if (candidateDetails.email) attendeeSet.add(candidateDetails.email);
+          if (interviewerDetails.email) attendeeSet.add(interviewerDetails.email);
+          for (const member of panelMembers) {
+            if (member?.email) attendeeSet.add(member.email);
           }
-        } else {
-          // For PHONE and IN_PERSON, create regular event in the interviewer's calendar
-          calendarEvent = await calendarService.createEventForUser(
-            interviewerDetails.email, // Create in the interviewer's calendar
-            {
-              summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
-              description,
-              location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
-              startDateTime,
-              endDateTime,
-              attendees,
-              sendNotifications: true,
-              timeZone: interviewerTimezone,
-              reminders: {
-                useDefault: false,
-                overrides: [
-                  { method: 'email', minutes: 24 * 60 }, // 1 day before
-                  { method: 'email', minutes: 60 }, // 1 hour before
-                  { method: 'popup', minutes: 15 } // 15 minutes before
-                ]
+          const attendees = Array.from(attendeeSet);
+
+          let calendarEvent: any;
+          let autoMeetLink: string | undefined;
+
+          // For VIDEO interviews, auto-generate Google Meet link in the interviewer's calendar
+          if (data.type === 'VIDEO') {
+            calendarEvent = await calendarService.createEventWithMeetForUser(
+              interviewerDetails.email, // Create in the interviewer's calendar
+              {
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+                description,
+                startDateTime,
+                endDateTime,
+                attendees,
+                sendNotifications: true,
+                timeZone: interviewerTimezone
               }
+            );
+
+            // Extract the auto-generated Meet link
+            autoMeetLink = calendarEvent.meetLink || calendarEvent.hangoutLink;
+            if (autoMeetLink) {
+              console.log('[INTERVIEW] Auto-generated Google Meet link:', autoMeetLink);
             }
-          );
-        }
-
-        googleEventId = calendarEvent.id;
-        console.log('[INTERVIEW] Google Calendar event created in interviewer\'s calendar:', googleEventId);
-
-        // Update interview with calendar event ID and auto-generated Meet link (for VIDEO)
-        if (googleEventId) {
-          const updateData: any = { googleEventId };
-          // If VIDEO and we have an auto-generated Meet link, use it (override any manual link)
-          if (data.type === 'VIDEO' && autoMeetLink) {
-            updateData.meetingLink = autoMeetLink;
+          } else {
+            // For PHONE and IN_PERSON, create regular event in the interviewer's calendar
+            calendarEvent = await calendarService.createEventForUser(
+              interviewerDetails.email, // Create in the interviewer's calendar
+              {
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+                description,
+                location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
+                startDateTime,
+                endDateTime,
+                attendees,
+                sendNotifications: true,
+                timeZone: interviewerTimezone,
+                reminders: {
+                  useDefault: false,
+                  overrides: [
+                    { method: 'email', minutes: 24 * 60 }, // 1 day before
+                    { method: 'email', minutes: 60 }, // 1 hour before
+                    { method: 'popup', minutes: 15 } // 15 minutes before
+                  ]
+                }
+              }
+            );
           }
-          await storage.updateInterview(interview.id, updateData);
+
+          googleEventId = calendarEvent.id;
+          console.log('[INTERVIEW] Google Calendar event created in interviewer\'s calendar:', googleEventId);
+
+          // Update interview with calendar event ID and auto-generated Meet link (for VIDEO)
+          if (googleEventId) {
+            const updateData: any = { googleEventId };
+            // If VIDEO and we have an auto-generated Meet link, use it (override any manual link)
+            if (data.type === 'VIDEO' && autoMeetLink) {
+              updateData.meetingLink = autoMeetLink;
+            }
+            await storage.updateInterview(interview.id, updateData);
+          }
+        } else if (!interviewerDetails || !interviewerDetails.email) {
+          console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available');
         }
-      } else if (!interviewerDetails || !interviewerDetails.email) {
-        console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available');
+      } catch (calendarError: any) {
+        console.error('[INTERVIEW] ❌ Failed to create Google Calendar event:', {
+          error: calendarError.message,
+          code: calendarError.code,
+          status: calendarError.status,
+          errors: calendarError.errors,
+          stack: calendarError.stack?.split('\n').slice(0, 5).join('\n')
+        });
+        // Send a warning in the response but don't fail the interview creation
+        res.locals.calendarWarning = `Interview scheduled but calendar event creation failed: ${calendarError.message}`;
       }
-    } catch (calendarError: any) {
-      console.error('[INTERVIEW] ❌ Failed to create Google Calendar event:', {
-        error: calendarError.message,
-        code: calendarError.code,
-        status: calendarError.status,
-        errors: calendarError.errors,
-        stack: calendarError.stack?.split('\n').slice(0, 5).join('\n')
-      });
-      // Send a warning in the response but don't fail the interview creation
-      res.locals.calendarWarning = `Interview scheduled but calendar event creation failed: ${calendarError.message}`;
     }
 
     // Send immediate confirmation emails (from the logged-in user's email)
@@ -563,11 +584,34 @@ router.post('/feedback', requireAuth, async (req, res) => {
   }
 });
 
-// Check for calendar conflicts before scheduling (managers only)
-router.post('/check-conflicts', requireAuth, requireManager, async (req, res) => {
+// Check for calendar conflicts before scheduling (managers or assigned sourcers)
+router.post('/check-conflicts', requireAuth, async (req: any, res) => {
   try {
     const { candidateId, interviewerId, panelMemberIds = [], scheduledDate, duration } = req.body;
+    const user = req.user;
+    const hasManagerAccess = isAdmin(user) || isManager(user.role);
+    const isSourcerUser = user && (
+      user.role === 'SOURCER' ||
+      isSourcer(user) ||
+      isLeadSourcer(user) ||
+      isExtendedSourcer(user)
+    );
+
+    if (!hasManagerAccess && !isSourcerUser) {
+      return res.status(403).json({ error: 'Manager or sourcer access required' });
+    }
     console.log('[CONFLICT CHECK] Input:', { candidateId, interviewerId, panelMemberIds, scheduledDate, duration });
+
+    const candidate = await storage.getCandidateById(candidateId);
+    if (!candidate) {
+      return res.status(400).json({ error: 'Candidate not found' });
+    }
+
+    if (!hasManagerAccess && !isLeadSourcer(user) && candidate.assignedTo !== user.id) {
+      return res.status(403).json({
+        error: 'You can only check conflicts for candidates assigned to you'
+      });
+    }
 
     // Get participant emails - check ALL interviewers (primary + panel members)
     const participants: string[] = [];
@@ -589,8 +633,7 @@ router.post('/check-conflicts', requireAuth, requireManager, async (req, res) =>
     }
 
     // Add candidate
-    const candidate = await storage.getCandidateById(candidateId);
-    if (candidate?.email) {
+    if (candidate.email) {
       participants.push(candidate.email);
     }
 
@@ -1084,6 +1127,7 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
     }
 
     const data = scheduleInterviewSchema.parse(req.body);
+    const panelMemberIds = data.panelMemberIds ?? [];
 
     // Get candidate
     const candidate = await storage.getCandidateById(data.candidateId);
@@ -1099,6 +1143,9 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
     }
 
     const interviewer = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
+    const panelMembers = panelMemberIds.length > 0
+      ? await Promise.all(panelMemberIds.map((id) => storage.getUserById(id)))
+      : [];
 
     if (!interviewer && !data.customInterviewerName) {
       return res.status(400).json({
@@ -1158,6 +1205,65 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
       }
     }
 
+    // Check for calendar conflicts
+    const conflictDetector = await getConflictDetector(storage);
+    const startTime = new Date(data.scheduledDate);
+    const endTime = new Date(startTime.getTime() + data.duration * 60 * 1000);
+
+    const participantSet = new Set<string>();
+    if (interviewer?.email) participantSet.add(interviewer.email);
+    if (candidate.email) participantSet.add(candidate.email);
+    for (const member of panelMembers) {
+      if (member?.email) participantSet.add(member.email);
+    }
+    const participants = Array.from(participantSet);
+
+    const conflictResult = await conflictDetector.checkConflicts(
+      participants,
+      startTime,
+      endTime
+    );
+
+    const hardConflicts = conflictResult.conflicts.filter(c => c.severity === 'hard');
+    if (hardConflicts.length > 0) {
+      await conflictDetector.sendConflictAlerts(
+        hardConflicts,
+        {
+          candidateId: data.candidateId,
+          interviewerId: data.interviewerId || undefined,
+          scheduledDate: startTime,
+          duration: data.duration,
+          type: data.type,
+          location: data.location,
+          meetingLink: data.meetingLink
+        },
+        false,
+        user.email
+      );
+
+      return res.status(409).json({
+        error: 'Schedule conflicts detected',
+        conflicts: hardConflicts.map(c => ({
+          message: conflictDetector.formatConflictMessage(c),
+          type: c.type,
+          severity: c.severity,
+          start: c.start,
+          end: c.end
+        })),
+        suggestedTimes: conflictResult.suggestedTimes,
+        warnings: conflictResult.warnings,
+        message: 'The selected time has conflicts. Please choose another time.'
+      });
+    }
+
+    const softConflicts = conflictResult.conflicts.filter(c => c.severity === 'soft');
+    if (softConflicts.length > 0 || conflictResult.warnings.length > 0) {
+      console.log('[SOURCER INTERVIEW] Soft conflicts/warnings detected:', {
+        softConflicts: softConflicts.length,
+        warnings: conflictResult.warnings.length
+      });
+    }
+
     // Create the interview (sourcers cannot force override conflicts)
     const interview = await storage.createInterview({
       candidateId: data.candidateId,
@@ -1173,22 +1279,180 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
       status: 'SCHEDULED',
     });
 
+    if (data.sendReminders) {
+      const reminderTime = new Date(data.scheduledDate);
+      reminderTime.setHours(reminderTime.getHours() - (data.reminderHours || 24));
+
+      await storage.createInterviewReminder({
+        interviewId: interview.id,
+        reminderType: 'CANDIDATE',
+        scheduledAt: reminderTime,
+        status: 'PENDING',
+      });
+
+      await storage.createInterviewReminder({
+        interviewId: interview.id,
+        reminderType: 'INTERVIEWER',
+        scheduledAt: reminderTime,
+        status: 'PENDING',
+      });
+    }
+
+    let googleEventId: string | undefined;
+    const shouldSendCalendarInvite = data.sendCalendarInvite !== false;
+    if (shouldSendCalendarInvite) {
+      try {
+        const GoogleCalendarService = (await import('../services/google-calendar-service')).default;
+        const calendarService = new GoogleCalendarService();
+
+        await calendarService.initialize();
+        console.log('[SOURCER INTERVIEW] Calendar service initialized successfully');
+
+        const candidateDetails = await storage.getCandidateById(data.candidateId);
+        const interviewerDetails = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
+
+        console.log('[SOURCER INTERVIEW] Calendar event details:', {
+          candidateId: data.candidateId,
+          interviewerId: data.interviewerId,
+          candidateEmail: candidateDetails?.email,
+          interviewerEmail: interviewerDetails?.email,
+          interviewType: data.type,
+          scheduledDate: data.scheduledDate
+        });
+
+        if (candidateDetails && interviewerDetails && interviewerDetails.email) {
+          const startDateTime = new Date(data.scheduledDate);
+          const endDateTime = new Date(startDateTime.getTime() + data.duration * 60 * 1000);
+          const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId!);
+
+          const description = `
+Interview Details:
+- Candidate: ${candidateDetails.firstName} ${candidateDetails.lastName}
+- Position: ${candidateDetails.position}
+- Department: ${(candidateDetails as any).department || 'N/A'}
+- Type: ${data.type}
+- Duration: ${data.duration} minutes
+${data.meetingLink ? `- Meeting Link: ${data.meetingLink}` : ''}
+${data.location && data.type === 'IN_PERSON' ? `- Location: ${data.location}` : ''}
+
+Candidate Contact:
+- Email: ${candidateDetails.email}
+- Phone: ${candidateDetails.phone || 'N/A'}
+
+${data.notes ? `Notes:\n${data.notes}` : ''}
+
+Please use the HR system to record interview feedback.
+          `.trim();
+
+          const attendeeSet = new Set<string>();
+          if (candidateDetails.email) attendeeSet.add(candidateDetails.email);
+          if (interviewerDetails.email) attendeeSet.add(interviewerDetails.email);
+          for (const member of panelMembers) {
+            if (member?.email) attendeeSet.add(member.email);
+          }
+          const attendees = Array.from(attendeeSet);
+
+          let calendarEvent: any;
+          let autoMeetLink: string | undefined;
+
+          if (data.type === 'VIDEO') {
+            calendarEvent = await calendarService.createEventWithMeetForUser(
+              interviewerDetails.email,
+              {
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+                description,
+                startDateTime,
+                endDateTime,
+                attendees,
+                sendNotifications: true,
+                timeZone: interviewerTimezone
+              }
+            );
+
+            autoMeetLink = calendarEvent.meetLink || calendarEvent.hangoutLink;
+            if (autoMeetLink) {
+              console.log('[SOURCER INTERVIEW] Auto-generated Google Meet link:', autoMeetLink);
+            }
+          } else {
+            calendarEvent = await calendarService.createEventForUser(
+              interviewerDetails.email,
+              {
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+                description,
+                location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
+                startDateTime,
+                endDateTime,
+                attendees,
+                sendNotifications: true,
+                timeZone: interviewerTimezone,
+                reminders: {
+                  useDefault: false,
+                  overrides: [
+                    { method: 'email', minutes: 24 * 60 },
+                    { method: 'email', minutes: 60 },
+                    { method: 'popup', minutes: 15 }
+                  ]
+                }
+              }
+            );
+          }
+
+          googleEventId = calendarEvent.id;
+          console.log('[SOURCER INTERVIEW] Google Calendar event created in interviewer\'s calendar:', googleEventId);
+
+          if (googleEventId) {
+            const updateData: any = { googleEventId };
+            if (data.type === 'VIDEO' && autoMeetLink) {
+              updateData.meetingLink = autoMeetLink;
+            }
+            await storage.updateInterview(interview.id, updateData);
+          }
+        } else if (!interviewerDetails || !interviewerDetails.email) {
+          console.warn('[SOURCER INTERVIEW] Cannot create calendar event: interviewer email not available');
+        }
+      } catch (calendarError: any) {
+        console.error('[SOURCER INTERVIEW] ❌ Failed to create Google Calendar event:', {
+          error: calendarError.message,
+          code: calendarError.code,
+          status: calendarError.status,
+          errors: calendarError.errors,
+          stack: calendarError.stack?.split('\n').slice(0, 5).join('\n')
+        });
+        res.locals.calendarWarning = `Interview scheduled but calendar event creation failed: ${calendarError.message}`;
+      }
+    }
+
     // Send interview emails
     if (data.sendReminders !== false) {
       try {
         await sendInterviewScheduledEmails(interview, user.email);
       } catch (emailError) {
         console.error('[SOURCER INTERVIEW] Failed to send emails:', emailError);
+        res.locals.emailWarning = 'Interview scheduled but email notifications failed';
       }
     }
 
+    await storage.updateCandidate(data.candidateId, {
+      status: 'INTERVIEW'
+    });
+
     console.log(`[SOURCER-SCHEDULE] ${user.email} scheduled interview for candidate ${candidate.firstName} ${candidate.lastName}`);
 
-    res.json({
-      success: true,
-      interview,
-      message: 'Interview scheduled successfully'
-    });
+    const response: any = { success: true, interview, message: 'Interview scheduled successfully' };
+    const warnings: string[] = [];
+
+    if (res.locals.calendarWarning) {
+      warnings.push(res.locals.calendarWarning);
+    }
+    if (res.locals.emailWarning) {
+      warnings.push(res.locals.emailWarning);
+    }
+
+    if (warnings.length > 0) {
+      response.warnings = warnings;
+    }
+
+    res.json(response);
 
   } catch (error) {
     console.error('[SOURCER SCHEDULE INTERVIEW ERROR]', error);
