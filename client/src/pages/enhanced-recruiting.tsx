@@ -1321,13 +1321,15 @@ export default function EnhancedRecruiting() {
 
   const updateCandidateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      // If user is SOURCER (not manager) and updating status, use the sourcer-move endpoint
-      if (userIsSourcerOnly && data.status) {
-        // Check if the target status is allowed for SOURCERs
-        if (!SOURCER_ALLOWED_STAGES.includes(data.status)) {
-          throw new Error('SOURCERs can only move candidates to early stages or mark as Dead/No-Show. Contact a manager to move to Offer or Hired.');
+      if (userIsSourcerOnly) {
+        if (data.status) {
+          // Check if the target status is allowed for SOURCERs
+          if (!SOURCER_ALLOWED_STAGES.includes(data.status)) {
+            throw new Error('SOURCERs can only move candidates to early stages or mark as Dead/No-Show. Contact a manager to move to Offer or Hired.');
+          }
+          return apiRequest(`/api/candidates/${id}/sourcer-move`, 'PATCH', { newStatus: data.status });
         }
-        return apiRequest(`/api/candidates/${id}/sourcer-move`, 'PATCH', { newStatus: data.status });
+        return apiRequest(`/api/candidates/${id}/sourcer-update`, 'PATCH', data);
       }
       // Managers and others use the regular endpoint
       return apiRequest(`/api/candidates/${id}`, 'PATCH', data);

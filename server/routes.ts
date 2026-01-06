@@ -15,7 +15,7 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
@@ -2504,6 +2504,7 @@ router.patch('/api/candidates/:id/sourcer-update', requireAuth, async (req: any,
 
     // Only allow specific screening-related fields
     const allowedFields = [
+      'firstName', 'lastName', 'email', 'phone', 'position', 'referralName',
       'interviewScreeningData', 'interviewScreeningDate', 'interviewScreeningNotes',
       'hasDriversLicense', 'hasReliableVehicle', 'canGetOnRoof', 'isOutgoing',
       'availability', 'customTags', 'notes', 'phoneScreeningNotes'
@@ -2536,9 +2537,10 @@ router.patch('/api/candidates/:id/sourcer-update', requireAuth, async (req: any,
 });
 
 // Bulk status update for group move
-router.post('/api/candidates/bulk-status', requireAuth, requireManagerOrLeadSourcer, async (req: any, res) => {
+router.post('/api/candidates/bulk-status', requireAuth, async (req: any, res) => {
   try {
     const { candidateIds, newStatus } = req.body;
+    const user = req.user!;
 
     if (!candidateIds || !Array.isArray(candidateIds) || candidateIds.length === 0) {
       return res.status(400).json({ error: 'candidateIds array is required' });
@@ -2552,6 +2554,44 @@ router.post('/api/candidates/bulk-status', requireAuth, requireManagerOrLeadSour
     const validStatuses = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'];
     if (!validStatuses.includes(newStatus)) {
       return res.status(400).json({ error: 'Invalid status value' });
+    }
+
+    const hasManagerAccess = user.email === 'ahmed.mahmoud@theroofdocs.com' ||
+      ADMIN_ROLES.includes(user.role) ||
+      MANAGER_ROLES.includes(user.role);
+    const isLead = isLeadSourcer(user);
+    const isSourcerUser = user.role === 'SOURCER' || isSourcer(user) || isExtendedSourcer(user) || isLead;
+
+    if (!hasManagerAccess && !isSourcerUser) {
+      return res.status(403).json({ error: 'Sourcer or manager access required' });
+    }
+
+    if (!hasManagerAccess && !isLead) {
+      const isExtended = isExtendedSourcer(user);
+      const allowedStages = isExtended
+        ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']
+        : ['APPLIED', 'SCREENING', 'INTERVIEW', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'];
+
+      if (!allowedStages.includes(newStatus)) {
+        const errorMsg = isExtended
+          ? 'You can only move candidates up to Offer or mark as Dead/No-Show. Contact a manager to hire candidates.'
+          : 'SOURCERs can only move candidates to early stages or mark as Dead/No-Show. Contact a manager to move to Offer or Hired.';
+        return res.status(403).json({ error: errorMsg });
+      }
+
+      const assignedCandidates = await db.select({
+        id: candidates.id,
+        assignedTo: candidates.assignedTo
+      }).from(candidates).where(inArray(candidates.id, candidateIds));
+
+      if (assignedCandidates.length !== candidateIds.length) {
+        return res.status(404).json({ error: 'One or more candidates not found' });
+      }
+
+      const unassigned = assignedCandidates.find(c => c.assignedTo !== user.id);
+      if (unassigned) {
+        return res.status(403).json({ error: 'You can only move candidates assigned to you' });
+      }
     }
 
     // Update all candidates in the list
