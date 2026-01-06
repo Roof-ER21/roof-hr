@@ -401,6 +401,7 @@ export default function RecruitingAnalytics() {
                 />
               </div>
               <SelectItem value="all">All Employees</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
               {(() => {
                 // Get employee IDs who have candidates assigned
                 const assigneeIds = new Set(

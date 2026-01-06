@@ -103,7 +103,11 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
 
     // Filter by specific assignee if provided
     if (assigneeId) {
-      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
     }
 
     // Filter by date range
@@ -195,7 +199,11 @@ router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) =
 
     // Filter by specific assignee if provided
     if (assigneeId) {
-      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
     }
 
     // Filter by date range
@@ -255,7 +263,11 @@ router.get('/sources', requireAuthOrAssignments(), async (req: any, res: any) =>
 
     // Filter by specific assignee if provided
     if (assigneeId) {
-      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
     }
 
     // Filter by date range
@@ -315,7 +327,11 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
 
     // Filter by specific assignee if provided
     if (assigneeId) {
-      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
     }
 
     // Filter hired candidates within date range
@@ -427,9 +443,15 @@ router.get('/interviews', requireAuthOrAssignments(), async (req: any, res: any)
         .map((c: any) => c.id);
     } else if (assigneeId) {
       // Managers filtering by specific assignee
-      candidateIdsToFilter = allCandidates
-        .filter((c: any) => c.assignedTo?.toString() === assigneeId)
-        .map((c: any) => c.id);
+      if (assigneeId === 'unassigned') {
+        candidateIdsToFilter = allCandidates
+          .filter((c: any) => !c.assignedTo)
+          .map((c: any) => c.id);
+      } else {
+        candidateIdsToFilter = allCandidates
+          .filter((c: any) => c.assignedTo?.toString() === assigneeId)
+          .map((c: any) => c.id);
+      }
     }
 
     // Apply candidate filter if needed
@@ -519,7 +541,11 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
 
     // Filter by specific assignee if provided
     if (assigneeId) {
-      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
     }
 
     // Filter candidates by date range
