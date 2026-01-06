@@ -79,6 +79,7 @@ interface Candidate {
 
 export default function RecruitingAnalytics() {
   const [period, setPeriod] = useState<Period>('30d');
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('all');
   const [archiveSearch, setArchiveSearch] = useState('');
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<string>('all');
   const [selectedArchivedIds, setSelectedArchivedIds] = useState<string[]>([]);
@@ -90,9 +91,11 @@ export default function RecruitingAnalytics() {
 
   // Fetch overview data
   const { data: overview, isLoading: loadingOverview } = useQuery({
-    queryKey: ['recruiting-analytics', 'overview', period],
+    queryKey: ['recruiting-analytics', 'overview', period, selectedAssigneeId],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/overview?period=${period}`, {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/overview?${params}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch overview');
@@ -102,9 +105,11 @@ export default function RecruitingAnalytics() {
 
   // Fetch pipeline data
   const { data: pipeline, isLoading: loadingPipeline } = useQuery({
-    queryKey: ['recruiting-analytics', 'pipeline', period],
+    queryKey: ['recruiting-analytics', 'pipeline', period, selectedAssigneeId],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/pipeline?period=${period}`, {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/pipeline?${params}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch pipeline');
@@ -114,9 +119,11 @@ export default function RecruitingAnalytics() {
 
   // Fetch assignee breakdown data
   const { data: assignees, isLoading: loadingAssignees } = useQuery({
-    queryKey: ['recruiting-analytics', 'recruiters', period],
+    queryKey: ['recruiting-analytics', 'recruiters', period, selectedAssigneeId],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/recruiters?period=${period}`, {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/recruiters?${params}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch assignees');
@@ -126,9 +133,11 @@ export default function RecruitingAnalytics() {
 
   // Fetch time-to-hire data
   const { data: timeToHire, isLoading: loadingTimeToHire } = useQuery({
-    queryKey: ['recruiting-analytics', 'time-to-hire', period],
+    queryKey: ['recruiting-analytics', 'time-to-hire', period, selectedAssigneeId],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/time-to-hire?period=${period}`, {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/time-to-hire?${params}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch time-to-hire');
@@ -138,9 +147,11 @@ export default function RecruitingAnalytics() {
 
   // Fetch interviews data
   const { data: interviews, isLoading: loadingInterviews } = useQuery({
-    queryKey: ['recruiting-analytics', 'interviews', period],
+    queryKey: ['recruiting-analytics', 'interviews', period, selectedAssigneeId],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/interviews?period=${period}`, {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/interviews?${params}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch interviews');
@@ -150,9 +161,11 @@ export default function RecruitingAnalytics() {
 
   // Fetch recruiters data
   const { data: recruiters, isLoading: loadingRecruiters } = useQuery({
-    queryKey: ['recruiting-analytics', 'recruiters', period],
+    queryKey: ['recruiting-analytics', 'recruiters-table', period, selectedAssigneeId],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/recruiters?period=${period}`, {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/recruiters?${params}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch recruiters');
@@ -369,18 +382,38 @@ export default function RecruitingAnalytics() {
           <h1 className="text-3xl font-bold tracking-tight">Recruitment Analytics</h1>
           <p className="text-muted-foreground">Track your hiring pipeline and recruitment performance</p>
         </div>
-        <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select period" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-            <SelectItem value="90d">Last 90 days</SelectItem>
-            <SelectItem value="year">Last year</SelectItem>
-            <SelectItem value="all">All time</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-3">
+          {/* Employee Filter */}
+          <Select value={selectedAssigneeId} onValueChange={setSelectedAssigneeId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All Employees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Employees</SelectItem>
+              {employees
+                .filter((e: any) => e.isActive !== false)
+                .map((e: any) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.firstName} {e.lastName}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+
+          {/* Period Filter */}
+          <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="30d">Last 30 days</SelectItem>
+              <SelectItem value="90d">Last 90 days</SelectItem>
+              <SelectItem value="year">Last year</SelectItem>
+              <SelectItem value="all">All time</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Summary Metrics */}

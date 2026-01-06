@@ -14,6 +14,7 @@ const dateRangeSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   period: z.enum(['7d', '30d', '90d', 'year', 'all']).optional(),
+  assigneeId: z.string().optional(), // Filter by specific assignee
 });
 
 // Middleware function for authentication - allows managers OR users with assigned candidates
@@ -94,11 +95,16 @@ function getDateRange(period?: string, startDate?: string, endDate?: string) {
 // Summary metrics: totalCandidates, activePipeline, hiredThisMonth, avgDaysToHire
 router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
-    const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+
+    // Filter by specific assignee if provided
+    if (assigneeId) {
+      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+    }
 
     // Filter by date range
     const filteredCandidates = candidates.filter((c: any) => {
@@ -181,11 +187,16 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
 // Pipeline funnel data with counts and conversion rates
 router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
-    const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+
+    // Filter by specific assignee if provided
+    if (assigneeId) {
+      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+    }
 
     // Filter by date range
     const filteredCandidates = candidates.filter((c: any) => {
@@ -236,11 +247,16 @@ router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) =
 // Source effectiveness: candidates by source, hire rate by source
 router.get('/sources', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
-    const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+
+    // Filter by specific assignee if provided
+    if (assigneeId) {
+      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+    }
 
     // Filter by date range
     const filteredCandidates = candidates.filter((c: any) => {
@@ -291,11 +307,16 @@ router.get('/sources', requireAuthOrAssignments(), async (req: any, res: any) =>
 // Time to hire trend data
 router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
-    const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+
+    // Filter by specific assignee if provided
+    if (assigneeId) {
+      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+    }
 
     // Filter hired candidates within date range
     const hiredCandidates = candidates.filter((c: any) => {
@@ -388,21 +409,32 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
 // Interview metrics: total, by status, by type, avg ratings
 router.get('/interviews', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
-    const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
     // Get interviews and filter by assigned candidates for non-managers
     const allInterviews = await storage.getAllInterviews();
+    const allCandidates = await storage.getAllCandidates();
     let interviews = allInterviews;
 
+    // Build candidate IDs to filter by
+    let candidateIdsToFilter: string[] | null = null;
+
     if (!req.isManager) {
-      // Get IDs of assigned candidates
-      const allCandidates = await storage.getAllCandidates();
-      const assignedCandidateIds = allCandidates
+      // Non-managers only see their assigned candidates' interviews
+      candidateIdsToFilter = allCandidates
         .filter((c: any) => c.assignedTo === req.user.id)
         .map((c: any) => c.id);
-      // Filter interviews to only those for assigned candidates
-      interviews = allInterviews.filter((i: any) => assignedCandidateIds.includes(i.candidateId));
+    } else if (assigneeId) {
+      // Managers filtering by specific assignee
+      candidateIdsToFilter = allCandidates
+        .filter((c: any) => c.assignedTo?.toString() === assigneeId)
+        .map((c: any) => c.id);
+    }
+
+    // Apply candidate filter if needed
+    if (candidateIdsToFilter) {
+      interviews = allInterviews.filter((i: any) => candidateIdsToFilter!.includes(i.candidateId));
     }
 
     // Filter by date range
@@ -478,12 +510,17 @@ router.get('/interviews', requireAuthOrAssignments(), async (req: any, res: any)
 // Team performance: candidates per assignee (including sourcers and unassigned)
 router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any) => {
   try {
-    const { period, startDate, endDate } = dateRangeSchema.parse(req.query);
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    const candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
     const users = await storage.getAllUsers();
+
+    // Filter by specific assignee if provided
+    if (assigneeId) {
+      candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+    }
 
     // Filter candidates by date range
     const filteredCandidates = candidates.filter((c: any) => {
