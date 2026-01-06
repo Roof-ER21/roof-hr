@@ -202,7 +202,7 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
     }
 
     // Check for calendar conflicts
-    const conflictDetector = getConflictDetector(storage);
+    const conflictDetector = await getConflictDetector(storage);
     const startTime = new Date(data.scheduledDate);
     const endTime = new Date(startTime.getTime() + data.duration * 60 * 1000);
 
@@ -599,7 +599,7 @@ router.post('/check-conflicts', requireAuth, requireManager, async (req, res) =>
     }
 
     // Check for conflicts for ALL participants
-    const conflictDetector = getConflictDetector(storage);
+    const conflictDetector = await getConflictDetector(storage);
     const startTime = new Date(scheduledDate);
     const endTime = new Date(startTime.getTime() + (duration || 60) * 60 * 1000);
 

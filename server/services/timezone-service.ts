@@ -207,6 +207,33 @@ class TimezoneService {
   }
 
   /**
+   * Get the hour (0-23) in a specific timezone
+   * Useful for time-of-day checks that need to respect user timezone
+   */
+  getHourInTimezone(date: Date, timezone: string): number {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false,
+    });
+    return parseInt(formatter.format(date), 10);
+  }
+
+  /**
+   * Get the day of week (0=Sunday, 6=Saturday) in a specific timezone
+   * Useful for day-specific checks that need to respect user timezone
+   */
+  getDayOfWeekInTimezone(date: Date, timezone: string): number {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'short',
+    });
+    const day = formatter.format(date);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days.indexOf(day);
+  }
+
+  /**
    * Get offset hours between two timezones at a specific date
    */
   getTimezoneOffset(timezone: string, date: Date = new Date()): number {

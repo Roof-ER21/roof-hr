@@ -691,7 +691,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                       {panelMembers.map((memberId) => {
                         const member = interviewers?.find((i: any) => i.id === memberId);
                         const memberAvail = panelAvailabilityData[memberId] || [];
-                        const activeSlots = memberAvail.filter((a: any) => a.isActive !== false);
+                        // Backend already filters for active slots, no need to filter again
+                        const activeSlots = memberAvail;
                         return (
                           <div key={memberId} className="text-sm">
                             <span className="font-medium text-purple-700">{member?.firstName} {member?.lastName}:</span>

@@ -284,11 +284,16 @@ export class CalendarConflictDetector {
 
   /**
    * Check for soft conflicts (warnings)
+   * Uses Eastern Time for hour/day checks since all users are in ET
    */
   private checkSoftConflicts(startTime: Date, endTime: Date): string[] {
     const warnings: string[] = [];
-    const hour = startTime.getHours();
-    const endHour = endTime.getHours();
+    const timezone = 'America/New_York';
+
+    // Get hours and day in Eastern Time, not UTC
+    const hour = timezoneService.getHourInTimezone(startTime, timezone);
+    const endHour = timezoneService.getHourInTimezone(endTime, timezone);
+    const dayOfWeek = timezoneService.getDayOfWeekInTimezone(startTime, timezone);
 
     // Lunch hour warning (12pm - 1pm)
     if (hour === 12 || (hour < 12 && endHour > 12)) {
@@ -305,13 +310,13 @@ export class CalendarConflictDetector {
       warnings.push('Interview scheduled after office hours (after 6pm)');
     }
 
-    // Friday afternoon warning
-    if (startTime.getDay() === 5 && hour >= 15) {
+    // Friday afternoon warning (dayOfWeek: 5 = Friday)
+    if (dayOfWeek === 5 && hour >= 15) {
       warnings.push('Interview scheduled on Friday afternoon');
     }
 
-    // Monday morning warning
-    if (startTime.getDay() === 1 && hour < 10) {
+    // Monday morning warning (dayOfWeek: 1 = Monday)
+    if (dayOfWeek === 1 && hour < 10) {
       warnings.push('Interview scheduled early Monday morning');
     }
 
@@ -439,13 +444,16 @@ export class CalendarConflictDetector {
 
 // Export singleton instance
 let conflictDetector: CalendarConflictDetector | null = null;
+let initPromise: Promise<void> | null = null;
 
-export function getConflictDetector(storage: IStorage): CalendarConflictDetector {
+export async function getConflictDetector(storage: IStorage): Promise<CalendarConflictDetector> {
   if (!conflictDetector) {
     conflictDetector = new CalendarConflictDetector(storage);
-    conflictDetector.initialize().catch(error => {
-      console.error('[CalendarConflictDetector] Failed to initialize:', error);
-    });
+    initPromise = conflictDetector.initialize();
+  }
+  // Always await initialization to prevent race conditions
+  if (initPromise) {
+    await initPromise;
   }
   return conflictDetector;
 }
