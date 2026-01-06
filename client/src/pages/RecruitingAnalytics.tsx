@@ -478,24 +478,33 @@ export default function RecruitingAnalytics() {
                 <Skeleton className="h-full w-full" />
               </div>
             ) : assigneeChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
                   <Pie
                     data={assigneeChartData}
-                    cx="50%"
+                    cx="35%"
                     cy="50%"
-                    labelLine={false}
-                    label={({ name, percentage }) => `${name} (${percentage}%)`}
-                    outerRadius={100}
+                    outerRadius={90}
                     dataKey="value"
+                    nameKey="name"
                   >
                     {assigneeChartData.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number, name: string) => [value, 'Candidates']}
+                    formatter={(value: number, name: string) => [`${value} candidates`, name]}
                     contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                  />
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    formatter={(value: string, entry: any) => {
+                      const item = assigneeChartData.find((d: any) => d.name === value);
+                      return `${value} (${item?.percentage || 0}%)`;
+                    }}
+                    wrapperStyle={{ fontSize: '12px', paddingLeft: '10px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
