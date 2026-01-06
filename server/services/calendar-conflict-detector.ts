@@ -30,6 +30,9 @@ export class CalendarConflictDetector {
   private storage: IStorage;
   private isInitialized: boolean = false;
   private initWarningLogged: boolean = false;
+  private calendarRateLimitUntil: number | null = null;
+  private calendarRateLimitByEmail = new Map<string, number>();
+  private readonly calendarRateLimitCooldownMs = 60 * 1000;
 
   constructor(storage: IStorage) {
     this.storage = storage;
@@ -209,6 +212,7 @@ export class CalendarConflictDetector {
     excludeEventId?: string
   ): Promise<CalendarConflict[]> {
     const conflicts: CalendarConflict[] = [];
+    const now = Date.now();
 
     if (!this.isInitialized) {
       console.log(`[CalendarConflictDetector] ⏭️ Skipping Google Calendar check for ${email} - not initialized`);
@@ -218,6 +222,10 @@ export class CalendarConflictDetector {
     // Only check @theroofdocs.com emails (domain-wide delegation scope)
     if (!email.endsWith('@theroofdocs.com')) {
       console.log(`[CalendarConflictDetector] ⏭️ Skipping Google Calendar check for ${email} - not @theroofdocs.com domain`);
+      return conflicts;
+    }
+
+    if (this.isCalendarRateLimited(email, now)) {
       return conflicts;
     }
 
@@ -298,6 +306,21 @@ export class CalendarConflictDetector {
       const message = error?.message || '';
       const status = error?.response?.status || error?.code;
       const details = error?.response?.data || error?.errors || '';
+      const detailsText = typeof details === 'string' ? details : JSON.stringify(details);
+      const isRateLimit =
+        status === 403 &&
+        (message.includes('Quota exceeded') ||
+          message.includes('RATE_LIMIT_EXCEEDED') ||
+          detailsText.includes('rateLimitExceeded') ||
+          detailsText.includes('RATE_LIMIT_EXCEEDED'));
+
+      if (isRateLimit) {
+        this.markCalendarRateLimited(email, now);
+        console.warn(
+          `[CalendarConflictDetector] [GoogleCalendar] Rate limit (status ${status}). Cooling down for ${Math.round(this.calendarRateLimitCooldownMs / 1000)}s.`
+        );
+        return conflicts;
+      }
 
       // Log specific error types with more detail
       if (status === 403 || message.includes('Not Authorized') || message.includes('Forbidden')) {
@@ -319,6 +342,22 @@ export class CalendarConflictDetector {
     }
 
     return conflicts;
+  }
+
+  private isCalendarRateLimited(email: string, now: number): boolean {
+    const globalUntil = this.calendarRateLimitUntil ?? 0;
+    if (globalUntil > now) {
+      return true;
+    }
+    const emailUntil = this.calendarRateLimitByEmail.get(email) ?? 0;
+    return emailUntil > now;
+  }
+
+  private markCalendarRateLimited(email: string, now: number): void {
+    const until = now + this.calendarRateLimitCooldownMs;
+    this.calendarRateLimitUntil = Math.max(this.calendarRateLimitUntil ?? 0, until);
+    const emailUntil = this.calendarRateLimitByEmail.get(email) ?? 0;
+    this.calendarRateLimitByEmail.set(email, Math.max(emailUntil, until));
   }
 
   /**
