@@ -54,6 +54,7 @@ import {
   FileText,
   Search,
   Eye,
+  Printer,
 } from 'lucide-react';
 import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
 
@@ -469,6 +470,20 @@ export default function RecruitingAnalytics() {
               <SelectItem value="all">All time</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Print Report Button */}
+          <Button
+            variant="outline"
+            size="default"
+            onClick={() => {
+              const params = new URLSearchParams({ period });
+              if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+              window.open(`/api/recruiting-analytics/export/analytics-report?${params}`, '_blank');
+            }}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Print Report
+          </Button>
         </div>
       </div>
 

@@ -873,4 +873,348 @@ router.get('/export/pdf', requireAuthOrAssignments(), async (req: any, res: any)
   }
 });
 
+// GET /api/recruiting-analytics/export/analytics-report
+// Full analytics report with all metrics (printable HTML)
+router.get('/export/analytics-report', requireAuthOrAssignments(), async (req: any, res: any) => {
+  try {
+    const { period, assigneeId } = dateRangeSchema.parse(req.query);
+    const { start, end } = getDateRange(period || '30d');
+    const now = new Date();
+
+    // Get all data
+    const allCandidates = await storage.getAllCandidates();
+    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    const users = await storage.getAllUsers();
+    const allInterviews = await storage.getAllInterviews();
+
+    // Filter by assignee if specified
+    if (assigneeId && assigneeId !== 'all') {
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
+    }
+
+    // Get employee name for header
+    let employeeName = 'All Employees';
+    if (assigneeId && assigneeId !== 'all' && assigneeId !== 'unassigned') {
+      const user = users.find((u: any) => u.id.toString() === assigneeId);
+      employeeName = user ? `${user.firstName} ${user.lastName}` : 'Unknown Employee';
+    } else if (assigneeId === 'unassigned') {
+      employeeName = 'Unassigned Candidates';
+    }
+
+    // Filter by date range
+    const filteredCandidates = candidates.filter((c: any) => {
+      const appliedDate = new Date(c.appliedDate || c.createdAt);
+      return appliedDate >= start && appliedDate <= end;
+    });
+
+    // Calculate OVERVIEW metrics
+    const totalCandidates = filteredCandidates.length;
+    const activePipeline = filteredCandidates.filter((c: any) =>
+      !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED'].includes(c.status)
+    ).length;
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const hiredThisMonth = filteredCandidates.filter((c: any) =>
+      c.status === 'HIRED' && new Date(c.updatedAt || c.createdAt) >= monthStart
+    ).length;
+    const hiredLastMonth = filteredCandidates.filter((c: any) =>
+      c.status === 'HIRED' &&
+      new Date(c.updatedAt || c.createdAt) >= lastMonthStart &&
+      new Date(c.updatedAt || c.createdAt) < monthStart
+    ).length;
+
+    // Calculate avg days to hire
+    const hiredCandidates = filteredCandidates.filter((c: any) => c.status === 'HIRED');
+    let avgDaysToHire = 0;
+    if (hiredCandidates.length > 0) {
+      const totalDays = hiredCandidates.reduce((sum: number, c: any) => {
+        const applied = new Date(c.appliedDate || c.createdAt);
+        const hired = new Date(c.updatedAt || c.createdAt);
+        return sum + Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
+      }, 0);
+      avgDaysToHire = Math.round(totalDays / hiredCandidates.length);
+    }
+
+    // Calculate PIPELINE data
+    const stages = {
+      applied: filteredCandidates.filter((c: any) => c.status === 'APPLIED' || c.status === 'NEW').length,
+      screening: filteredCandidates.filter((c: any) => c.status === 'SCREENING').length,
+      interview: filteredCandidates.filter((c: any) => c.status === 'INTERVIEW' || c.status === 'INTERVIEWED').length,
+      offer: filteredCandidates.filter((c: any) => c.status === 'OFFER').length,
+      hired: filteredCandidates.filter((c: any) => c.status === 'HIRED').length,
+    };
+    const conversionRate = totalCandidates > 0 ? Math.round((stages.hired / totalCandidates) * 100) : 0;
+
+    // Calculate INTERVIEW metrics
+    let interviews = allInterviews;
+    if (assigneeId && assigneeId !== 'all') {
+      const candidateIds = candidates.map((c: any) => c.id);
+      interviews = allInterviews.filter((i: any) => candidateIds.includes(i.candidateId));
+    }
+    const filteredInterviews = interviews.filter((i: any) => {
+      const scheduledDate = new Date(i.scheduledDate || i.createdAt);
+      return scheduledDate >= start && scheduledDate <= end;
+    });
+    const interviewStats = {
+      total: filteredInterviews.length,
+      completed: filteredInterviews.filter((i: any) => i.status === 'completed').length,
+      scheduled: filteredInterviews.filter((i: any) => i.status === 'scheduled').length,
+      cancelled: filteredInterviews.filter((i: any) => i.status === 'cancelled').length,
+      noShow: filteredInterviews.filter((i: any) => i.status === 'no_show').length,
+    };
+
+    // Calculate TEAM PERFORMANCE (assignee breakdown)
+    const assigneeMap = new Map<string | null, { assigned: number; hired: number }>();
+    filteredCandidates.forEach((c: any) => {
+      const aid = c.assignedTo?.toString() || null;
+      if (!assigneeMap.has(aid)) {
+        assigneeMap.set(aid, { assigned: 0, hired: 0 });
+      }
+      const data = assigneeMap.get(aid)!;
+      data.assigned++;
+      if (c.status === 'HIRED') data.hired++;
+    });
+
+    const teamPerformance: any[] = [];
+    for (const [aid, data] of assigneeMap.entries()) {
+      if (aid === null) {
+        teamPerformance.push({
+          name: 'Unassigned',
+          email: '',
+          candidatesAssigned: data.assigned,
+          hiredCount: data.hired,
+          hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100) : 0,
+        });
+      } else {
+        const user = users.find((u: any) => u.id.toString() === aid);
+        teamPerformance.push({
+          name: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+          email: user?.email || '',
+          candidatesAssigned: data.assigned,
+          hiredCount: data.hired,
+          hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100) : 0,
+        });
+      }
+    }
+    teamPerformance.sort((a, b) => b.candidatesAssigned - a.candidatesAssigned);
+
+    // Format period label
+    const periodLabels: Record<string, string> = {
+      '7d': 'Last 7 Days',
+      '30d': 'Last 30 Days',
+      '90d': 'Last 90 Days',
+      'year': 'Last Year',
+      'all': 'All Time',
+    };
+    const periodLabel = periodLabels[period || '30d'] || 'Last 30 Days';
+
+    // Generate HTML report
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Recruiting Analytics Report - ${employeeName}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 40px; color: #1a202c; background: #fff; }
+    @media print {
+      body { padding: 20px; }
+      .no-break { page-break-inside: avoid; }
+      .page-break { page-break-before: always; }
+    }
+    .header { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white; padding: 30px; margin: -40px -40px 30px -40px; }
+    @media print { .header { margin: -20px -20px 20px -20px; } }
+    .header h1 { margin: 0 0 8px 0; font-size: 28px; font-weight: 700; }
+    .header .subtitle { opacity: 0.9; font-size: 16px; }
+    .header .meta { margin-top: 15px; font-size: 13px; opacity: 0.8; }
+
+    .section { margin-bottom: 30px; }
+    .section-title { font-size: 18px; font-weight: 600; color: #2d3748; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; }
+
+    .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    @media print { .metrics-grid { grid-template-columns: repeat(4, 1fr); } }
+    .metric-card { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; }
+    .metric-value { font-size: 32px; font-weight: 700; color: #2d3748; }
+    .metric-label { font-size: 13px; color: #718096; margin-top: 4px; }
+    .metric-change { font-size: 12px; margin-top: 6px; }
+    .metric-change.positive { color: #38a169; }
+    .metric-change.negative { color: #e53e3e; }
+
+    .pipeline-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .pipeline-stage { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; text-align: center; }
+    .pipeline-stage .count { font-size: 28px; font-weight: 700; color: #2d3748; }
+    .pipeline-stage .label { font-size: 12px; color: #718096; margin-top: 4px; }
+    .pipeline-stage.applied { border-top: 4px solid #3b82f6; }
+    .pipeline-stage.screening { border-top: 4px solid #10b981; }
+    .pipeline-stage.interview { border-top: 4px solid #f59e0b; }
+    .pipeline-stage.offer { border-top: 4px solid #8b5cf6; }
+    .pipeline-stage.hired { border-top: 4px solid #22c55e; }
+
+    .interview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .interview-stat { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; text-align: center; }
+    .interview-stat .count { font-size: 24px; font-weight: 700; }
+    .interview-stat .label { font-size: 12px; color: #718096; margin-top: 4px; }
+    .interview-stat.completed .count { color: #22c55e; }
+    .interview-stat.scheduled .count { color: #3b82f6; }
+    .interview-stat.cancelled .count { color: #f59e0b; }
+    .interview-stat.noshow .count { color: #ef4444; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f7fafc; font-weight: 600; font-size: 13px; color: #4a5568; }
+    td { font-size: 14px; }
+    tr:hover { background: #f7fafc; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #718096; font-size: 12px; text-align: center; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+    @media print { .two-col { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Recruiting Analytics Report</h1>
+    <div class="subtitle">${employeeName} • ${periodLabel}</div>
+    <div class="meta">Generated on ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' })} at ${now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' })}</div>
+  </div>
+
+  <div class="section no-break">
+    <div class="section-title">Summary Metrics</div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-value">${totalCandidates}</div>
+        <div class="metric-label">Total Candidates</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">${activePipeline}</div>
+        <div class="metric-label">Active Pipeline</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">${hiredThisMonth}</div>
+        <div class="metric-label">Hired This Month</div>
+        ${hiredLastMonth > 0 ? `<div class="metric-change ${hiredThisMonth >= hiredLastMonth ? 'positive' : 'negative'}">vs ${hiredLastMonth} last month</div>` : ''}
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">${avgDaysToHire}</div>
+        <div class="metric-label">Avg Days to Hire</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section no-break">
+    <div class="section-title">Pipeline Funnel</div>
+    <div class="pipeline-grid">
+      <div class="pipeline-stage applied">
+        <div class="count">${stages.applied}</div>
+        <div class="label">Applied</div>
+      </div>
+      <div class="pipeline-stage screening">
+        <div class="count">${stages.screening}</div>
+        <div class="label">Screening</div>
+      </div>
+      <div class="pipeline-stage interview">
+        <div class="count">${stages.interview}</div>
+        <div class="label">Interview</div>
+      </div>
+      <div class="pipeline-stage offer">
+        <div class="count">${stages.offer}</div>
+        <div class="label">Offer</div>
+      </div>
+      <div class="pipeline-stage hired">
+        <div class="count">${stages.hired}</div>
+        <div class="label">Hired</div>
+      </div>
+    </div>
+    <div style="text-align: center; margin-top: 12px; color: #718096; font-size: 14px;">
+      Overall Conversion Rate: <strong style="color: #2d3748;">${conversionRate}%</strong>
+    </div>
+  </div>
+
+  <div class="section no-break">
+    <div class="section-title">Interview Metrics</div>
+    <div class="interview-grid">
+      <div class="interview-stat completed">
+        <div class="count">${interviewStats.completed}</div>
+        <div class="label">Completed</div>
+      </div>
+      <div class="interview-stat scheduled">
+        <div class="count">${interviewStats.scheduled}</div>
+        <div class="label">Scheduled</div>
+      </div>
+      <div class="interview-stat cancelled">
+        <div class="count">${interviewStats.cancelled}</div>
+        <div class="label">Cancelled</div>
+      </div>
+      <div class="interview-stat noshow">
+        <div class="count">${interviewStats.noShow}</div>
+        <div class="label">No Show</div>
+      </div>
+    </div>
+    <div style="text-align: center; margin-top: 12px; color: #718096; font-size: 14px;">
+      Total Interviews: <strong style="color: #2d3748;">${interviewStats.total}</strong>
+    </div>
+  </div>
+
+  <div class="section no-break">
+    <div class="section-title">Team Performance</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Team Member</th>
+          <th class="text-center">Candidates</th>
+          <th class="text-center">Hired</th>
+          <th class="text-center">Hire Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${teamPerformance.map(member => `
+          <tr>
+            <td>
+              <div style="font-weight: 500;">${member.name}</div>
+              ${member.email ? `<div style="font-size: 12px; color: #718096;">${member.email}</div>` : ''}
+            </td>
+            <td class="text-center">${member.candidatesAssigned}</td>
+            <td class="text-center"><span class="badge badge-green">${member.hiredCount}</span></td>
+            <td class="text-center"><span class="badge badge-blue">${member.hireRate}%</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight: 600; background: #f7fafc;">
+          <td>Total</td>
+          <td class="text-center">${totalCandidates}</td>
+          <td class="text-center">${stages.hired}</td>
+          <td class="text-center">${conversionRate}%</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="footer">
+    <p>This report was generated by Roof HR. For questions, contact your HR administrator.</p>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error exporting analytics report:', error);
+    res.status(500).json({
+      error: 'Failed to export analytics report',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;
