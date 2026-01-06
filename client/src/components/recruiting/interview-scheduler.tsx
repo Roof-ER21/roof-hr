@@ -179,15 +179,45 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   // Ref to track if a request is already in flight
   const isCheckingRef = useRef(false);
 
+  // Ref for auto-timeout to prevent infinite hang
+  const conflictCheckAutoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Effect to check conflicts when inputs change (debounced to prevent race conditions)
+  // FIXED: Sourcers skip conflict check (they don't have permission), added 10s timeout
   useEffect(() => {
-    // Clear any pending conflict check
+    // Clear any pending conflict check and auto-timeout
     if (conflictCheckTimeoutRef.current) {
       clearTimeout(conflictCheckTimeoutRef.current);
     }
+    if (conflictCheckAutoTimeoutRef.current) {
+      clearTimeout(conflictCheckAutoTimeoutRef.current);
+    }
 
     if (selectedDate && selectedInterviewer && selectedTime) {
+      // FIXED: Sourcers skip conflict check entirely (they get 403 from backend)
+      if (isSourcerUser) {
+        console.log('[CONFLICT CHECK] Skipping for sourcer user - no permission for conflict API');
+        setIsCheckingConflicts(false);
+        setConflicts([]);
+        setWarnings([]);
+        setSuggestedTimes([]);
+        setShowConflictOverride(false);
+        isCheckingRef.current = false;
+        return;
+      }
+
       setIsCheckingConflicts(true);
+
+      // FIXED: Auto-timeout after 10 seconds to prevent infinite hang
+      conflictCheckAutoTimeoutRef.current = setTimeout(() => {
+        if (isCheckingRef.current) {
+          console.warn('[CONFLICT CHECK] Auto-timeout after 10s - clearing state');
+          setIsCheckingConflicts(false);
+          setConflicts([]);
+          setWarnings(['Conflict check timed out. You can proceed with scheduling.']);
+          isCheckingRef.current = false;
+        }
+      }, 10000);
 
       // Debounce: wait 500ms after last change before checking
       conflictCheckTimeoutRef.current = setTimeout(() => {
@@ -221,9 +251,12 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       if (conflictCheckTimeoutRef.current) {
         clearTimeout(conflictCheckTimeoutRef.current);
       }
+      if (conflictCheckAutoTimeoutRef.current) {
+        clearTimeout(conflictCheckAutoTimeoutRef.current);
+      }
     };
     // Use JSON.stringify for panelMembers to prevent reference changes from triggering re-renders
-  }, [selectedDate, selectedTime, selectedInterviewer, duration, JSON.stringify(panelMembers)]);
+  }, [selectedDate, selectedTime, selectedInterviewer, duration, JSON.stringify(panelMembers), isSourcerUser]);
 
   const scheduleMutation = useMutation<
     any,
@@ -653,13 +686,29 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                       <SelectValue placeholder="Select interviewer" />
                     </SelectTrigger>
                     <SelectContent>
-                      {interviewers?.filter((user: any) =>
-                        MANAGER_ROLES.includes(user.role) || ADMIN_ROLES.includes(user.role)
-                      ).map((user: any) => (
+                      {(() => {
+                        // FIXED: Case-insensitive matching + debug logging
+                        const managerRolesUpper = MANAGER_ROLES.map(r => r.toUpperCase());
+                        const adminRolesUpper = ADMIN_ROLES.map(r => r.toUpperCase());
+
+                        const eligibleInterviewers = interviewers?.filter((user: any) => {
+                          const userRole = (user.role || '').toUpperCase();
+                          return managerRolesUpper.includes(userRole) || adminRolesUpper.includes(userRole);
+                        }) || [];
+
+                        // Debug logging for troubleshooting
+                        console.log('[InterviewScheduler] All users loaded:', interviewers?.length || 0);
+                        console.log('[InterviewScheduler] User roles in DB:', interviewers?.map(u => u.role));
+                        console.log('[InterviewScheduler] MANAGER_ROLES:', MANAGER_ROLES);
+                        console.log('[InterviewScheduler] ADMIN_ROLES:', ADMIN_ROLES);
+                        console.log('[InterviewScheduler] Eligible interviewers:', eligibleInterviewers.length);
+
+                        return eligibleInterviewers.map((user: any) => (
                           <SelectItem key={user.id} value={user.id}>
-                            {user.firstName} {user.lastName} - {user.position}
+                            {user.firstName} {user.lastName} - {user.position || user.role}
                           </SelectItem>
-                        ))}
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
                 )}
@@ -707,9 +756,13 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                   Select additional team members to join this interview
                 </p>
                 <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                  {interviewers?.filter((user: any) =>
-                    (MANAGER_ROLES.includes(user.role) || ADMIN_ROLES.includes(user.role)) && user.id !== selectedInterviewer
-                  ).map((user: any) => (
+                  {interviewers?.filter((user: any) => {
+                    // FIXED: Case-insensitive matching for additional interviewers
+                    const userRole = (user.role || '').toUpperCase();
+                    const managerRolesUpper = MANAGER_ROLES.map(r => r.toUpperCase());
+                    const adminRolesUpper = ADMIN_ROLES.map(r => r.toUpperCase());
+                    return (managerRolesUpper.includes(userRole) || adminRolesUpper.includes(userRole)) && user.id !== selectedInterviewer;
+                  }).map((user: any) => (
                     <div key={user.id} className="flex items-center space-x-2">
                       <input
                         type="checkbox"

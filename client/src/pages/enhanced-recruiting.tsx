@@ -2752,7 +2752,10 @@ export default function EnhancedRecruiting() {
           </SheetHeader>
           <div className="mt-4">
             {selectedCandidateForNotes && (
-              <CandidateNotes candidateId={selectedCandidateForNotes.id} />
+              <CandidateNotes
+                key={selectedCandidateForNotes.id}  // CRITICAL: Forces component remount when candidate changes
+                candidateId={selectedCandidateForNotes.id}
+              />
             )}
           </div>
         </SheetContent>

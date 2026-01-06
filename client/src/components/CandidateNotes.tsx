@@ -44,10 +44,12 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
   const [noteType, setNoteType] = useState<'GENERAL' | 'INTERVIEW' | 'REFERENCE' | 'INTERNAL'>('GENERAL');
   const [isAddingNote, setIsAddingNote] = useState(false);
 
-  // Fetch notes
+  // Fetch notes - FIXED: staleTime=0 prevents cache collision between candidates
   const { data: notes = [], isLoading } = useQuery<CandidateNote[]>({
     queryKey: [`/api/candidates/${candidateId}/notes`],
-    enabled: !!candidateId
+    enabled: !!candidateId,
+    staleTime: 0,  // Always refetch when queryKey changes
+    gcTime: 0,     // Don't cache notes across candidates
   });
 
   // Fetch users to get author names
