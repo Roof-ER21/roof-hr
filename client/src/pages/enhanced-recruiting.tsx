@@ -2858,7 +2858,45 @@ export default function EnhancedRecruiting() {
           setShowCandidateDetails(false);
         }}
         onMoveToNextStage={(candidate, nextStatus) => {
-          // Check if moving to OFFER - require notes
+          // 1. INTERVIEW - requires screening (same as drag-and-drop)
+          if (nextStatus === 'INTERVIEW' && candidate.status !== 'INTERVIEW') {
+            let skipScreening = false;
+            if (candidate.interviewScreeningData) {
+              try {
+                const prevScreening = JSON.parse(candidate.interviewScreeningData as string);
+                skipScreening = prevScreening.hasDriversLicense &&
+                               prevScreening.hasReliableVehicle &&
+                               prevScreening.hasClearCommunication;
+              } catch (e) {
+                skipScreening = false;
+              }
+            }
+
+            if (!skipScreening) {
+              setCandidateForInterviewScreening({ candidate, nextStatus });
+              setShowInterviewScreening(true);
+              setShowCandidateDetails(false);
+              return;
+            }
+          }
+
+          // 2. HIRED - show hire modal
+          if (nextStatus === 'HIRED') {
+            setCandidateToHire(candidate);
+            setShowHireModal(true);
+            setShowCandidateDetails(false);
+            return;
+          }
+
+          // 3. DEAD - show type selection modal
+          if (nextStatus === 'DEAD') {
+            setCandidateForDeadType(candidate);
+            setShowDeadTypeModal(true);
+            setShowCandidateDetails(false);
+            return;
+          }
+
+          // 4. OFFER - require notes (already implemented)
           if (nextStatus === 'OFFER' && candidate.status !== 'OFFER') {
             setCandidateForOfferNotes({
               candidate: candidate,
@@ -2868,6 +2906,8 @@ export default function EnhancedRecruiting() {
             setShowCandidateDetails(false);
             return;
           }
+
+          // 5. Other stages - direct update
           updateCandidateMutation.mutate({
             id: candidate.id,
             data: { status: nextStatus }
