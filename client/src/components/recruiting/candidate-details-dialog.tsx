@@ -753,8 +753,8 @@ export function CandidateDetailsDialog({
                                   {/* Header with type badge, author, time, and delete */}
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                      <Badge className={`${noteTypeConfig[note.type].color} text-[10px] px-1.5 py-0`}>
-                                        {hasQA ? 'Q&A' : noteTypeConfig[note.type].label}
+                                      <Badge className={`${noteTypeConfig[note.type]?.color || 'bg-gray-100 text-gray-800'} text-[10px] px-1.5 py-0`}>
+                                        {hasQA ? 'Q&A' : (noteTypeConfig[note.type]?.label || note.type || 'Note')}
                                       </Badge>
                                       <span className="text-[11px] text-muted-foreground truncate">
                                         {note.author

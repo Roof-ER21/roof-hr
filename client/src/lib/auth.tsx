@@ -6,7 +6,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'CONTRACTOR';
+  role: 'SYSTEM_ADMIN' | 'HR_ADMIN' | 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'CONTRACTOR' | 'SOURCER' | 'TEAM_LEAD' | 'FIELD_TECH' | 'SALES_REP';
   employmentType: 'W2' | 'CONTRACTOR';
   department: string;
   position: string;

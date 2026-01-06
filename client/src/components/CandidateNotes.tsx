@@ -198,8 +198,8 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
-                      <Badge className={noteTypeConfig[note.type].color}>
-                        {noteTypeConfig[note.type].label}
+                      <Badge className={noteTypeConfig[note.type]?.color || 'bg-gray-100 text-gray-800'}>
+                        {noteTypeConfig[note.type]?.label || note.type || 'Note'}
                       </Badge>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <User className="h-3 w-3" />
