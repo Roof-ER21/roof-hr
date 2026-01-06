@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
@@ -142,6 +142,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       setConflicts(data.conflicts || []);
       setWarnings(data.warnings || []);
       setSuggestedTimes(data.suggestedTimes?.map((t: string) => new Date(t)) || []);
+      setIsCheckingConflicts(false);
 
       // If there are hard conflicts, show override option
       const hardConflicts = data.conflicts?.filter((c: any) => c.severity === 'hard') || [];
@@ -156,25 +157,48 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       // If conflict check fails, clear conflicts but allow scheduling
       setConflicts([]);
       setWarnings(['Unable to check for conflicts. Please verify availability manually.']);
+      setIsCheckingConflicts(false);
     },
   });
 
-  // Effect to check conflicts when inputs change
+  // Ref for debounce timeout
+  const conflictCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Effect to check conflicts when inputs change (debounced to prevent race conditions)
   useEffect(() => {
+    // Clear any pending conflict check
+    if (conflictCheckTimeoutRef.current) {
+      clearTimeout(conflictCheckTimeoutRef.current);
+    }
+
     if (selectedDate && selectedInterviewer && selectedTime) {
       setIsCheckingConflicts(true);
-      const [hours, minutes] = selectedTime.split(':').map(Number);
-      const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
-      
-      checkConflictsMutation.mutate({
-        candidateId,
-        interviewerId: selectedInterviewer,
-        panelMemberIds: panelMembers,
-        scheduledDate: scheduledDate.toISOString(),
-        duration: parseInt(duration),
-      });
+
+      // Debounce: wait 300ms after last change before checking
+      conflictCheckTimeoutRef.current = setTimeout(() => {
+        const [hours, minutes] = selectedTime.split(':').map(Number);
+        const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
+
+        console.log('[CONFLICT CHECK] Debounced check - Time selected:', selectedTime, '→ ISO:', scheduledDate.toISOString());
+
+        checkConflictsMutation.mutate({
+          candidateId,
+          interviewerId: selectedInterviewer,
+          panelMemberIds: panelMembers,
+          scheduledDate: scheduledDate.toISOString(),
+          duration: parseInt(duration),
+        });
+      }, 300);
+    } else {
       setIsCheckingConflicts(false);
     }
+
+    // Cleanup on unmount
+    return () => {
+      if (conflictCheckTimeoutRef.current) {
+        clearTimeout(conflictCheckTimeoutRef.current);
+      }
+    };
   }, [selectedDate, selectedTime, selectedInterviewer, duration, panelMembers]);
 
   const scheduleMutation = useMutation<
