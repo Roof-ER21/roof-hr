@@ -40,4 +40,4 @@ __MACOSX/
 # Archive files (may contain credentials)
 *.zip
 *.rar
-*.7z
+*.7zdatabase.db
