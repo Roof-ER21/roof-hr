@@ -2,6 +2,7 @@ import { emailService } from '../email-service';
 import type { CalendarConflict } from './calendar-conflict-detector';
 import { format } from 'date-fns';
 import type { IStorage } from '../storage';
+import { INTERVIEW_CONFLICT_ALERT_RECIPIENTS } from '@shared/constants/roles';
 
 // HTML escape helper to prevent injection
 function escapeHtml(unsafe: string): string {
@@ -248,9 +249,12 @@ export class InterviewConflictNotifier {
     forcedSchedule: boolean,
     fromUserEmail?: string
   ): Promise<void> {
-    // Get all admin users
+    // FIXED: Only notify specific people, NOT all admins company-wide
     const allUsers = await this.storage.getAllUsers();
-    const admins = allUsers.filter(u => u.role === 'ADMIN' && u.email);
+    const admins = allUsers.filter(u =>
+      u.email && INTERVIEW_CONFLICT_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
+    );
+    console.log(`[Interview Conflict Alert] Sending to ${admins.length} targeted recipients (NOT company-wide)`);
 
     if (admins.length === 0) return;
 

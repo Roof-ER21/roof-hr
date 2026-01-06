@@ -3126,11 +3126,15 @@ router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) 
     const user = req.user!;
     const { candidateId, candidateName, position, failedRequirements, notes, timestamp } = req.body;
 
-    // Get all managers and admins to notify
+    // FIXED: Only notify specific people, NOT all managers company-wide
+    // Import alert recipients from shared constants
+    const { SCREENING_ALERT_RECIPIENTS } = await import('@shared/constants/roles');
     const allUsers = await storage.getAllUsers();
-    const managersAndAdmins = allUsers.filter((u: any) =>
-      u.role === 'ADMIN' || u.role === 'MANAGER'
+    const alertRecipients = allUsers.filter((u: any) =>
+      u.email && SCREENING_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
     );
+    console.log(`[Screening Alert] Sending to ${alertRecipients.length} targeted recipients (NOT company-wide)`);
+    const managersAndAdmins = alertRecipients;
 
     // Create a candidate note recording the screening failure
     if (candidateId) {
@@ -4155,9 +4159,14 @@ export function registerRoutes(app: express.Application) {
   app.post('/api/alerts/screening-failure', async (req, res) => {
     try {
       const { candidateId, candidateName, position, failedRequirements, notes, timestamp } = req.body;
-      
-      // Get all managers and admins
-      const managersAndAdmins = await storage.getUsersByRoles(['MANAGER', 'ADMIN', 'TRUE_ADMIN']);
+
+      // FIXED: Only notify specific people, NOT all managers company-wide
+      const { SCREENING_ALERT_RECIPIENTS } = await import('@shared/constants/roles');
+      const allUsers = await storage.getAllUsers();
+      const managersAndAdmins = allUsers.filter((u: any) =>
+        u.email && SCREENING_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
+      );
+      console.log(`[Screening Alert] Sending to ${managersAndAdmins.length} targeted recipients (NOT company-wide)`);
       
       // Log the alert
       console.log(`[SCREENING ALERT] Candidate ${candidateName} (${position}) failed screening requirements:`, failedRequirements);

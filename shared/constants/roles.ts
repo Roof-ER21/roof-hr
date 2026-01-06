@@ -435,3 +435,68 @@ export function isSourcerRole(user: { role?: string } | null): boolean {
   if (!user?.role) return false;
   return SOURCER_ROLES.includes(user.role);
 }
+
+// ============================================================================
+// ALERT & NOTIFICATION RECIPIENTS
+// ============================================================================
+// IMPORTANT: These constants define WHO receives each type of alert
+// Do NOT send alerts company-wide - only to specific people who need them
+
+// Top 3 Leaders who should receive important alerts
+export const TOP_LEADERSHIP_EMAILS = [
+  'oliver.brown@theroofdocs.com',  // Oliver (General Manager)
+  'reese.samala@theroofdocs.com',  // Reese (Territory Sales Manager)
+  'ford.barsi@theroofdocs.com',    // Ford (Territory Sales Manager)
+];
+
+// Recruiting Team (Sourcers)
+export const RECRUITING_TEAM_EMAILS = [
+  'careers@theroofdocs.com',       // Ryan Ferguson (Lead Sourcer)
+  'jobs@theroofdocs.com',          // Natia Tutberidze (Extended Sourcer)
+  'recruiting@theroofdocs.com',    // Sima Popal (Extended Sourcer)
+];
+
+// Screening Failure Alerts - Recruiters + Top Leadership
+// Alerts when a candidate fails screening but proceeds to interview
+export const SCREENING_ALERT_RECIPIENTS = [
+  ...RECRUITING_TEAM_EMAILS,       // All recruiters involved
+  ...TOP_LEADERSHIP_EMAILS,        // Oliver, Reese, Ford
+];
+
+// Contract Signed Notifications - Top Leadership + Lead Recruiter
+// Alerts when contracts are signed
+export const CONTRACT_ALERT_RECIPIENTS = [
+  ...TOP_LEADERSHIP_EMAILS,        // Oliver, Reese, Ford
+  'careers@theroofdocs.com',       // Ryan (handles onboarding/contracts)
+];
+
+// Interview Conflict Alerts - Recruiters + Top Leadership
+// Alerts about scheduling conflicts
+export const INTERVIEW_CONFLICT_ALERT_RECIPIENTS = [
+  ...RECRUITING_TEAM_EMAILS,       // All recruiters involved
+  ...TOP_LEADERSHIP_EMAILS,        // Oliver, Reese, Ford
+];
+
+/**
+ * Check if user should receive screening alerts
+ */
+export function shouldReceiveScreeningAlerts(email: string | undefined | null): boolean {
+  if (!email) return false;
+  return SCREENING_ALERT_RECIPIENTS.includes(email.toLowerCase());
+}
+
+/**
+ * Check if user should receive contract alerts
+ */
+export function shouldReceiveContractAlerts(email: string | undefined | null): boolean {
+  if (!email) return false;
+  return CONTRACT_ALERT_RECIPIENTS.includes(email.toLowerCase());
+}
+
+/**
+ * Check if user should receive interview conflict alerts
+ */
+export function shouldReceiveInterviewConflictAlerts(email: string | undefined | null): boolean {
+  if (!email) return false;
+  return INTERVIEW_CONFLICT_ALERT_RECIPIENTS.includes(email.toLowerCase());
+}

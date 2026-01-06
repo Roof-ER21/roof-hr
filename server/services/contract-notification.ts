@@ -1,5 +1,6 @@
 import { storage } from '../storage';
 import { gmailService } from './gmail-service';
+import { CONTRACT_ALERT_RECIPIENTS } from '@shared/constants/roles';
 
 interface ContractSignedNotification {
   contractId: string;
@@ -14,8 +15,12 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
     // Initialize Gmail service
     await gmailService.initialize();
 
-    // Get all managers and HR personnel
-    const managers = await storage.getUsersByRoles(['ADMIN', 'MANAGER', 'GENERAL_MANAGER', 'TRUE_ADMIN']);
+    // FIXED: Only notify specific people, NOT all managers company-wide
+    const allUsers = await storage.getAllUsers();
+    const managers = allUsers.filter((u: any) =>
+      u.email && CONTRACT_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
+    );
+    console.log(`[Contract Alert] Sending to ${managers.length} targeted recipients (NOT company-wide)`);
     
     // Filter out already notified managers
     const contract = await storage.getEmployeeContractById(notification.contractId);
