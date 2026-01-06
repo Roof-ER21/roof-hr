@@ -219,7 +219,6 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
 
     const participantSet = new Set<string>();
     if (interviewer?.email) participantSet.add(interviewer.email);
-    if (candidate.email) participantSet.add(candidate.email);
     for (const member of panelMembers) {
       if (member?.email) participantSet.add(member.email);
     }
@@ -637,10 +636,7 @@ router.post('/check-conflicts', requireAuth, async (req: any, res) => {
       }
     }
 
-    // Add candidate
-    if (candidate.email) {
-      participants.push(candidate.email);
-    }
+    // Candidate calendars are not checked for conflicts.
 
     if (participants.length === 0) {
       return res.status(400).json({
@@ -1224,7 +1220,6 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
 
     const participantSet = new Set<string>();
     if (interviewer?.email) participantSet.add(interviewer.email);
-    if (candidate.email) participantSet.add(candidate.email);
     for (const member of panelMembers) {
       if (member?.email) participantSet.add(member.email);
     }
