@@ -39,9 +39,12 @@ export class CalendarConflictDetector {
     // Use service account with domain-wide delegation for calendar access
     if (serviceAccountAuth.isConfigured()) {
       this.isInitialized = true;
-      console.log('[CalendarConflictDetector] Initialized with Service Account (domain-wide delegation)');
+      const serviceEmail = serviceAccountAuth.getServiceAccountEmail();
+      console.log('[CalendarConflictDetector] ✅ Initialized with Service Account:', serviceEmail);
+      console.log('[CalendarConflictDetector] 📅 Google Calendar conflict detection ENABLED');
     } else {
-      console.warn('[CalendarConflictDetector] Service account not configured - Google Calendar checks disabled');
+      console.warn('[CalendarConflictDetector] ⚠️ Service account not configured - Google Calendar checks disabled');
+      console.warn('[CalendarConflictDetector] Set GOOGLE_SERVICE_ACCOUNT_KEY environment variable to enable');
     }
   }
 
@@ -207,12 +210,19 @@ export class CalendarConflictDetector {
   ): Promise<CalendarConflict[]> {
     const conflicts: CalendarConflict[] = [];
 
-    if (!this.isInitialized) return conflicts;
+    if (!this.isInitialized) {
+      console.log(`[CalendarConflictDetector] ⏭️ Skipping Google Calendar check for ${email} - not initialized`);
+      return conflicts;
+    }
 
     // Only check @theroofdocs.com emails (domain-wide delegation scope)
     if (!email.endsWith('@theroofdocs.com')) {
+      console.log(`[CalendarConflictDetector] ⏭️ Skipping Google Calendar check for ${email} - not @theroofdocs.com domain`);
       return conflicts;
     }
+
+    console.log(`[CalendarConflictDetector] 📅 Checking Google Calendar for ${email}...`);
+    console.log(`[CalendarConflictDetector] 🕒 Time range: ${startTime.toISOString()} to ${endTime.toISOString()}`);
 
     try {
       // Get calendar service impersonating this user
@@ -228,17 +238,37 @@ export class CalendarConflictDetector {
       });
 
       const events = response.data.items || [];
+      console.log(`[CalendarConflictDetector] 📊 Found ${events.length} calendar events for ${email}`);
+
+      if (events.length > 0) {
+        console.log(`[CalendarConflictDetector] 📋 Events:`, events.map(e => ({
+          summary: e.summary,
+          start: e.start?.dateTime || e.start?.date,
+          end: e.end?.dateTime || e.end?.date,
+          transparency: e.transparency,
+          status: e.status
+        })));
+      }
 
       for (const event of events) {
         // Skip if this is the event we're updating
-        if (excludeEventId && event.id === excludeEventId) continue;
+        if (excludeEventId && event.id === excludeEventId) {
+          console.log(`[CalendarConflictDetector] ⏭️ Skipping event ${event.id} - excluded event`);
+          continue;
+        }
 
         // Skip if the event is marked as free/transparent
-        if (event.transparency === 'transparent') continue;
+        if (event.transparency === 'transparent') {
+          console.log(`[CalendarConflictDetector] ⏭️ Skipping "${event.summary}" - marked as free/transparent`);
+          continue;
+        }
 
         // Skip if user has declined the event
         const userAttendee = event.attendees?.find((a: any) => a.email === email);
-        if (userAttendee?.responseStatus === 'declined') continue;
+        if (userAttendee?.responseStatus === 'declined') {
+          console.log(`[CalendarConflictDetector] ⏭️ Skipping "${event.summary}" - user declined`);
+          continue;
+        }
 
         const eventStart = event.start?.dateTime ?
           parseISO(event.start.dateTime) :
@@ -249,34 +279,42 @@ export class CalendarConflictDetector {
           parseISO(event.end?.date || '');
 
         if (this.datesOverlap(startTime, endTime, eventStart, eventEnd)) {
+          const severity = userAttendee?.responseStatus === 'tentative' ? 'soft' : 'hard';
+          console.log(`[CalendarConflictDetector] ❌ CONFLICT DETECTED: "${event.summary}" (${severity})`);
+
           conflicts.push({
             type: 'MEETING',
             title: event.summary || 'Busy',
             start: eventStart,
             end: eventEnd,
             attendees: event.attendees?.map((a: any) => a.email),
-            severity: userAttendee?.responseStatus === 'tentative' ? 'soft' : 'hard'
+            severity
           });
         }
       }
 
-      console.log(`[CalendarConflictDetector] Checked ${email}'s calendar: ${events.length} events, ${conflicts.length} conflicts`);
+      console.log(`[CalendarConflictDetector] ✅ Finished checking ${email}'s calendar: ${events.length} events, ${conflicts.length} conflicts`);
     } catch (error: any) {
       const message = error?.message || '';
       const status = error?.response?.status || error?.code;
+      const details = error?.response?.data || error?.errors || '';
 
-      // Log specific error types
-      if (status === 403 || message.includes('Not Authorized')) {
+      // Log specific error types with more detail
+      if (status === 403 || message.includes('Not Authorized') || message.includes('Forbidden')) {
+        console.error(`[CalendarConflictDetector] ❌ ACCESS DENIED for ${email}'s calendar`);
+        console.error(`[CalendarConflictDetector] 🔑 Error: ${message}`);
+        console.error(`[CalendarConflictDetector] 📋 Details:`, JSON.stringify(details, null, 2));
+        console.error(`[CalendarConflictDetector] 💡 SOLUTION: Verify domain-wide delegation is enabled for service account with Calendar API scope (https://www.googleapis.com/auth/calendar)`);
+
         if (!this.initWarningLogged) {
-          console.warn(
-            `[CalendarConflictDetector] Cannot access ${email}'s calendar - check domain-wide delegation settings`
-          );
           this.initWarningLogged = true;
         }
       } else if (status === 404) {
-        console.warn(`[CalendarConflictDetector] Calendar not found for ${email}`);
+        console.warn(`[CalendarConflictDetector] ⚠️ Calendar not found for ${email}`);
       } else {
-        console.error(`[CalendarConflictDetector] Error checking Google Calendar for ${email}:`, message);
+        console.error(`[CalendarConflictDetector] ❌ Unexpected error checking Google Calendar for ${email}`);
+        console.error(`[CalendarConflictDetector] Status: ${status}, Message: ${message}`);
+        console.error(`[CalendarConflictDetector] Full error:`, error);
       }
     }
 

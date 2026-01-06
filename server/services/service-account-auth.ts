@@ -11,9 +11,14 @@ class ServiceAccountAuth {
     if (keyString) {
       try {
         this.serviceAccountKey = JSON.parse(keyString);
+        console.log('[ServiceAccount] ✅ Service account key loaded successfully');
+        console.log('[ServiceAccount] 📧 Service account email:', this.serviceAccountKey.client_email);
+        console.log('[ServiceAccount] 🆔 Project ID:', this.serviceAccountKey.project_id);
       } catch (error) {
-        console.error('[ServiceAccount] Failed to parse service account key:', error);
+        console.error('[ServiceAccount] ❌ Failed to parse service account key:', error);
       }
+    } else {
+      console.warn('[ServiceAccount] ⚠️ GOOGLE_SERVICE_ACCOUNT_KEY environment variable not set');
     }
   }
 

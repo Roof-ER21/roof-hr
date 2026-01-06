@@ -143,6 +143,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       setWarnings(data.warnings || []);
       setSuggestedTimes(data.suggestedTimes?.map((t: string) => new Date(t)) || []);
       setIsCheckingConflicts(false);
+      isCheckingRef.current = false; // Reset the in-flight flag
 
       // If there are hard conflicts, show override option
       const hardConflicts = data.conflicts?.filter((c: any) => c.severity === 'hard') || [];
@@ -158,11 +159,14 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       setConflicts([]);
       setWarnings(['Unable to check for conflicts. Please verify availability manually.']);
       setIsCheckingConflicts(false);
+      isCheckingRef.current = false; // Reset the in-flight flag
     },
   });
 
   // Ref for debounce timeout
   const conflictCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref to track if a request is already in flight
+  const isCheckingRef = useRef(false);
 
   // Effect to check conflicts when inputs change (debounced to prevent race conditions)
   useEffect(() => {
@@ -174,8 +178,15 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     if (selectedDate && selectedInterviewer && selectedTime) {
       setIsCheckingConflicts(true);
 
-      // Debounce: wait 300ms after last change before checking
+      // Debounce: wait 500ms after last change before checking
       conflictCheckTimeoutRef.current = setTimeout(() => {
+        // Prevent duplicate calls if one is already in progress
+        if (isCheckingRef.current) {
+          console.log('[CONFLICT CHECK] Skipping - check already in progress');
+          return;
+        }
+
+        isCheckingRef.current = true;
         const [hours, minutes] = selectedTime.split(':').map(Number);
         const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
 
@@ -188,9 +199,10 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
           scheduledDate: scheduledDate.toISOString(),
           duration: parseInt(duration),
         });
-      }, 300);
+      }, 500);
     } else {
       setIsCheckingConflicts(false);
+      isCheckingRef.current = false;
     }
 
     // Cleanup on unmount
@@ -199,7 +211,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
         clearTimeout(conflictCheckTimeoutRef.current);
       }
     };
-  }, [selectedDate, selectedTime, selectedInterviewer, duration, panelMembers]);
+    // Use JSON.stringify for panelMembers to prevent reference changes from triggering re-renders
+  }, [selectedDate, selectedTime, selectedInterviewer, duration, JSON.stringify(panelMembers)]);
 
   const scheduleMutation = useMutation<
     any,
