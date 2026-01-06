@@ -606,6 +606,17 @@ class EmailService {
             <span style="color: #cc0000;"><strong>You MUST complete this fully before your first day in office.</strong></span>
           </p>
 
+          ${temporaryPassword ? `
+          <div style="background-color: #fef3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+            <h3 style="margin-top: 0; color: #856404;">🔐 HR Portal Login</h3>
+            <p style="font-size: 15px; margin-bottom: 10px;">Access the HR system to view your employee information and documents:</p>
+            <p style="font-size: 15px; margin: 5px 0;"><strong>URL:</strong> <a href="https://roofhr.up.railway.app/login" style="color: #1155cc;">https://roofhr.up.railway.app/login</a></p>
+            <p style="font-size: 15px; margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
+            <p style="font-size: 15px; margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${temporaryPassword}</code></p>
+            <p style="font-size: 13px; color: #856404; margin-top: 10px;">⚠️ Please log in and change your password on first access.</p>
+          </div>
+          ` : ''}
+
           <p style="font-size: 15px; line-height: 1.7; color: #800080;">
             On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel, so no particular dress code is required.
           </p>

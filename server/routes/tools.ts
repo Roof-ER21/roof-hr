@@ -775,7 +775,7 @@ router.post('/assignments', async (req, res) => {
 
       const signatureLinks = createdAssignments.map(a => {
         const tool = tools.find(t => t.id === a.toolId);
-        return `${tool?.name}: ${process.env.VITE_BASE_URL || 'http://localhost:5000'}/tools/signature/${assignmentTokens[a.id]}`;
+        return `${tool?.name}: ${process.env.APP_URL || 'https://roofhr.up.railway.app'}/tools/signature/${assignmentTokens[a.id]}`;
       }).join('\n');
 
       const emailContent = {
@@ -815,7 +815,7 @@ ROOF-ER HR Team`,
             <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
               ${createdAssignments.map(a => {
                 const tool = tools.find(t => t.id === a.toolId);
-                return `<p><a href="${process.env.VITE_BASE_URL || 'http://localhost:5000'}/tools/signature/${assignmentTokens[a.id]}" 
+                return `<p><a href="${process.env.APP_URL || 'https://roofhr.up.railway.app'}/tools/signature/${assignmentTokens[a.id]}" 
                   style="color: #1976d2; text-decoration: none; font-weight: bold;">
                   ✅ Sign for ${tool?.name}
                 </a></p>`;

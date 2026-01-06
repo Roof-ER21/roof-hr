@@ -1538,6 +1538,7 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
 
     for (const emp of employees) {
       try {
+        const appUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
         await emailService.sendEmail({
           to: emp.email,
           subject: 'Welcome to TheRoofDocs - Your Account Has Been Created',
@@ -1546,7 +1547,7 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
             <p>Your HR system account has been created. Here are your login credentials:</p>
             <p><strong>Email:</strong> ${emp.email}</p>
             <p><strong>Temporary Password:</strong> ${password}</p>
-            <p><strong>Login URL:</strong> <a href="http://localhost:5050/login">http://localhost:5050/login</a></p>
+            <p><strong>Login URL:</strong> <a href="${appUrl}/login">${appUrl}/login</a></p>
             <p>Please log in and change your password immediately for security.</p>
             <br>
             <p>Best regards,</p>
