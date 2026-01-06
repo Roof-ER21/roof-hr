@@ -163,13 +163,15 @@ class EmailService {
       console.error('Failed to create email log:', logError);
     }
 
-    // Try user impersonation via service account first (if configured and user email provided)
-    // Now supports attachments via MIME multipart
+    // Try service account impersonation first (if configured)
+    // Use provided fromUserEmail or default to careers@theroofdocs.com for HR/system emails
+    // This avoids SMTP timeouts on Railway where port 587 is often blocked
     const hasAttachments = config.attachments && config.attachments.length > 0;
-    if (config.fromUserEmail && serviceAccountAuth.isConfigured()) {
+    const senderEmail = config.fromUserEmail || 'careers@theroofdocs.com';
+    if (serviceAccountAuth.isConfigured()) {
       try {
-        console.log(`[Email] Attempting to send as ${config.fromUserEmail} via service account impersonation${hasAttachments ? ' (with attachments)' : ''}`);
-        const gmail = await serviceAccountAuth.getGmailForUser(config.fromUserEmail);
+        console.log(`[Email] Attempting to send as ${senderEmail} via service account impersonation${hasAttachments ? ' (with attachments)' : ''}`);
+        const gmail = await serviceAccountAuth.getGmailForUser(senderEmail);
 
         let emailContent: string;
         const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -208,7 +210,7 @@ class EmailService {
           const htmlBase64 = Buffer.from(config.html).toString('base64');
 
           emailContent = [
-            `From: ${config.fromUserEmail}`,
+            `From: ${senderEmail}`,
             `To: ${config.to}`,
             ...(config.cc && config.cc.length > 0 ? [`Cc: ${config.cc.join(', ')}`] : []),
             `Subject: ${config.subject}`,
@@ -228,7 +230,7 @@ class EmailService {
         } else {
           // Simple message without attachments
           emailContent = [
-            `From: ${config.fromUserEmail}`,
+            `From: ${senderEmail}`,
             `To: ${config.to}`,
             ...(config.cc && config.cc.length > 0 ? [`Cc: ${config.cc.join(', ')}`] : []),
             `Subject: ${config.subject}`,
@@ -266,7 +268,7 @@ class EmailService {
           }
         }
 
-        console.log(`[Email] ✅ Successfully sent email from ${config.fromUserEmail} via impersonation`, {
+        console.log(`[Email] ✅ Successfully sent email from ${senderEmail} via impersonation`, {
           to: config.to,
           subject: config.subject,
           messageId: result.data.id,
@@ -275,7 +277,7 @@ class EmailService {
         return true;
       } catch (impersonationError: any) {
         console.error('[Email] ❌ Service account impersonation failed:', {
-          fromUser: config.fromUserEmail,
+          fromUser: senderEmail,
           to: config.to,
           subject: config.subject,
           errorType: impersonationError?.constructor?.name,
