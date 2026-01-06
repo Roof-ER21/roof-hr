@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { addMinutes, format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import type { IStorage } from '../storage';
+import { timezoneService } from './timezone-service';
 
 export interface CalendarConflict {
   type: 'PTO' | 'INTERVIEW' | 'MEETING' | 'BUSY';
@@ -378,21 +379,34 @@ export class CalendarConflictDetector {
   }
 
   /**
-   * Format conflict for display
+   * Format conflict for display - uses Eastern Time (America/New_York)
    */
   formatConflictMessage(conflict: CalendarConflict): string {
-    const startStr = format(conflict.start, 'MMM d, h:mm a');
-    const endStr = format(conflict.end, 'h:mm a');
-    
+    const timezone = 'America/New_York';
+
+    // Format date and time in ET
+    const startStr = timezoneService.formatInTimezone(conflict.start, timezone, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const endStr = timezoneService.formatInTimezone(conflict.end, timezone, {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
     switch (conflict.type) {
       case 'PTO':
-        return `❌ ${conflict.attendees?.[0] || 'Participant'} is on PTO from ${startStr} to ${endStr}`;
+        return `❌ ${conflict.attendees?.[0] || 'Participant'} is on PTO from ${startStr} to ${endStr} ET`;
       case 'INTERVIEW':
-        return `❌ ${conflict.title} scheduled from ${startStr} to ${endStr}`;
+        return `❌ ${conflict.title} scheduled from ${startStr} to ${endStr} ET`;
       case 'MEETING':
-        return `⚠️ ${conflict.title} scheduled from ${startStr} to ${endStr}`;
+        return `⚠️ ${conflict.title} scheduled from ${startStr} to ${endStr} ET`;
       default:
-        return `⚠️ Calendar conflict from ${startStr} to ${endStr}`;
+        return `⚠️ Calendar conflict from ${startStr} to ${endStr} ET`;
     }
   }
 

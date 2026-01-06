@@ -94,6 +94,27 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     enabled: !!selectedInterviewer && isOpen,
   });
 
+  // Fetch availability for all panel members
+  const { data: panelAvailabilityData } = useQuery<Record<string, Array<{ dayOfWeek: number; startTime: string; endTime: string }>>>({
+    queryKey: ['/api/interview-availability/bulk', panelMembers],
+    queryFn: async () => {
+      if (panelMembers.length === 0) return {};
+      const results: Record<string, Array<{ dayOfWeek: number; startTime: string; endTime: string }>> = {};
+      await Promise.all(
+        panelMembers.map(async (id) => {
+          try {
+            const data = await apiRequest(`/api/interview-availability/${id}`);
+            results[id] = data as Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+          } catch {
+            results[id] = [];
+          }
+        })
+      );
+      return results;
+    },
+    enabled: panelMembers.length > 0 && isOpen,
+  });
+
   // Check for conflicts when date/time/interviewer changes
   const checkConflictsMutation = useMutation<
     { conflicts?: any[]; warnings?: string[]; suggestedTimes?: string[] },
@@ -657,6 +678,51 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                   <p className="text-xs text-green-600">
                     {panelMembers.length} additional interviewer{panelMembers.length > 1 ? 's' : ''} selected
                   </p>
+                )}
+
+                {/* Show panel members' availability */}
+                {panelMembers.length > 0 && panelAvailabilityData && (
+                  <div className="mt-2 p-3 bg-purple-50 rounded-md border border-purple-200">
+                    <p className="text-sm font-medium text-purple-800 flex items-center gap-1">
+                      <Users className="h-4 w-4" />
+                      Additional Interviewers' Availability
+                    </p>
+                    <div className="mt-2 space-y-3">
+                      {panelMembers.map((memberId) => {
+                        const member = interviewers?.find((i: any) => i.id === memberId);
+                        const memberAvail = panelAvailabilityData[memberId] || [];
+                        const activeSlots = memberAvail.filter((a: any) => a.isActive !== false);
+                        return (
+                          <div key={memberId} className="text-sm">
+                            <span className="font-medium text-purple-700">{member?.firstName} {member?.lastName}:</span>
+                            {activeSlots.length > 0 ? (
+                              <div className="ml-2 mt-1 text-purple-600 space-y-0.5">
+                                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, idx) => {
+                                  const daySlots = activeSlots.filter((a: any) => a.dayOfWeek === idx);
+                                  if (daySlots.length === 0) return null;
+                                  return (
+                                    <div key={day} className="flex gap-2">
+                                      <span className="w-20 text-xs">{day}:</span>
+                                      <span className="text-xs">
+                                        {daySlots.map((slot: any, i: number) => (
+                                          <span key={i}>
+                                            {formatTime12Hour(slot.startTime)} - {formatTime12Hour(slot.endTime)}
+                                            {i < daySlots.length - 1 ? ', ' : ''}
+                                          </span>
+                                        ))}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="ml-2 text-xs text-orange-600">No availability set</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
 
