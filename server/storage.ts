@@ -572,8 +572,9 @@ class DrizzleStorage implements IStorage {
       startDate: data.startDate,
       endDate: data.endDate,
       days: data.days,
+      type: data.type || 'VACATION',
       reason: data.reason,
-      status: 'PENDING' as 'PENDING' | 'APPROVED' | 'DENIED',
+      status: (data.status || 'PENDING') as 'PENDING' | 'APPROVED' | 'DENIED',
       departmentOverlapWarning: data.departmentOverlapWarning,
       overlappingEmployees: data.overlappingEmployees,
       googleEventId: data.googleEventId
