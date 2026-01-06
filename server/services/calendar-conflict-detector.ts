@@ -296,13 +296,10 @@ export class CalendarConflictDetector {
     const endHour = timezoneService.getHourInTimezone(endTime, timezone);
     const dayOfWeek = timezoneService.getDayOfWeekInTimezone(startTime, timezone);
 
-    console.log('[SOFT CONFLICTS] Input:', {
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      hourET: hour,
-      endHourET: endHour,
-      dayOfWeek
-    });
+    console.log('[SOFT CONFLICTS] Checking time:', startTime.toISOString(), '→ hour in ET:', hour);
+
+    // TEMPORARY: Always add a test warning to verify deployment
+    warnings.push(`[DEBUG] Hour in ET: ${hour}, Day: ${dayOfWeek}`);
 
     // Lunch hour warning (12pm - 1pm)
     if (hour === 12 || (hour < 12 && endHour > 12)) {
