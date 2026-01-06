@@ -112,14 +112,14 @@ export default function RecruitingAnalytics() {
     },
   });
 
-  // Fetch sources data
-  const { data: sources, isLoading: loadingSources } = useQuery({
-    queryKey: ['recruiting-analytics', 'sources', period],
+  // Fetch assignee breakdown data
+  const { data: assignees, isLoading: loadingAssignees } = useQuery({
+    queryKey: ['recruiting-analytics', 'recruiters', period],
     queryFn: async () => {
-      const response = await fetch(`/api/recruiting-analytics/sources?period=${period}`, {
+      const response = await fetch(`/api/recruiting-analytics/recruiters?period=${period}`, {
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('Failed to fetch sources');
+      if (!response.ok) throw new Error('Failed to fetch assignees');
       return response.json();
     },
   });
@@ -304,11 +304,13 @@ export default function RecruitingAnalytics() {
       ]
     : [];
 
-  // Transform sources data for pie chart
-  const sourceChartData = sources?.sources?.map((s: any, idx: number) => ({
-    name: s.source,
-    value: s.count,
-    percentage: s.percentage,
+  // Transform assignee data for pie chart
+  const assigneeChartData = assignees?.recruiters?.map((r: any, idx: number) => ({
+    name: r.name || 'Unassigned',
+    value: r.candidatesAssigned,
+    percentage: assignees?.totals?.totalCandidates > 0
+      ? Math.round((r.candidatesAssigned / assignees.totals.totalCandidates) * 100)
+      : 0,
     fill: COLORS[idx % COLORS.length],
   })) || [];
 
@@ -465,21 +467,21 @@ export default function RecruitingAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Source Breakdown */}
+        {/* Assignee Breakdown */}
         <Card>
           <CardHeader>
-            <CardTitle>Source Breakdown</CardTitle>
+            <CardTitle>Assignee Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
-            {loadingSources ? (
+            {loadingAssignees ? (
               <div className="h-[300px] flex items-center justify-center">
                 <Skeleton className="h-full w-full" />
               </div>
-            ) : sourceChartData.length > 0 ? (
+            ) : assigneeChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={sourceChartData}
+                    data={assigneeChartData}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -487,7 +489,7 @@ export default function RecruitingAnalytics() {
                     outerRadius={100}
                     dataKey="value"
                   >
-                    {sourceChartData.map((entry: any, index: number) => (
+                    {assigneeChartData.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Pie>
@@ -499,7 +501,7 @@ export default function RecruitingAnalytics() {
               </ResponsiveContainer>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                No source data available
+                No assignee data available
               </div>
             )}
           </CardContent>
