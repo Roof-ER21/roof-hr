@@ -296,6 +296,14 @@ export class CalendarConflictDetector {
     const endHour = timezoneService.getHourInTimezone(endTime, timezone);
     const dayOfWeek = timezoneService.getDayOfWeekInTimezone(startTime, timezone);
 
+    console.log('[SOFT CONFLICTS] Input:', {
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      hourET: hour,
+      endHourET: endHour,
+      dayOfWeek
+    });
+
     // Lunch hour warning (12pm - 1pm)
     if (hour === 12 || (hour < 12 && endHour > 12)) {
       warnings.push('Interview scheduled during typical lunch hours (12pm-1pm)');
@@ -321,6 +329,7 @@ export class CalendarConflictDetector {
       warnings.push('Interview scheduled early Monday morning');
     }
 
+    console.log('[SOFT CONFLICTS] Generated warnings:', warnings);
     return warnings;
   }
 

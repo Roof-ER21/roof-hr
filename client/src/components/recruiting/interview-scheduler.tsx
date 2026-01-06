@@ -103,7 +103,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       await Promise.all(
         panelMembers.map(async (id) => {
           try {
-            const data = await apiRequest(`/api/interview-availability/${id}`);
+            const data = await apiRequest(`/api/interview-availability/${id}`, 'GET');
             console.log(`[Panel Availability] Fetched for ${id}:`, data);
             results[id] = data as Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
           } catch (error) {
