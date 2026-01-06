@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle, UserX, Loader2 } from 'lucide-react';
+import { MANAGER_ROLES, ADMIN_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 import { DialogFooter } from '@/components/ui/dialog';
+import { useAuth } from '@/lib/auth';
 import { format, addDays, setHours, setMinutes, isBefore, isAfter, startOfDay, endOfDay } from 'date-fns';
 
 interface InterviewSchedulerProps {
@@ -35,7 +37,16 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const candidateName = `${candidate.firstName} ${candidate.lastName}`;
   const position = candidate.position;
   const { toast } = useToast();
+  const { user } = useAuth();
   const [internalIsOpen, setInternalIsOpen] = useState(false);
+
+  // Determine if user is a sourcer (use sourcer-specific endpoint)
+  const isSourcerUser = user && (
+    user.role === 'SOURCER' ||
+    isSourcer(user) ||
+    isLeadSourcer(user) ||
+    isExtendedSourcer(user)
+  ) && !MANAGER_ROLES.includes(user.role || '');
 
   // Use controlled state if props provided, otherwise use internal state
   const isOpen = open !== undefined ? open : internalIsOpen;
@@ -220,8 +231,9 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     any
   >({
     mutationFn: async (data: any) => {
-      // Use /api/interviews/schedule for full integration (calendar + emails)
-      const response: any = await apiRequest('/api/interviews/schedule', {
+      // Use sourcer endpoint for sourcers, manager endpoint for managers
+      const endpoint = isSourcerUser ? '/api/interviews/sourcer-schedule' : '/api/interviews/schedule';
+      const response: any = await apiRequest(endpoint, {
         method: 'POST',
         body: JSON.stringify(data),
       });
@@ -641,8 +653,9 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                       <SelectValue placeholder="Select interviewer" />
                     </SelectTrigger>
                     <SelectContent>
-                      {interviewers?.filter((user: any) => ['ADMIN', 'MANAGER'].includes(user.role))
-                        .map((user: any) => (
+                      {interviewers?.filter((user: any) =>
+                        MANAGER_ROLES.includes(user.role) || ADMIN_ROLES.includes(user.role)
+                      ).map((user: any) => (
                           <SelectItem key={user.id} value={user.id}>
                             {user.firstName} {user.lastName} - {user.position}
                           </SelectItem>
@@ -695,7 +708,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                 </p>
                 <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-2">
                   {interviewers?.filter((user: any) =>
-                    ['ADMIN', 'MANAGER'].includes(user.role) && user.id !== selectedInterviewer
+                    (MANAGER_ROLES.includes(user.role) || ADMIN_ROLES.includes(user.role)) && user.id !== selectedInterviewer
                   ).map((user: any) => (
                     <div key={user.id} className="flex items-center space-x-2">
                       <input

@@ -6,6 +6,7 @@ import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewRe
 import { getConflictDetector } from '../services/calendar-conflict-detector';
 import { timezoneService } from '../services/timezone-service';
 import { requireAuth, requireManager } from '../middleware/auth';
+import { isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 
 const router = Router();
 
@@ -1065,5 +1066,145 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
     return { success: false, errors };
   }
 }
+
+// Sourcer-specific interview scheduling endpoint
+// Allows sourcers to schedule interviews for their assigned candidates
+router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user;
+
+    // Must be a sourcer
+    const isSourcerUser = user.role === 'SOURCER' ||
+      isSourcer(user) ||
+      isLeadSourcer(user) ||
+      isExtendedSourcer(user);
+
+    if (!isSourcerUser) {
+      return res.status(403).json({ error: 'Sourcer access required' });
+    }
+
+    const data = scheduleInterviewSchema.parse(req.body);
+
+    // Get candidate
+    const candidate = await storage.getCandidateById(data.candidateId);
+    if (!candidate) {
+      return res.status(400).json({ error: 'Candidate not found' });
+    }
+
+    // Lead sourcers can schedule for any candidate, others only their assigned
+    if (!isLeadSourcer(user) && candidate.assignedTo !== user.id) {
+      return res.status(403).json({
+        error: 'You can only schedule interviews for candidates assigned to you'
+      });
+    }
+
+    const interviewer = data.interviewerId ? await storage.getUserById(data.interviewerId) : null;
+
+    if (!interviewer && !data.customInterviewerName) {
+      return res.status(400).json({
+        error: 'Either interviewer or custom interviewer name is required'
+      });
+    }
+
+    // Check interviewer availability if interviewerId is provided
+    if (data.interviewerId && interviewer) {
+      const scheduledDate = new Date(data.scheduledDate);
+      const interviewerTimezone = await timezoneService.getUserTimezone(data.interviewerId);
+
+      // Get day of week in interviewer's timezone
+      const dayFormatter = new Intl.DateTimeFormat('en-US', {
+        weekday: 'short',
+        timeZone: interviewerTimezone
+      });
+      const dayName = dayFormatter.format(scheduledDate);
+      const dayMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+      const dayOfWeek = dayMap[dayName] ?? scheduledDate.getDay();
+
+      const availability = await storage.getInterviewAvailabilityByInterviewer(data.interviewerId);
+      const daySlots = availability.filter((a: any) => a.dayOfWeek === dayOfWeek && a.isActive);
+
+      if (daySlots.length === 0) {
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const availableDays = [...new Set(availability.filter((a: any) => a.isActive).map((a: any) => a.dayOfWeek))];
+        const availableDayNames = availableDays.map(d => dayNames[d as number]).join(', ');
+
+        return res.status(400).json({
+          error: 'Outside interviewer availability',
+          message: `${interviewer.firstName} ${interviewer.lastName} is not available on ${dayNames[dayOfWeek]}s.`,
+          availableDays: availableDayNames || 'No availability set'
+        });
+      }
+
+      // Check for existing interviews at this time
+      const existingInterviews = await storage.getInterviewsByInterviewer(data.interviewerId);
+      const scheduledStart = scheduledDate.getTime();
+      const scheduledEnd = scheduledStart + data.duration * 60 * 1000;
+
+      const conflictingInterview = existingInterviews.find((interview: any) => {
+        if (interview.status === 'CANCELLED') return false;
+        const interviewStart = new Date(interview.scheduledDate).getTime();
+        const interviewEnd = interviewStart + interview.duration * 60 * 1000;
+        return scheduledStart < interviewEnd && scheduledEnd > interviewStart;
+      });
+
+      if (conflictingInterview) {
+        const conflictCandidate = await storage.getCandidateById(conflictingInterview.candidateId);
+        const conflictTime = new Date(conflictingInterview.scheduledDate);
+
+        return res.status(409).json({
+          error: 'Interviewer has existing appointment',
+          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled at that time with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`
+        });
+      }
+    }
+
+    // Create the interview (sourcers cannot force override conflicts)
+    const interview = await storage.createInterview({
+      candidateId: data.candidateId,
+      interviewerId: data.interviewerId || undefined,
+      customInterviewerName: data.customInterviewerName || undefined,
+      scheduledDate: new Date(data.scheduledDate),
+      duration: data.duration,
+      type: data.type,
+      location: data.location,
+      meetingLink: data.meetingLink,
+      notes: data.notes,
+      reminderHours: data.reminderHours || 24,
+      status: 'SCHEDULED',
+    });
+
+    // Send interview emails
+    if (data.sendReminders !== false) {
+      try {
+        await sendInterviewScheduledEmails(interview, user.email);
+      } catch (emailError) {
+        console.error('[SOURCER INTERVIEW] Failed to send emails:', emailError);
+      }
+    }
+
+    console.log(`[SOURCER-SCHEDULE] ${user.email} scheduled interview for candidate ${candidate.firstName} ${candidate.lastName}`);
+
+    res.json({
+      success: true,
+      interview,
+      message: 'Interview scheduled successfully'
+    });
+
+  } catch (error) {
+    console.error('[SOURCER SCHEDULE INTERVIEW ERROR]', error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid interview data',
+        details: error.errors
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to schedule interview',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
 export default router;

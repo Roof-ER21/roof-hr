@@ -1018,10 +1018,10 @@ export default function EnhancedRecruiting() {
   } = usePermissions();
 
   // Stages that SOURCERs can move candidates to
-  // Extended sourcers (Sima, Natia) can move to OFFER, regular sourcers cannot
+  // Extended sourcers (Sima, Natia) can move to OFFER, all sourcers can mark candidates as dead/no-show
   const SOURCER_ALLOWED_STAGES = isExtendedSourcer()
-    ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER']
-    : ['APPLIED', 'SCREENING', 'INTERVIEW'];
+    ? ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']
+    : ['APPLIED', 'SCREENING', 'INTERVIEW', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'];
   const userIsSourcerOnly = isSourcerRole() && !isManager();
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
@@ -1323,7 +1323,7 @@ export default function EnhancedRecruiting() {
       if (userIsSourcerOnly && data.status) {
         // Check if the target status is allowed for SOURCERs
         if (!SOURCER_ALLOWED_STAGES.includes(data.status)) {
-          throw new Error('SOURCERs can only move candidates to Application Review, Phone Screening, or Interview Process. Contact a manager to move to later stages.');
+          throw new Error('SOURCERs can only move candidates to early stages or mark as Dead/No-Show. Contact a manager to move to Offer or Hired.');
         }
         return apiRequest(`/api/candidates/${id}/sourcer-move`, 'PATCH', { newStatus: data.status });
       }
@@ -2733,7 +2733,12 @@ export default function EnhancedRecruiting() {
       </Dialog>
 
       {/* Candidate Notes Side Panel */}
-      <Sheet open={showNotes} onOpenChange={setShowNotes}>
+      <Sheet open={showNotes} onOpenChange={(open) => {
+        setShowNotes(open);
+        if (!open) {
+          setSelectedCandidateForNotes(null);
+        }
+      }}>
         <SheetContent side="right" className="w-[450px] sm:w-[540px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
