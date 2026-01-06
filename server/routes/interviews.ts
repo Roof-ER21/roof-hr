@@ -565,28 +565,44 @@ router.post('/feedback', requireAuth, async (req, res) => {
 // Check for calendar conflicts before scheduling (managers only)
 router.post('/check-conflicts', requireAuth, requireManager, async (req, res) => {
   try {
-    const { candidateId, interviewerId, scheduledDate, duration } = req.body;
-    
-    // Get participant emails
+    const { candidateId, interviewerId, panelMemberIds = [], scheduledDate, duration } = req.body;
+
+    // Get participant emails - check ALL interviewers (primary + panel members)
+    const participants: string[] = [];
+
+    // Add primary interviewer
+    if (interviewerId) {
+      const interviewer = await storage.getUserById(interviewerId);
+      if (interviewer?.email) {
+        participants.push(interviewer.email);
+      }
+    }
+
+    // Add ALL panel members (additional interviewers)
+    for (const memberId of panelMemberIds) {
+      const member = await storage.getUserById(memberId);
+      if (member?.email) {
+        participants.push(member.email);
+      }
+    }
+
+    // Add candidate
     const candidate = await storage.getCandidateById(candidateId);
-    const interviewer = await storage.getUserById(interviewerId);
-    
-    if (!candidate || !interviewer) {
-      return res.status(400).json({ 
-        error: 'Invalid candidate or interviewer' 
+    if (candidate?.email) {
+      participants.push(candidate.email);
+    }
+
+    if (participants.length === 0) {
+      return res.status(400).json({
+        error: 'No valid participants found'
       });
     }
-    
-    // Check for conflicts
+
+    // Check for conflicts for ALL participants
     const conflictDetector = getConflictDetector(storage);
     const startTime = new Date(scheduledDate);
     const endTime = new Date(startTime.getTime() + (duration || 60) * 60 * 1000);
-    
-    const participants = [
-      ...(interviewer.email ? [interviewer.email] : []),
-      ...(candidate.email ? [candidate.email] : [])
-    ];
-    
+
     const conflictResult = await conflictDetector.checkConflicts(
       participants,
       startTime,

@@ -42,7 +42,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const setIsOpen = onOpenChange || setInternalIsOpen;
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState('09:00');
-  const [interviewType, setInterviewType] = useState<'PHONE' | 'VIDEO' | 'IN_PERSON' | 'TECHNICAL' | 'PANEL'>('VIDEO');
+  const [interviewType, setInterviewType] = useState<'PHONE' | 'VIDEO' | 'IN_PERSON' | 'TECHNICAL' | 'PANEL'>('IN_PERSON');
   const [duration, setDuration] = useState('60');
   const [location, setLocation] = useState('');
   const [meetingLink, setMeetingLink] = useState('');
@@ -101,6 +101,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     {
       candidateId: string;
       interviewerId: string;
+      panelMemberIds?: string[];
       scheduledDate: string;
       duration: number;
     }
@@ -141,12 +142,13 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       checkConflictsMutation.mutate({
         candidateId,
         interviewerId: selectedInterviewer,
+        panelMemberIds: panelMembers,
         scheduledDate: scheduledDate.toISOString(),
         duration: parseInt(duration),
       });
       setIsCheckingConflicts(false);
     }
-  }, [selectedDate, selectedTime, selectedInterviewer, duration]);
+  }, [selectedDate, selectedTime, selectedInterviewer, duration, panelMembers]);
 
   const scheduleMutation = useMutation<
     any,
@@ -370,7 +372,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const resetForm = () => {
     setSelectedDate(undefined);
     setSelectedTime('09:00');
-    setInterviewType('VIDEO');
+    setInterviewType('IN_PERSON');
     setDuration('60');
     setLocation('');
     setMeetingLink('');
@@ -488,6 +490,12 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="IN_PERSON">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4" />
+                          In-Person Interview
+                        </div>
+                      </SelectItem>
                       <SelectItem value="PHONE">
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4" />
@@ -498,12 +506,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                         <div className="flex items-center gap-2">
                           <Video className="h-4 w-4" />
                           Video Interview
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="IN_PERSON">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          In-Person Interview
                         </div>
                       </SelectItem>
                       <SelectItem value="TECHNICAL">
