@@ -2516,6 +2516,11 @@ router.patch('/api/candidates/:id/sourcer-update', requireAuth, async (req: any,
       }
     }
 
+    // Convert date string to Date object (storage expects Date)
+    if (updates.interviewScreeningDate && typeof updates.interviewScreeningDate === 'string') {
+      updates.interviewScreeningDate = new Date(updates.interviewScreeningDate);
+    }
+
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
