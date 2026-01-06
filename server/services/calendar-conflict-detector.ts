@@ -73,11 +73,11 @@ export class CalendarConflictDetector {
           const calendarConflicts = await this.checkGoogleCalendarConflicts(email, startTime, endTime, excludeEventId);
           conflicts.push(...calendarConflicts);
         }
-
-        // 4. Check for soft conflicts (lunch hours, end of day, etc.)
-        const softConflicts = this.checkSoftConflicts(startTime, endTime);
-        warnings.push(...softConflicts);
       }
+
+      // 4. Check for soft conflicts ONCE (outside the participant loop)
+      const softConflicts = this.checkSoftConflicts(startTime, endTime);
+      warnings.push(...softConflicts);
 
       // Generate suggested alternative times if there are conflicts
       let suggestedTimes: Date[] = [];

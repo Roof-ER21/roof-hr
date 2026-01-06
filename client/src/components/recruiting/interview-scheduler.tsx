@@ -104,12 +104,15 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
         panelMembers.map(async (id) => {
           try {
             const data = await apiRequest(`/api/interview-availability/${id}`);
+            console.log(`[Panel Availability] Fetched for ${id}:`, data);
             results[id] = data as Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
-          } catch {
+          } catch (error) {
+            console.error(`[Panel Availability] Failed to fetch for ${id}:`, error);
             results[id] = [];
           }
         })
       );
+      console.log('[Panel Availability] All results:', results);
       return results;
     },
     enabled: panelMembers.length > 0 && isOpen,
@@ -128,12 +131,14 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     }
   >({
     mutationFn: async (data) => {
+      console.log('[CONFLICT CHECK] Calling API with:', data);
       return await apiRequest('/api/interviews/check-conflicts', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
     onSuccess: (data) => {
+      console.log('[CONFLICT CHECK] Success response:', data);
       setConflicts(data.conflicts || []);
       setWarnings(data.warnings || []);
       setSuggestedTimes(data.suggestedTimes?.map((t: string) => new Date(t)) || []);
@@ -146,7 +151,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
         setShowConflictOverride(false);
       }
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('[CONFLICT CHECK] Error:', error);
       // If conflict check fails, clear conflicts but allow scheduling
       setConflicts([]);
       setWarnings(['Unable to check for conflicts. Please verify availability manually.']);

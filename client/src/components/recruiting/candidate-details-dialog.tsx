@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
+import { parseScreeningData } from '@/lib/parse-screening-data';
 import { format } from 'date-fns';
 import {
   User, Mail, Phone, Calendar, Users, ChevronRight, Pencil,
@@ -471,15 +472,8 @@ export function CandidateDetailsDialog({
     return { ...note, author };
   });
 
-  // Parse interview screening data
-  let screeningData: any = null;
-  if (candidate?.interviewScreeningData) {
-    try {
-      screeningData = JSON.parse(candidate.interviewScreeningData);
-    } catch (e) {
-      console.error('Failed to parse screening data:', e);
-    }
-  }
+  // Parse interview screening data (handles both string and object formats)
+  const screeningData = parseScreeningData(candidate?.interviewScreeningData);
 
   const assignedEmployee = availableEmployees.find((e) => e.id === candidate?.assignedTo);
 

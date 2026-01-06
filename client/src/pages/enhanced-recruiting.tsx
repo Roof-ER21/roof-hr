@@ -21,6 +21,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { parseScreeningData } from '@/lib/parse-screening-data';
 import {
   Users, UserPlus, UserCheck, Calendar, Phone, Mail, FileText,
   Clock, ChevronRight, CheckCircle, XCircle, AlertCircle,
@@ -1701,16 +1702,12 @@ export default function EnhancedRecruiting() {
     if (newStatus === 'INTERVIEW' && currentCandidate.status !== 'INTERVIEW') {
       // Check if candidate has previous screening data that passed all requirements
       let skipScreening = false;
-      if (currentCandidate.interviewScreeningData) {
-        try {
-          const prevScreening = JSON.parse(currentCandidate.interviewScreeningData as string);
-          // Skip if all previous requirements were met
-          skipScreening = prevScreening.hasDriversLicense &&
-                         prevScreening.hasReliableVehicle &&
-                         prevScreening.hasClearCommunication;
-        } catch (e) {
-          skipScreening = false;
-        }
+      const prevScreening = parseScreeningData(currentCandidate.interviewScreeningData);
+      if (prevScreening) {
+        // Skip if all previous requirements were met
+        skipScreening = prevScreening.hasDriversLicense &&
+                       prevScreening.hasReliableVehicle &&
+                       prevScreening.hasClearCommunication;
       }
 
       if (!skipScreening) {
@@ -2139,15 +2136,11 @@ export default function EnhancedRecruiting() {
                             if (newStatus === 'INTERVIEW' && currentCandidate.status !== 'INTERVIEW') {
                               // Check if candidate has previous screening data that passed all requirements
                               let skipScreening = false;
-                              if (currentCandidate.interviewScreeningData) {
-                                try {
-                                  const prevScreening = JSON.parse(currentCandidate.interviewScreeningData as string);
-                                  skipScreening = prevScreening.hasDriversLicense &&
-                                                 prevScreening.hasReliableVehicle &&
-                                                 prevScreening.hasClearCommunication;
-                                } catch (e) {
-                                  skipScreening = false;
-                                }
+                              const prevScreening = parseScreeningData(currentCandidate.interviewScreeningData);
+                              if (prevScreening) {
+                                skipScreening = prevScreening.hasDriversLicense &&
+                                               prevScreening.hasReliableVehicle &&
+                                               prevScreening.hasClearCommunication;
                               }
 
                               if (!skipScreening) {
@@ -2249,15 +2242,11 @@ export default function EnhancedRecruiting() {
                           if (newStatus === 'INTERVIEW' && currentCandidate.status !== 'INTERVIEW') {
                             // Check if candidate has previous screening data that passed all requirements
                             let skipScreening = false;
-                            if (currentCandidate.interviewScreeningData) {
-                              try {
-                                const prevScreening = JSON.parse(currentCandidate.interviewScreeningData as string);
-                                skipScreening = prevScreening.hasDriversLicense &&
-                                               prevScreening.hasReliableVehicle &&
-                                               prevScreening.hasClearCommunication;
-                              } catch (e) {
-                                skipScreening = false;
-                              }
+                            const prevScreening = parseScreeningData(currentCandidate.interviewScreeningData);
+                            if (prevScreening) {
+                              skipScreening = prevScreening.hasDriversLicense &&
+                                             prevScreening.hasReliableVehicle &&
+                                             prevScreening.hasClearCommunication;
                             }
 
                             if (!skipScreening) {
@@ -2317,15 +2306,11 @@ export default function EnhancedRecruiting() {
                           // Check if moving to INTERVIEW status - requires screening for in-person interviews
                           if (newStatus === 'INTERVIEW' && currentCandidate.status !== 'INTERVIEW') {
                             let skipScreening = false;
-                            if (currentCandidate.interviewScreeningData) {
-                              try {
-                                const prevScreening = JSON.parse(currentCandidate.interviewScreeningData as string);
-                                skipScreening = prevScreening.hasDriversLicense &&
-                                               prevScreening.hasReliableVehicle &&
-                                               prevScreening.hasClearCommunication;
-                              } catch (e) {
-                                skipScreening = false;
-                              }
+                            const prevScreening = parseScreeningData(currentCandidate.interviewScreeningData);
+                            if (prevScreening) {
+                              skipScreening = prevScreening.hasDriversLicense &&
+                                             prevScreening.hasReliableVehicle &&
+                                             prevScreening.hasClearCommunication;
                             }
 
                             if (!skipScreening) {
@@ -2861,15 +2846,11 @@ export default function EnhancedRecruiting() {
           // 1. INTERVIEW - requires screening (same as drag-and-drop)
           if (nextStatus === 'INTERVIEW' && candidate.status !== 'INTERVIEW') {
             let skipScreening = false;
-            if (candidate.interviewScreeningData) {
-              try {
-                const prevScreening = JSON.parse(candidate.interviewScreeningData as string);
-                skipScreening = prevScreening.hasDriversLicense &&
-                               prevScreening.hasReliableVehicle &&
-                               prevScreening.hasClearCommunication;
-              } catch (e) {
-                skipScreening = false;
-              }
+            const prevScreening = parseScreeningData(candidate.interviewScreeningData);
+            if (prevScreening) {
+              skipScreening = prevScreening.hasDriversLicense &&
+                             prevScreening.hasReliableVehicle &&
+                             prevScreening.hasClearCommunication;
             }
 
             if (!skipScreening) {

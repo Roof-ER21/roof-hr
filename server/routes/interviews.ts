@@ -566,6 +566,7 @@ router.post('/feedback', requireAuth, async (req, res) => {
 router.post('/check-conflicts', requireAuth, requireManager, async (req, res) => {
   try {
     const { candidateId, interviewerId, panelMemberIds = [], scheduledDate, duration } = req.body;
+    console.log('[CONFLICT CHECK] Input:', { candidateId, interviewerId, panelMemberIds, scheduledDate, duration });
 
     // Get participant emails - check ALL interviewers (primary + panel members)
     const participants: string[] = [];
@@ -600,14 +601,24 @@ router.post('/check-conflicts', requireAuth, requireManager, async (req, res) =>
 
     // Check for conflicts for ALL participants
     const conflictDetector = await getConflictDetector(storage);
+    console.log('[CONFLICT CHECK] Participants:', participants);
+    console.log('[CONFLICT CHECK] Detector initialized:', (conflictDetector as any).isInitialized);
+
     const startTime = new Date(scheduledDate);
     const endTime = new Date(startTime.getTime() + (duration || 60) * 60 * 1000);
+    console.log('[CONFLICT CHECK] Time range:', { startTime: startTime.toISOString(), endTime: endTime.toISOString() });
 
     const conflictResult = await conflictDetector.checkConflicts(
       participants,
       startTime,
       endTime
     );
+    console.log('[CONFLICT CHECK] Result:', {
+      hasConflicts: conflictResult.hasConflicts,
+      conflictCount: conflictResult.conflicts.length,
+      warningCount: conflictResult.warnings.length,
+      warnings: conflictResult.warnings
+    });
     
     // Format the response
     const formattedConflicts = conflictResult.conflicts.map(c => ({

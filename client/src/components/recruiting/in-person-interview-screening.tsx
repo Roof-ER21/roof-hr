@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, AlertTriangle, Car, MessageSquare, UserCheck, RefreshCw, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { parseScreeningData } from '@/lib/parse-screening-data';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import type { Candidate } from '@shared/schema';
@@ -57,31 +58,24 @@ export function InPersonInterviewScreening({
 
   // Parse previous screening data from candidate
   useEffect(() => {
-    if (candidate?.interviewScreeningData) {
-      try {
-        const data = JSON.parse(candidate.interviewScreeningData as string);
-        setPreviousScreening({
-          ...data,
-          date: candidate.interviewScreeningDate ? format(new Date(candidate.interviewScreeningDate), 'MMM d, yyyy') : undefined
-        });
+    const data = parseScreeningData(candidate?.interviewScreeningData);
+    if (data) {
+      setPreviousScreening({
+        ...data,
+        date: candidate.interviewScreeningDate ? format(new Date(candidate.interviewScreeningDate), 'MMM d, yyyy') : undefined
+      });
 
-        // Check if previous screening had any failures
-        const hadFailures = !data.hasDriversLicense || !data.hasReliableVehicle || !data.hasClearCommunication;
-        setIsReScreening(hadFailures);
+      // Check if previous screening had any failures
+      const hadFailures = !data.hasDriversLicense || !data.hasReliableVehicle || !data.hasClearCommunication;
+      setIsReScreening(hadFailures);
 
-        // Pre-fill with previous responses
-        setResponses({
-          driversLicense: data.hasDriversLicense ? 'yes' : 'no',
-          reliableVehicle: data.hasReliableVehicle ? 'yes' : 'no',
-          clearCommunication: data.hasClearCommunication ? 'yes' : 'no',
-          notes: ''
-        });
-
-        // Notes are always required regardless of screening results
-      } catch (e) {
-        setPreviousScreening(null);
-        setIsReScreening(false);
-      }
+      // Pre-fill with previous responses
+      setResponses({
+        driversLicense: data.hasDriversLicense ? 'yes' : 'no',
+        reliableVehicle: data.hasReliableVehicle ? 'yes' : 'no',
+        clearCommunication: data.hasClearCommunication ? 'yes' : 'no',
+        notes: ''
+      });
     } else {
       setPreviousScreening(null);
       setIsReScreening(false);
