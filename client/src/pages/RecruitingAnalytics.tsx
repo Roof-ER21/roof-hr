@@ -80,6 +80,7 @@ interface Candidate {
 export default function RecruitingAnalytics() {
   const [period, setPeriod] = useState<Period>('30d');
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('all');
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [archiveSearch, setArchiveSearch] = useState('');
   const [archiveStatusFilter, setArchiveStatusFilter] = useState<string>('all');
   const [selectedArchivedIds, setSelectedArchivedIds] = useState<string[]>([]);
@@ -384,19 +385,73 @@ export default function RecruitingAnalytics() {
         </div>
         <div className="flex gap-3">
           {/* Employee Filter */}
-          <Select value={selectedAssigneeId} onValueChange={setSelectedAssigneeId}>
-            <SelectTrigger className="w-[200px]">
+          <Select value={selectedAssigneeId} onValueChange={(v) => { setSelectedAssigneeId(v); setEmployeeSearch(''); }}>
+            <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="All Employees" />
             </SelectTrigger>
             <SelectContent>
+              {/* Search Input */}
+              <div className="px-2 pb-2">
+                <Input
+                  placeholder="Search employees..."
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  className="h-8"
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+              </div>
               <SelectItem value="all">All Employees</SelectItem>
-              {employees
-                .filter((e: any) => e.isActive !== false)
-                .map((e: any) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.firstName} {e.lastName}
-                  </SelectItem>
-                ))}
+              {(() => {
+                // Get employee IDs who have candidates assigned
+                const assigneeIds = new Set(
+                  recruiters?.recruiters
+                    ?.filter((r: any) => r.id !== 'unassigned' && r.candidatesAssigned > 0)
+                    ?.map((r: any) => r.id) || []
+                );
+
+                // Get candidate counts by assignee
+                const assigneeCounts: Record<string, number> = {};
+                recruiters?.recruiters?.forEach((r: any) => {
+                  if (r.id !== 'unassigned') {
+                    assigneeCounts[r.id] = r.candidatesAssigned || 0;
+                  }
+                });
+
+                // Filter and sort employees
+                const filteredEmployees = employees
+                  .filter((e: any) => e.isActive !== false)
+                  .filter((e: any) =>
+                    `${e.firstName} ${e.lastName}`.toLowerCase().includes(employeeSearch.toLowerCase())
+                  )
+                  .sort((a: any, b: any) => {
+                    const aHasCandidates = assigneeIds.has(a.id);
+                    const bHasCandidates = assigneeIds.has(b.id);
+                    // Assignees first
+                    if (aHasCandidates && !bHasCandidates) return -1;
+                    if (!aHasCandidates && bHasCandidates) return 1;
+                    // Then by candidate count (descending)
+                    const aCount = assigneeCounts[a.id] || 0;
+                    const bCount = assigneeCounts[b.id] || 0;
+                    if (aCount !== bCount) return bCount - aCount;
+                    // Then alphabetically
+                    return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+                  });
+
+                // Only show employees with candidates, unless searching
+                const displayEmployees = employeeSearch
+                  ? filteredEmployees
+                  : filteredEmployees.filter((e: any) => assigneeIds.has(e.id));
+
+                return displayEmployees.map((e: any) => {
+                  const count = assigneeCounts[e.id] || 0;
+                  return (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName}
+                      {count > 0 && <span className="ml-2 text-muted-foreground">({count})</span>}
+                    </SelectItem>
+                  );
+                });
+              })()}
             </SelectContent>
           </Select>
 
