@@ -1,8 +1,8 @@
 import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
-import { addMinutes, format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { addMinutes, parseISO } from 'date-fns';
 import type { IStorage } from '../storage';
 import { timezoneService } from './timezone-service';
+import { serviceAccountAuth } from './service-account-auth';
 
 export interface CalendarConflict {
   type: 'PTO' | 'INTERVIEW' | 'MEETING' | 'BUSY';
@@ -27,31 +27,21 @@ export interface TimeSlot {
 }
 
 export class CalendarConflictDetector {
-  private oauth2Client: OAuth2Client;
-  private calendar: any;
   private storage: IStorage;
   private isInitialized: boolean = false;
-  private scopeWarningLogged: boolean = false;
+  private initWarningLogged: boolean = false;
 
   constructor(storage: IStorage) {
     this.storage = storage;
-    this.oauth2Client = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    );
   }
 
   async initialize() {
-    if (process.env.GOOGLE_REFRESH_TOKEN) {
-      this.oauth2Client.setCredentials({
-        refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-      });
-      this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+    // Use service account with domain-wide delegation for calendar access
+    if (serviceAccountAuth.isConfigured()) {
       this.isInitialized = true;
-      console.log('[CalendarConflictDetector] Initialized with Google Calendar');
+      console.log('[CalendarConflictDetector] Initialized with Service Account (domain-wide delegation)');
     } else {
-      console.warn('[CalendarConflictDetector] No Google refresh token available');
+      console.warn('[CalendarConflictDetector] Service account not configured - Google Calendar checks disabled');
     }
   }
 
@@ -207,7 +197,7 @@ export class CalendarConflictDetector {
   }
 
   /**
-   * Check Google Calendar for conflicts
+   * Check Google Calendar for conflicts using service account impersonation
    */
   private async checkGoogleCalendarConflicts(
     email: string,
@@ -219,10 +209,18 @@ export class CalendarConflictDetector {
 
     if (!this.isInitialized) return conflicts;
 
+    // Only check @theroofdocs.com emails (domain-wide delegation scope)
+    if (!email.endsWith('@theroofdocs.com')) {
+      return conflicts;
+    }
+
     try {
-      // Query Google Calendar for events in the time range
-      const response = await this.calendar.events.list({
-        calendarId: email,
+      // Get calendar service impersonating this user
+      const calendar = await serviceAccountAuth.getCalendarForUser(email);
+
+      // Query the user's calendar for events in the time range
+      const response = await calendar.events.list({
+        calendarId: 'primary', // User's primary calendar
         timeMin: startTime.toISOString(),
         timeMax: endTime.toISOString(),
         singleEvents: true,
@@ -242,12 +240,12 @@ export class CalendarConflictDetector {
         const userAttendee = event.attendees?.find((a: any) => a.email === email);
         if (userAttendee?.responseStatus === 'declined') continue;
 
-        const eventStart = event.start?.dateTime ? 
-          parseISO(event.start.dateTime) : 
+        const eventStart = event.start?.dateTime ?
+          parseISO(event.start.dateTime) :
           parseISO(event.start?.date || '');
-        
-        const eventEnd = event.end?.dateTime ? 
-          parseISO(event.end.dateTime) : 
+
+        const eventEnd = event.end?.dateTime ?
+          parseISO(event.end.dateTime) :
           parseISO(event.end?.date || '');
 
         if (this.datesOverlap(startTime, endTime, eventStart, eventEnd)) {
@@ -261,22 +259,25 @@ export class CalendarConflictDetector {
           });
         }
       }
+
+      console.log(`[CalendarConflictDetector] Checked ${email}'s calendar: ${events.length} events, ${conflicts.length} conflicts`);
     } catch (error: any) {
       const message = error?.message || '';
-      const status = (error as any)?.response?.status;
-      const isScopeError = message.includes('insufficient authentication scopes') || status === 403;
+      const status = error?.response?.status || error?.code;
 
-      if (isScopeError) {
-        if (!this.scopeWarningLogged) {
+      // Log specific error types
+      if (status === 403 || message.includes('Not Authorized')) {
+        if (!this.initWarningLogged) {
           console.warn(
-            '[CalendarConflictDetector] Google Calendar access has insufficient scopes (needs calendar.readonly). Skipping Calendar conflict checks until re-auth is completed.'
+            `[CalendarConflictDetector] Cannot access ${email}'s calendar - check domain-wide delegation settings`
           );
-          this.scopeWarningLogged = true;
+          this.initWarningLogged = true;
         }
-        return conflicts;
+      } else if (status === 404) {
+        console.warn(`[CalendarConflictDetector] Calendar not found for ${email}`);
+      } else {
+        console.error(`[CalendarConflictDetector] Error checking Google Calendar for ${email}:`, message);
       }
-
-      console.error(`[CalendarConflictDetector] Error checking Google Calendar for ${email}:`, error);
     }
 
     return conflicts;
