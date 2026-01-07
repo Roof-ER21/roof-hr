@@ -17,6 +17,7 @@ import {
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
+import { ALL_HOLIDAYS } from '../shared/constants/holidays';
 import agentRoutes from './routes/agents';
 import emailRoutes from './routes/emails';
 import googleAuthRoutes from './routes/google-auth';
@@ -79,6 +80,57 @@ function getSessionExpiry(): Date {
   const expiry = new Date();
   expiry.setHours(expiry.getHours() + 24);
   return expiry;
+}
+
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+type HolidayEntry = { date: string; name?: string };
+
+function parseHolidaySchedule(raw?: string | null): HolidayEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry) => typeof entry?.date === 'string');
+  } catch (error) {
+    console.error('[PTO] Failed to parse holidaySchedule JSON:', error);
+    return [];
+  }
+}
+
+function buildHolidaySet(entries: HolidayEntry[]): Set<string> {
+  return new Set(entries.map((entry) => entry.date));
+}
+
+function isBusinessDay(date: Date, holidaySet: Set<string>): boolean {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+  return !holidaySet.has(formatLocalDate(date));
+}
+
+function countBusinessDays(startDate: Date, endDate: Date, holidaySet: Set<string>): number {
+  const current = new Date(startDate);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  let days = 0;
+
+  while (current <= end) {
+    if (isBusinessDay(current, holidaySet)) days++;
+    current.setDate(current.getDate() + 1);
+  }
+
+  return days;
 }
 
 // Middleware
@@ -801,7 +853,7 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
 });
 
 // Admin can create PTO on behalf of employees
-router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, async (req: any, res) => {
+  router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, async (req: any, res) => {
   try {
     const adminUser = req.user!;
     const { employeeId, startDate, endDate, type, reason, autoApprove } = req.body;
@@ -817,15 +869,18 @@ router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, asy
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Calculate days - parse as local date (not UTC) to avoid off-by-one errors
-    const parseLocalDate = (dateStr: string): Date => {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      return new Date(year, month - 1, day);
-    };
     const start = parseLocalDate(startDate);
     const end = parseLocalDate(endDate);
-    const diffTime = end.getTime() - start.getTime();
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    if (start > end) {
+      return res.status(400).json({ error: 'End date cannot be before start date' });
+    }
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+    const holidayEntries = parseHolidaySchedule(companyPolicy?.holidaySchedule);
+    const holidaySet = buildHolidaySet(holidayEntries.length ? holidayEntries : ALL_HOLIDAYS);
+    const days = countBusinessDays(start, end, holidaySet);
+    if (days <= 0) {
+      return res.status(400).json({ error: 'Selected date range has no business days' });
+    }
 
     // Create the PTO request
     const ptoRequest = await storage.createPtoRequest({
@@ -1628,33 +1683,42 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
   }
 });
 
-router.post('/api/pto', requireAuth, async (req: any, res) => {
+  router.post('/api/pto', requireAuth, async (req: any, res) => {
   try {
-    // Helper to parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one errors
-    const parseLocalDate = (dateStr: string): Date => {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      return new Date(year, month - 1, day);
-    };
-
     // Calculate days from startDate and endDate BEFORE validation
     const startDateStr = req.body.startDate; // YYYY-MM-DD string
     const endDateStr = req.body.endDate;     // YYYY-MM-DD string
     const startDate = parseLocalDate(startDateStr);
     const endDate = parseLocalDate(endDateStr);
 
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+    const holidayEntries = parseHolidaySchedule(companyPolicy?.holidaySchedule);
+    const holidaySet = buildHolidaySet(holidayEntries.length ? holidayEntries : ALL_HOLIDAYS);
+
     let days: number;
 
     // Check if this is a half-day request
     const halfDay = req.body.halfDay || false;
 
+    if (startDate > endDate) {
+      return res.status(400).json({ error: 'End date cannot be before start date' });
+    }
+
     if (halfDay) {
+      if (startDateStr !== endDateStr) {
+        return res.status(400).json({ error: 'Half-day requests must be for a single date' });
+      }
+      if (!isBusinessDay(startDate, holidaySet)) {
+        return res.status(400).json({ error: 'Selected date is not a business day' });
+      }
       // For half-day requests, store as 0.5 days
       days = 0.5;
     } else {
-      // Calculate the number of days (inclusive)
-      const diffTime = endDate.getTime() - startDate.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 for inclusive
-      days = diffDays;
+      // Calculate the number of business days (inclusive, excluding weekends/holidays)
+      days = countBusinessDays(startDate, endDate, holidaySet);
+      if (days <= 0) {
+        return res.status(400).json({ error: 'Selected date range has no business days' });
+      }
     }
 
     // Get the requesting user
@@ -1692,7 +1756,6 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     const deptSetting = user.department
       ? await storage.getDepartmentPtoSettingByDepartment(user.department)
       : null;
-    const companyPolicy = await storage.getCompanyPtoPolicy();
 
     const defaultAllocation = getPtoAllocation(user.employmentType, user.department);
     let vacationDays = defaultAllocation.vacationDays;
@@ -1961,6 +2024,36 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
 });
 
 // PTO Approvers - imported from shared/constants/roles.ts
+
+router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user!;
+    const currentRequest = await storage.getPtoRequestById(req.params.id);
+    if (!currentRequest) {
+      return res.status(404).json({ error: 'PTO request not found' });
+    }
+
+    if (currentRequest.employeeId !== user.id) {
+      return res.status(403).json({ error: 'You can only cancel your own PTO request' });
+    }
+
+    if (currentRequest.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Only pending PTO requests can be cancelled' });
+    }
+
+    const ptoRequest = await storage.updatePtoRequest(req.params.id, {
+      status: 'DENIED',
+      reviewNotes: 'Cancelled by employee',
+      reviewedBy: user.id,
+      reviewedAt: new Date(),
+    });
+
+    res.json(ptoRequest);
+  } catch (error: any) {
+    console.error('PTO cancel error:', error);
+    res.status(500).json({ error: 'Failed to cancel PTO request' });
+  }
+});
 
 router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) => {
   try {

@@ -1,9 +1,11 @@
 import express from 'express';
 import { storage } from '../storage';
-import { insertPtoPolicySchema, insertDepartmentPtoSettingSchema } from '../../shared/schema';
+import { insertPtoPolicySchema, insertDepartmentPtoSettingSchema, ptoPolicies, users, departmentPtoSettings } from '../../shared/schema';
 import { v4 as uuidv4 } from 'uuid';
-import { getPtoAllocation } from '../../shared/constants/pto-policy';
+import { PTO_POLICY, getPtoAllocation } from '../../shared/constants/pto-policy';
 import { requireAuth, requireManager } from '../middleware/auth';
+import { db } from '../db';
+import { eq, inArray } from 'drizzle-orm';
 
 const router = express.Router();
 
@@ -45,6 +47,45 @@ router.put('/api/pto/company-policy', requireAuth, requireManager, async (req, r
     }
 
     const updatedPolicy = await storage.updateCompanyPtoPolicy(req.body);
+
+    const baseVacation = updatedPolicy?.vacationDays ?? PTO_POLICY.DEFAULT_VACATION_DAYS;
+    const baseSick = updatedPolicy?.sickDays ?? PTO_POLICY.DEFAULT_SICK_DAYS;
+    const basePersonal = updatedPolicy?.personalDays ?? PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    const baseDays = baseVacation + baseSick + basePersonal;
+
+    const companyPolicies = await db.select().from(ptoPolicies)
+      .where(eq(ptoPolicies.policyLevel, 'COMPANY'));
+
+    for (const policy of companyPolicies) {
+      const additionalDays = policy.additionalDays || 0;
+      const vacationDays = baseVacation + additionalDays;
+      const totalDays = vacationDays + baseSick + basePersonal;
+      const usedDays = policy.usedDays || 0;
+      const remainingDays = Math.max(0, totalDays - usedDays);
+
+      await db.update(ptoPolicies)
+        .set({
+          vacationDays,
+          sickDays: baseSick,
+          personalDays: basePersonal,
+          baseDays,
+          totalDays,
+          remainingDays,
+          updatedAt: new Date()
+        })
+        .where(eq(ptoPolicies.id, policy.id));
+    }
+
+    await db.update(departmentPtoSettings)
+      .set({
+        vacationDays: baseVacation,
+        sickDays: baseSick,
+        personalDays: basePersonal,
+        totalDays: baseDays,
+        updatedAt: new Date()
+      })
+      .where(eq(departmentPtoSettings.inheritFromCompany, true));
+
     res.json(updatedPolicy);
   } catch (error) {
     console.error('Error updating company PTO policy:', error);
@@ -76,10 +117,9 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
     }
 
     // Ensure all required fields are set and calculate totals correctly
-    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
-    const vacationDays = parseInt(req.body.vacationDays) || 5;
-    const sickDays = parseInt(req.body.sickDays) || 5;
-    const personalDays = parseInt(req.body.personalDays) || 2;
+    const vacationDays = parseInt(req.body.vacationDays) || PTO_POLICY.DEFAULT_VACATION_DAYS;
+    const sickDays = parseInt(req.body.sickDays) || PTO_POLICY.DEFAULT_SICK_DAYS;
+    const personalDays = parseInt(req.body.personalDays) || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
 
     const settingsData = {
       department: req.body.department,
@@ -93,6 +133,40 @@ router.post('/api/pto/department-settings', requireAuth, requireManager, async (
     };
 
     const newSettings = await storage.createDepartmentPtoSetting(settingsData);
+
+    if (!newSettings.inheritFromCompany) {
+      const deptEmployees = await db.select({ id: users.id }).from(users)
+        .where(eq(users.department, newSettings.department));
+      const employeeIds = deptEmployees.map((employee) => employee.id);
+
+      if (employeeIds.length > 0) {
+        const policies = await db.select().from(ptoPolicies)
+          .where(inArray(ptoPolicies.employeeId, employeeIds));
+
+        for (const policy of policies) {
+          if (policy.policyLevel === 'INDIVIDUAL') continue;
+          const additionalDays = policy.additionalDays || 0;
+          const vacationDays = newSettings.vacationDays + additionalDays;
+          const totalDays = vacationDays + newSettings.sickDays + newSettings.personalDays;
+          const usedDays = policy.usedDays || 0;
+          const remainingDays = Math.max(0, totalDays - usedDays);
+
+          await db.update(ptoPolicies)
+            .set({
+              policyLevel: 'DEPARTMENT',
+              vacationDays,
+              sickDays: newSettings.sickDays,
+              personalDays: newSettings.personalDays,
+              baseDays: newSettings.totalDays,
+              totalDays,
+              remainingDays,
+              updatedAt: new Date()
+            })
+            .where(eq(ptoPolicies.id, policy.id));
+        }
+      }
+    }
+
     res.json(newSettings);
   } catch (error) {
     console.error('Error creating department PTO settings:', error);
@@ -126,6 +200,51 @@ router.put('/api/pto/department-settings/:id', requireAuth, requireManager, asyn
       totalDays,
       lastUpdatedBy: user.id
     });
+
+    const deptEmployees = await db.select({ id: users.id }).from(users)
+      .where(eq(users.department, updatedSettings.department));
+    const employeeIds = deptEmployees.map((employee) => employee.id);
+
+    if (employeeIds.length > 0) {
+      const policies = await db.select().from(ptoPolicies)
+        .where(inArray(ptoPolicies.employeeId, employeeIds));
+
+      const companyPolicy = updatedSettings.inheritFromCompany ? await storage.getCompanyPtoPolicy() : null;
+      const baseVacation = updatedSettings.inheritFromCompany
+        ? (companyPolicy?.vacationDays ?? PTO_POLICY.DEFAULT_VACATION_DAYS)
+        : updatedSettings.vacationDays;
+      const baseSick = updatedSettings.inheritFromCompany
+        ? (companyPolicy?.sickDays ?? PTO_POLICY.DEFAULT_SICK_DAYS)
+        : updatedSettings.sickDays;
+      const basePersonal = updatedSettings.inheritFromCompany
+        ? (companyPolicy?.personalDays ?? PTO_POLICY.DEFAULT_PERSONAL_DAYS)
+        : updatedSettings.personalDays;
+      const baseDays = baseVacation + baseSick + basePersonal;
+      const nextPolicyLevel = updatedSettings.inheritFromCompany ? 'COMPANY' : 'DEPARTMENT';
+
+      for (const policy of policies) {
+        if (policy.policyLevel === 'INDIVIDUAL') continue;
+        const additionalDays = policy.additionalDays || 0;
+        const vacationDays = baseVacation + additionalDays;
+        const totalDays = vacationDays + baseSick + basePersonal;
+        const usedDays = policy.usedDays || 0;
+        const remainingDays = Math.max(0, totalDays - usedDays);
+
+        await db.update(ptoPolicies)
+          .set({
+            policyLevel: nextPolicyLevel,
+            vacationDays,
+            sickDays: baseSick,
+            personalDays: basePersonal,
+            baseDays,
+            totalDays,
+            remainingDays,
+            updatedAt: new Date()
+          })
+          .where(eq(ptoPolicies.id, policy.id));
+      }
+    }
+
     res.json(updatedSettings);
   } catch (error) {
     console.error('Error updating department PTO settings:', error);
@@ -257,11 +376,17 @@ router.get('/api/pto-policies/employee/:employeeId', requireAuth, async (req, re
       const user = await storage.getUserById(req.params.employeeId);
       if (user) {
         const deptSetting = await storage.getDepartmentPtoSettingByDepartment(user.department);
-        // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
-        const totalDays = deptSetting?.totalDays || 12;
-        const vacationDays = deptSetting?.vacationDays || 5;
-        const sickDays = deptSetting?.sickDays || 5;
-        const personalDays = deptSetting?.personalDays || 2;
+        const companyPolicy = await storage.getCompanyPtoPolicy();
+        const vacationDays = deptSetting?.vacationDays
+          ?? companyPolicy?.vacationDays
+          ?? PTO_POLICY.DEFAULT_VACATION_DAYS;
+        const sickDays = deptSetting?.sickDays
+          ?? companyPolicy?.sickDays
+          ?? PTO_POLICY.DEFAULT_SICK_DAYS;
+        const personalDays = deptSetting?.personalDays
+          ?? companyPolicy?.personalDays
+          ?? PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+        const totalDays = deptSetting?.totalDays || (vacationDays + sickDays + personalDays);
 
         const newPolicy = await storage.createPtoPolicy({
           employeeId: req.params.employeeId,
@@ -303,12 +428,21 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
     }
 
     // Get department base days
-    // Default to company standard: 5 vacation, 5 sick, 2 personal = 12 total
     const deptSetting = await storage.getDepartmentPtoSettingByDepartment(employee.department);
-    const baseDays = deptSetting?.totalDays || 12;
-    const vacationDays = deptSetting?.vacationDays || 5;
-    const sickDays = deptSetting?.sickDays || 5;
-    const personalDays = deptSetting?.personalDays || 2;
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+    const baseVacation = deptSetting?.vacationDays
+      ?? companyPolicy?.vacationDays
+      ?? PTO_POLICY.DEFAULT_VACATION_DAYS;
+    const baseSick = deptSetting?.sickDays
+      ?? companyPolicy?.sickDays
+      ?? PTO_POLICY.DEFAULT_SICK_DAYS;
+    const basePersonal = deptSetting?.personalDays
+      ?? companyPolicy?.personalDays
+      ?? PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    const baseDays = (deptSetting?.totalDays ?? (baseVacation + baseSick + basePersonal));
+    const vacationDays = baseVacation;
+    const sickDays = baseSick;
+    const personalDays = basePersonal;
 
     // Check if policy exists
     const existingPolicy = await storage.getPtoPolicyByEmployeeId(employeeId);
@@ -319,7 +453,7 @@ router.post('/api/pto-policies', requireAuth, requireManager, async (req, res) =
 
     if (existingPolicy) {
       // Update existing policy
-      const updatedPolicy = await storage.updatePtoPolicy(employeeId, {
+      const updatedPolicy = await storage.updatePtoPolicy(existingPolicy.id, {
         baseDays,
         additionalDays: additionalDays || 0,
         totalDays,
@@ -443,7 +577,7 @@ router.post('/api/pto-policies/update-usage', requireAuth, requireGeneralManager
       return res.status(400).json({ error: 'Insufficient PTO days available' });
     }
     
-    const updatedPolicy = await storage.updatePtoPolicy(employeeId, {
+    const updatedPolicy = await storage.updatePtoPolicy(policy.id, {
       usedDays: newUsedDays,
       remainingDays: newRemainingDays
     });

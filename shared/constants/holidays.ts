@@ -14,6 +14,7 @@ export const US_HOLIDAYS_2025: Holiday[] = [
   { date: '2025-09-01', name: 'Labor Day' },
   { date: '2025-11-27', name: 'Thanksgiving Day' },
   { date: '2025-11-28', name: 'Black Friday' },
+  { date: '2025-12-24', name: 'Christmas Eve' },
   { date: '2025-12-25', name: 'Christmas Day' },
 ];
 
@@ -25,6 +26,7 @@ export const US_HOLIDAYS_2026: Holiday[] = [
   { date: '2026-09-07', name: 'Labor Day' },
   { date: '2026-11-26', name: 'Thanksgiving Day' },
   { date: '2026-11-27', name: 'Black Friday' },
+  { date: '2026-12-24', name: 'Christmas Eve' },
   { date: '2026-12-25', name: 'Christmas Day' },
 ];
 

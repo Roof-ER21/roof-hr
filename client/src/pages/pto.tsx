@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PtoCalendar } from '@/components/PtoCalendar';
 import { format } from 'date-fns';
+import { ALL_HOLIDAYS } from '@shared/constants/holidays';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/lib/auth';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
 import { employeeGetsPto, ADMIN_ROLES } from '@shared/constants/roles';
+import { PTO_POLICY } from '@shared/constants/pto-policy';
 
 const ptoSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
@@ -40,6 +42,7 @@ const adminPtoSchema = z.object({
 });
 
 type AdminPTOFormData = z.infer<typeof adminPtoSchema>;
+type HolidayEntry = { date: string; name: string };
 
 function PTO() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -66,6 +69,9 @@ function PTO() {
     return format(end, 'yyyy-MM-dd');
   });
   const [analyticsEmployeeId, setAnalyticsEmployeeId] = useState('ALL');
+  const [holidayDraft, setHolidayDraft] = useState<HolidayEntry[]>([]);
+  const [holidayDateInput, setHolidayDateInput] = useState('');
+  const [holidayNameInput, setHolidayNameInput] = useState('');
   // Admin PTO creation dialog
   const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
@@ -282,6 +288,83 @@ function PTO() {
     return new Date(year, month - 1, day);
   };
 
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseHolidaySchedule = (raw?: string | null): HolidayEntry[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((entry: any) => typeof entry?.date === 'string')
+        .map((entry: any) => ({
+          date: entry.date,
+          name: typeof entry?.name === 'string' ? entry.name : 'Company Holiday'
+        }));
+    } catch (error) {
+      console.error('[PTO] Failed to parse holidaySchedule JSON:', error);
+      return [];
+    }
+  };
+
+  const holidaySchedule = useMemo(() => parseHolidaySchedule(companyPolicy?.holidaySchedule), [companyPolicy]);
+  const fallbackHolidayEntries = useMemo(
+    () => ALL_HOLIDAYS.map((holiday) => ({ date: holiday.date, name: holiday.name })),
+    []
+  );
+  const holidayDateSet = useMemo(() => {
+    const source = holidaySchedule.length ? holidaySchedule : fallbackHolidayEntries;
+    return new Set(source.map((holiday) => holiday.date));
+  }, [holidaySchedule]);
+
+  useEffect(() => {
+    const source = holidaySchedule.length ? holidaySchedule : fallbackHolidayEntries;
+    setHolidayDraft(source);
+  }, [companyPolicy?.holidaySchedule, holidaySchedule, fallbackHolidayEntries]);
+
+  const sortedHolidayDraft = useMemo(
+    () => [...holidayDraft].sort((a, b) => a.date.localeCompare(b.date)),
+    [holidayDraft]
+  );
+
+  const isBusinessDay = (date: Date): boolean => {
+    const day = date.getDay();
+    if (day === 0 || day === 6) return false;
+    return !holidayDateSet.has(formatLocalDate(date));
+  };
+
+  const countBusinessDaysBetween = (start: Date, end: Date): number => {
+    const current = new Date(start);
+    const endDate = new Date(end);
+    current.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    let days = 0;
+
+    while (current <= endDate) {
+      if (isBusinessDay(current)) days++;
+      current.setDate(current.getDate() + 1);
+    }
+    return days;
+  };
+
+  const watchedStartDate = form.watch('startDate');
+  const watchedEndDate = form.watch('endDate');
+  const businessDaysPreview = useMemo(() => {
+    if (!watchedStartDate || !watchedEndDate) return null;
+    const start = parseLocalDate(watchedStartDate);
+    const end = parseLocalDate(watchedEndDate);
+    if (start > end) {
+      return { days: 0, error: 'End date cannot be before start date' };
+    }
+    const days = countBusinessDaysBetween(start, end);
+    return { days, error: days === 0 ? 'Selected range has no business days' : null };
+  }, [watchedStartDate, watchedEndDate]);
+
   const createPTOMutation = useMutation({
     mutationFn: async (data: PTOFormData) => {
       // Validate dates - parse as LOCAL time, not UTC
@@ -318,8 +401,10 @@ function PTO() {
         }
       }
 
-      const timeDiff = endDate.getTime() - startDate.getTime();
-      const days = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+      const days = countBusinessDaysBetween(startDate, endDate);
+      if (days <= 0) {
+        throw new Error('Selected date range has no business days');
+      }
 
       const requestBody = {
         startDate: data.startDate,
@@ -392,6 +477,37 @@ function PTO() {
     }
   });
 
+  const cancelPTOMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/pto/${id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to cancel PTO request');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
+      toast({
+        title: 'Cancelled',
+        description: 'Your PTO request has been cancelled.'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to cancel PTO request',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const onSubmit = (data: PTOFormData) => {
     createPTOMutation.mutate(data);
   };
@@ -417,6 +533,10 @@ function PTO() {
     }
   };
 
+  const handleCancel = (id: string) => {
+    cancelPTOMutation.mutate(id);
+  };
+
   // Add mutations for policy management (must be before any conditional returns)
   const updateCompanyPolicyMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -433,6 +553,10 @@ function PTO() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pto/company-policy'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto/department-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto/individual-policies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/employee-portal/pto-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
       setEditingCompanyPolicy(false);
       toast({
         title: 'Success',
@@ -440,6 +564,88 @@ function PTO() {
       });
     }
   });
+
+  const updateHolidayScheduleMutation = useMutation({
+    mutationFn: async (holidays: HolidayEntry[]) => {
+      const payload = {
+        holidaySchedule: JSON.stringify(holidays),
+        lastUpdatedBy: user?.id
+      };
+      const response = await fetch('/api/pto/company-policy', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error('Failed to update company holidays');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pto/company-policy'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
+      toast({
+        title: 'Success',
+        description: 'Company holidays updated successfully'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update company holidays',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const handleAddHoliday = () => {
+    const date = holidayDateInput.trim();
+    const name = holidayNameInput.trim() || 'Company Holiday';
+    if (!date) {
+      toast({
+        title: 'Missing date',
+        description: 'Choose a date for the holiday.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    if (holidayDraft.some((entry) => entry.date === date)) {
+      toast({
+        title: 'Duplicate date',
+        description: 'That date already exists in the holiday list.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    const next = [...holidayDraft, { date, name }].sort((a, b) => a.date.localeCompare(b.date));
+    setHolidayDraft(next);
+    setHolidayDateInput('');
+    setHolidayNameInput('');
+  };
+
+  const handleRemoveHoliday = (date: string) => {
+    setHolidayDraft((prev) => prev.filter((entry) => entry.date !== date));
+  };
+
+  const handleSaveHolidays = () => {
+    if (!companyPolicy) {
+      toast({
+        title: 'Missing company policy',
+        description: 'Create the company PTO policy before saving holidays.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    const sanitized = holidayDraft
+      .filter((entry) => entry.date)
+      .map((entry) => ({
+        date: entry.date,
+        name: entry.name?.trim() || 'Company Holiday'
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    updateHolidayScheduleMutation.mutate(sanitized);
+  };
 
   const updateDepartmentSettingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
@@ -456,6 +662,9 @@ function PTO() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pto/department-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto/individual-policies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/employee-portal/pto-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
       setEditingDepartment(null);
       toast({
         title: 'Success',
@@ -479,6 +688,8 @@ function PTO() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pto/individual-policies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/employee-portal/pto-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
       setEditingEmployeePolicy(null);
       toast({
         title: 'Success',
@@ -503,6 +714,9 @@ function PTO() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pto/department-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto/individual-policies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/employee-portal/pto-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
       setAddingDepartment(false);
       toast({
         title: 'Success',
@@ -526,6 +740,8 @@ function PTO() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/pto/individual-policies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/employee-portal/pto-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
       setAddingIndividual(false);
       toast({
         title: 'Success',
@@ -573,13 +789,22 @@ function PTO() {
     return users?.find((user: any) => user.id === id);
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, isCancelled: boolean = false) => {
+    if (isCancelled) {
+      return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+    }
     switch (status) {
       case 'PENDING': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
       case 'APPROVED': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
       case 'DENIED': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     }
+  };
+
+  const isCancelledRequest = (request: any) => {
+    if (request.status !== 'DENIED') return false;
+    const notes = (request.reviewNotes || '').toLowerCase();
+    return notes.includes('cancelled') || notes.includes('canceled');
   };
 
   const today = useMemo(() => {
@@ -612,11 +837,16 @@ function PTO() {
 
     if (start > end) return 0;
     if (request.days <= 0.5 && requestStart.getTime() === requestEnd.getTime()) {
-      return request.days;
+      return isBusinessDay(requestStart) ? request.days : 0;
     }
 
-    const diffTime = end.getTime() - start.getTime();
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    let days = 0;
+    const current = new Date(start);
+    while (current <= end) {
+      if (isBusinessDay(current)) days++;
+      current.setDate(current.getDate() + 1);
+    }
+    return days;
   };
 
   const countMonthUsage = (requests: any[], year: number, monthIndex: number) => {
@@ -652,6 +882,12 @@ function PTO() {
 
     const employeeUsage: Record<string, any> = {};
     const departmentUsage: Record<string, any> = {};
+    const typeTotals = {
+      VACATION: 0,
+      SICK: 0,
+      PERSONAL: 0
+    };
+    const employeeTypeTotals: Record<string, { VACATION: number; SICK: number; PERSONAL: number }> = {};
     let totalUsedDays = 0;
     let totalFutureDays = 0;
 
@@ -663,6 +899,7 @@ function PTO() {
       const days = countOverlappingDays(request, analyticsRangeStart, analyticsRangeEnd);
 
       totalUsedDays += days;
+      typeTotals[type] += days;
 
       if (!employeeUsage[request.employeeId]) {
         employeeUsage[request.employeeId] = {
@@ -675,10 +912,14 @@ function PTO() {
           totalDays: 0
         };
       }
+      if (!employeeTypeTotals[request.employeeId]) {
+        employeeTypeTotals[request.employeeId] = { VACATION: 0, SICK: 0, PERSONAL: 0 };
+      }
       if (type === 'VACATION') employeeUsage[request.employeeId].vacationDays += days;
       if (type === 'SICK') employeeUsage[request.employeeId].sickDays += days;
       if (type === 'PERSONAL') employeeUsage[request.employeeId].personalDays += days;
       employeeUsage[request.employeeId].totalDays += days;
+      employeeTypeTotals[request.employeeId][type] += days;
 
       if (!departmentUsage[department]) {
         departmentUsage[department] = {
@@ -732,7 +973,9 @@ function PTO() {
       janUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 0),
       febUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 1),
       decUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 11),
-      employeeMonthUsage
+      employeeMonthUsage,
+      typeTotals,
+      employeeTypeTotals
     };
   }, [ptoRequests, today, users, analyticsRangeEnd, analyticsRangeStart]);
 
@@ -747,6 +990,39 @@ function PTO() {
     }
     return analytics.employeeMonthUsage[analyticsEmployeeId] || { jan: 0, feb: 0, dec: 0 };
   }, [analytics, analyticsEmployeeId]);
+
+  const selectedTypeTotals = useMemo(() => {
+    if (analyticsEmployeeId === 'ALL') {
+      return analytics.typeTotals;
+    }
+    return analytics.employeeTypeTotals[analyticsEmployeeId] || { VACATION: 0, SICK: 0, PERSONAL: 0 };
+  }, [analytics, analyticsEmployeeId]);
+
+  const typeTotalDays = selectedTypeTotals.VACATION + selectedTypeTotals.SICK + selectedTypeTotals.PERSONAL;
+
+  const typeSegments = useMemo(() => ([
+    { key: 'VACATION', label: 'Vacation', value: selectedTypeTotals.VACATION, color: '#3b82f6' },
+    { key: 'SICK', label: 'Sick', value: selectedTypeTotals.SICK, color: '#f97316' },
+    { key: 'PERSONAL', label: 'Personal', value: selectedTypeTotals.PERSONAL, color: '#a855f7' }
+  ]), [selectedTypeTotals]);
+
+  const typeChartBackground = useMemo(() => {
+    if (typeTotalDays <= 0) {
+      return 'conic-gradient(#e5e7eb 0% 100%)';
+    }
+    let cumulative = 0;
+    const stops = typeSegments.map((segment) => {
+      const percent = (segment.value / typeTotalDays) * 100;
+      const start = cumulative;
+      cumulative += percent;
+      return `${segment.color} ${start}% ${cumulative}%`;
+    });
+    return `conic-gradient(${stops.join(', ')})`;
+  }, [typeSegments, typeTotalDays]);
+
+  const formatDays = (value: number) => {
+    return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+  };
 
   // Helper function to calculate effective PTO for an employee
   const getEffectivePTO = (employee: any) => {
@@ -787,7 +1063,7 @@ function PTO() {
 
     // Check for department policy
     const deptSetting = departmentSettings?.find((d: any) => d.department === employee?.department);
-    if (deptSetting && deptSetting.overridesCompany) {
+    if (deptSetting && deptSetting.inheritFromCompany === false) {
       return {
         vacationDays: deptSetting.vacationDays || 0,
         sickDays: deptSetting.sickDays || 0,
@@ -955,7 +1231,7 @@ function PTO() {
             </div>
             
             {/* Check for department-specific policy */}
-            {user && departmentSettings?.find((d: any) => d.department === user.department) && (
+            {user && departmentSettings?.find((d: any) => d.department === user.department && d.inheritFromCompany === false) && (
               <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
                 <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <AlertDescription className="text-blue-800 dark:text-blue-200">
@@ -1025,6 +1301,15 @@ function PTO() {
                     {...form.register('endDate')}
                   />
                 </div>
+                <div className="text-xs text-muted-foreground">
+                  Weekends and company holidays are not counted toward PTO.
+                </div>
+                {businessDaysPreview && (
+                  <div className={`text-sm ${businessDaysPreview.error ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                    Business days: {businessDaysPreview.days}
+                    {businessDaysPreview.error ? ` (${businessDaysPreview.error})` : ''}
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="type">Type of Time Off</Label>
@@ -1282,6 +1567,9 @@ function PTO() {
                 {filteredPtoRequests.length > 0 ? (
                   filteredPtoRequests.map((request: any) => {
                   const employee = getUserById(request.employeeId);
+                  const isCancelled = isCancelledRequest(request);
+                  const statusLabel = isCancelled ? 'CANCELLED' : request.status;
+                  const isOwnRequest = request.employeeId === user?.id;
                   return (
                     <tr key={request.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="py-3 px-4">
@@ -1312,17 +1600,17 @@ function PTO() {
                       </td>
                       <td className="py-3 px-4">{request.reason}</td>
                       <td className="py-3 px-4">
-                        <Badge className={getStatusColor(request.status)}>
-                          {request.status}
+                        <Badge className={getStatusColor(request.status, isCancelled)}>
+                          {statusLabel}
                         </Badge>
                         {request.status === 'DENIED' && request.reviewNotes && (
-                          <div className="text-red-600 dark:text-red-400 text-sm mt-1">
-                            <span className="font-medium">Reason:</span> {request.reviewNotes}
+                          <div className={`${isCancelled ? 'text-gray-500 dark:text-gray-400' : 'text-red-600 dark:text-red-400'} text-sm mt-1`}>
+                            <span className="font-medium">{isCancelled ? 'Note' : 'Reason'}:</span> {request.reviewNotes}
                           </div>
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        {request.status === 'PENDING' && canApprovePto && (
+                        {request.status === 'PENDING' && canApprovePto && !isOwnRequest && (
                           <div className="flex space-x-2">
                             <Button
                               variant="outline"
@@ -1344,7 +1632,18 @@ function PTO() {
                             </Button>
                           </div>
                         )}
-                        {request.status === 'PENDING' && !canApprovePto && (
+                        {request.status === 'PENDING' && isOwnRequest && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCancel(request.id)}
+                            disabled={cancelPTOMutation.isPending}
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            Cancel
+                          </Button>
+                        )}
+                        {request.status === 'PENDING' && !canApprovePto && !isOwnRequest && (
                           <span className="text-sm text-muted-foreground">Pending approval</span>
                         )}
                       </td>
@@ -1490,6 +1789,39 @@ function PTO() {
               })}
             </div>
           </div>
+          <div className="mt-6 rounded-lg border p-4">
+            <div className="text-sm font-medium text-muted-foreground mb-3">
+              PTO Type Mix ({analyticsEmployeeId === 'ALL' ? 'All employees' : 'Selected employee'})
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="relative h-32 w-32 shrink-0">
+                <div
+                  className="absolute inset-0 rounded-full transition-[background] duration-700 ease-out"
+                  style={{ background: typeChartBackground }}
+                />
+                <div className="absolute inset-4 rounded-full bg-background shadow-inner" />
+                <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold">
+                  {formatDays(typeTotalDays)} days
+                </div>
+              </div>
+              <div className="grid w-full grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                {typeSegments.map((segment) => (
+                  <div key={segment.key} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
+                      <span className="font-medium">{segment.label}</span>
+                    </div>
+                    <span className="text-muted-foreground">{formatDays(segment.value)} days</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {typeTotalDays === 0 && (
+              <div className="mt-3 text-xs text-muted-foreground">
+                No past approved PTO in this range.
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1621,7 +1953,7 @@ function PTO() {
                     id="vacationDays"
                     name="vacationDays"
                     type="number"
-                    defaultValue={companyPolicy?.vacationDays || 5}
+                    defaultValue={companyPolicy?.vacationDays ?? PTO_POLICY.DEFAULT_VACATION_DAYS}
                     min="0"
                     required
                   />
@@ -1632,7 +1964,7 @@ function PTO() {
                     id="sickDays" 
                     name="sickDays" 
                     type="number" 
-                    defaultValue={companyPolicy?.sickDays || 5}
+                    defaultValue={companyPolicy?.sickDays ?? PTO_POLICY.DEFAULT_SICK_DAYS}
                     min="0"
                     required
                   />
@@ -1643,7 +1975,7 @@ function PTO() {
                     id="personalDays"
                     name="personalDays"
                     type="number"
-                    defaultValue={companyPolicy?.personalDays || 2}
+                    defaultValue={companyPolicy?.personalDays ?? PTO_POLICY.DEFAULT_PERSONAL_DAYS}
                     min="0"
                     required
                   />
@@ -1723,6 +2055,100 @@ function PTO() {
               </div>
             )
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Company Holidays
+          </CardTitle>
+          <CardDescription>
+            Used to exclude days from PTO counts and highlight holidays on the calendar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {sortedHolidayDraft.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No company holidays configured yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {sortedHolidayDraft.map((holiday) => (
+                  <div
+                    key={holiday.date}
+                    className="flex items-center justify-between rounded-md border px-3 py-2"
+                  >
+                    <div>
+                      <div className="font-medium">{holiday.name || 'Company Holiday'}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {format(parseLocalDate(holiday.date), 'MMM d, yyyy')}
+                      </div>
+                    </div>
+                    {canEditPolicies && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveHoliday(holiday.date)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {canEditPolicies && (
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_auto] gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="holiday-date">Date</Label>
+                    <Input
+                      id="holiday-date"
+                      type="date"
+                      value={holidayDateInput}
+                      onChange={(event) => setHolidayDateInput(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="holiday-name">Holiday Name</Label>
+                    <Input
+                      id="holiday-name"
+                      placeholder="Company Holiday"
+                      value={holidayNameInput}
+                      onChange={(event) => setHolidayNameInput(event.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" onClick={handleAddHoliday}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Holiday
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Changes apply after saving.</span>
+                  <Button
+                    type="button"
+                    onClick={handleSaveHolidays}
+                    disabled={updateHolidayScheduleMutation.isPending}
+                  >
+                    {updateHolidayScheduleMutation.isPending ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Holidays'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1840,7 +2266,7 @@ function PTO() {
                     totalDays: parseInt(formData.get('vacationDays') as string) + 
                               parseInt(formData.get('sickDays') as string) + 
                               parseInt(formData.get('personalDays') as string),
-                    overridesCompany: true
+                    inheritFromCompany: false
                   };
                   createDepartmentSettingMutation.mutate(data);
                 }} className="space-y-4">
@@ -1868,7 +2294,7 @@ function PTO() {
                         id="vacationDays"
                         name="vacationDays" 
                         type="number" 
-                        defaultValue="10"
+                        defaultValue={PTO_POLICY.DEFAULT_VACATION_DAYS}
                         min="0"
                         required
                       />
@@ -1879,7 +2305,7 @@ function PTO() {
                         id="sickDays"
                         name="sickDays" 
                         type="number" 
-                        defaultValue="5"
+                        defaultValue={PTO_POLICY.DEFAULT_SICK_DAYS}
                         min="0"
                         required
                       />
@@ -1890,7 +2316,7 @@ function PTO() {
                         id="personalDays"
                         name="personalDays" 
                         type="number" 
-                        defaultValue="3"
+                        defaultValue={PTO_POLICY.DEFAULT_PERSONAL_DAYS}
                         min="0"
                         required
                       />
@@ -1942,7 +2368,7 @@ function PTO() {
                           totalDays: parseInt(formData.get('vacationDays') as string) + 
                                     parseInt(formData.get('sickDays') as string) + 
                                     parseInt(formData.get('personalDays') as string),
-                          overridesCompany: true
+                          inheritFromCompany: false
                         };
                         updateDepartmentSettingMutation.mutate({ id: dept.id, data });
                       }} className="space-y-4">
@@ -2105,7 +2531,7 @@ function PTO() {
                         id="new-ind-vacation"
                         name="vacationDays" 
                         type="number" 
-                        defaultValue="10"
+                        defaultValue={PTO_POLICY.DEFAULT_VACATION_DAYS}
                         min="0"
                         required
                       />
@@ -2116,7 +2542,7 @@ function PTO() {
                         id="new-ind-sick"
                         name="sickDays" 
                         type="number" 
-                        defaultValue="5"
+                        defaultValue={PTO_POLICY.DEFAULT_SICK_DAYS}
                         min="0"
                         required
                       />
@@ -2127,7 +2553,7 @@ function PTO() {
                         id="new-ind-personal"
                         name="personalDays" 
                         type="number" 
-                        defaultValue="3"
+                        defaultValue={PTO_POLICY.DEFAULT_PERSONAL_DAYS}
                         min="0"
                         required
                       />

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Star } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isWithinInterval } from 'date-fns';
-import { isHoliday, getHolidayName, getHolidaysForYear } from '@shared/constants/holidays';
+import { ALL_HOLIDAYS } from '@shared/constants/holidays';
 
 // Parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one errors
 const parseLocalDate = (dateStr: string): Date => {
@@ -33,6 +33,30 @@ export function PtoCalendar() {
   const { data: calendarPtos = [], isLoading } = useQuery<CalendarPtoEntry[]>({
     queryKey: ['/api/pto/calendar']
   });
+
+  const { data: companyPolicy } = useQuery<{ holidaySchedule?: string | null }>({
+    queryKey: ['/api/pto/company-policy']
+  });
+
+  const parseHolidaySchedule = (raw?: string | null) => {
+    if (!raw) return [] as Array<{ date: string; name?: string }>;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry) => typeof entry?.date === 'string');
+    } catch (error) {
+      console.error('[PTO Calendar] Failed to parse holidaySchedule JSON:', error);
+      return [];
+    }
+  };
+
+  const holidaySchedule = parseHolidaySchedule(companyPolicy?.holidaySchedule);
+  const holidaysForYear = (() => {
+    const year = currentDate.getFullYear();
+    const source = holidaySchedule.length ? holidaySchedule : ALL_HOLIDAYS;
+    return source.filter((holiday) => holiday.date.startsWith(`${year}-`));
+  })();
+  const holidayNameMap = new Map(holidaysForYear.map((holiday) => [holiday.date, holiday.name || 'Holiday']));
 
   // Get PTOs for a specific day
   const getPtosForDay = (day: Date) => {
@@ -127,7 +151,7 @@ export function PtoCalendar() {
             const isCurrentMonth = isSameMonth(day, currentDate);
             const isTodayDate = isToday(day);
             const dateStr = format(day, 'yyyy-MM-dd');
-            const holidayName = getHolidayName(dateStr);
+            const holidayName = holidayNameMap.get(dateStr) || null;
             const isHolidayDay = !!holidayName;
 
             return (
@@ -201,7 +225,7 @@ export function PtoCalendar() {
             Company Holidays ({currentDate.getFullYear()})
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-6">
-            {getHolidaysForYear(currentDate.getFullYear()).map((holiday) => (
+            {holidaysForYear.map((holiday) => (
               <div
                 key={holiday.date}
                 className="text-xs p-2 rounded bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700"

@@ -14,6 +14,7 @@ import { SusanReviewManager } from './review-manager';
 import { SusanToolsManager } from './tools-manager';
 import { SusanTerritoryManager } from './territory-manager';
 import { SusanContractManager } from './contract-manager';
+import { ALL_HOLIDAYS } from '../../../shared/constants/holidays';
 
 /**
  * Calculate string similarity between two strings (Levenshtein distance)
@@ -3785,7 +3786,8 @@ Should I proceed with scheduling this interview?`,
                     (type === 'SICK' ? 'Sick leave' : 'Personal time off');
 
       // Calculate business days
-      const businessDays = this.countBusinessDays(startDate, endDate!);
+      const holidaySet = await this.getHolidaySet();
+      const businessDays = this.countBusinessDays(startDate, endDate!, holidaySet);
 
       const result = await this.ptoManager.requestPTO({
         employeeId: user.id,
@@ -3819,15 +3821,45 @@ Should I proceed with scheduling this interview?`,
   }
 
   // Count business days between dates
-  private countBusinessDays(start: Date, end: Date): number {
+  private countBusinessDays(start: Date, end: Date, holidaySet: Set<string>): number {
+    const formatLocalDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = `${date.getMonth() + 1}`.padStart(2, '0');
+      const day = `${date.getDate()}`.padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    const isBusinessDay = (date: Date) => {
+      const day = date.getDay();
+      if (day === 0 || day === 6) return false;
+      return !holidaySet.has(formatLocalDate(date));
+    };
+
     let count = 0;
     const current = new Date(start);
     while (current <= end) {
-      const day = current.getDay();
-      if (day !== 0 && day !== 6) count++;
+      if (isBusinessDay(current)) count++;
       current.setDate(current.getDate() + 1);
     }
     return count;
+  }
+
+  private parseHolidaySchedule(raw?: string | null): Array<{ date: string; name?: string }> {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry) => typeof entry?.date === 'string');
+    } catch (error) {
+      console.error('[SUSAN-AI] Failed to parse holidaySchedule JSON:', error);
+      return [];
+    }
+  }
+
+  private async getHolidaySet(): Promise<Set<string>> {
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+    const entries = this.parseHolidaySchedule(companyPolicy?.holidaySchedule);
+    const source = entries.length ? entries : ALL_HOLIDAYS;
+    return new Set(source.map((entry) => entry.date));
   }
 
   // Allow scheduling interviews directly

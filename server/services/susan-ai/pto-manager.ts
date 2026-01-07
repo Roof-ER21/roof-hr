@@ -1,5 +1,7 @@
 import { db } from '../../db';
 import { ptoRequests, users, ptoPolicies } from '../../../shared/schema';
+import { PTO_POLICY, getPtoAllocation } from '../../../shared/constants/pto-policy';
+import { ALL_HOLIDAYS } from '../../../shared/constants/holidays';
 import { eq, and, or, sql, desc, gte, lte, between } from 'drizzle-orm';
 import { EmailService } from '../../email-service';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,6 +22,41 @@ export class SusanPTOManager {
   constructor(storage: IStorage) {
     this.storage = storage;
     this.emailService = new EmailService();
+  }
+
+  private formatLocalDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private parseHolidaySchedule(raw?: string | null): Array<{ date: string; name?: string }> {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry) => typeof entry?.date === 'string');
+    } catch (error) {
+      console.error('[SUSAN-PTO] Failed to parse holidaySchedule JSON:', error);
+      return [];
+    }
+  }
+
+  private buildHolidaySet(entries: Array<{ date: string }>): Set<string> {
+    return new Set(entries.map((entry) => entry.date));
+  }
+
+  private async getHolidaySet(): Promise<Set<string>> {
+    const companyPolicy = await this.storage.getCompanyPtoPolicy();
+    const entries = this.parseHolidaySchedule(companyPolicy?.holidaySchedule);
+    return this.buildHolidaySet(entries.length ? entries : ALL_HOLIDAYS);
+  }
+
+  private isBusinessDay(date: Date, holidaySet: Set<string>): boolean {
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+    return !holidaySet.has(this.formatLocalDate(date));
   }
 
   /**
@@ -512,14 +549,123 @@ export class SusanPTOManager {
     try {
       const requestId = uuidv4();
 
+      const holidaySet = await this.getHolidaySet();
+
       // Calculate business days
       let days = 0;
       const current = new Date(data.startDate);
       const end = new Date(data.endDate);
       while (current <= end) {
-        const dayOfWeek = current.getDay();
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) days++;
+        if (this.isBusinessDay(current, holidaySet)) days++;
         current.setDate(current.getDate() + 1);
+      }
+      if (days <= 0) {
+        return { success: false, error: 'Selected date range has no business days.' };
+      }
+
+      const requestTypeRaw = (data.type || 'VACATION').toString().toUpperCase();
+      const allowedTypes = ['VACATION', 'SICK', 'PERSONAL'] as const;
+      const requestType = allowedTypes.includes(requestTypeRaw as any)
+        ? (requestTypeRaw as typeof allowedTypes[number])
+        : null;
+
+      if (!requestType) {
+        return {
+          success: false,
+          error: 'PTO type must be VACATION, SICK, or PERSONAL.'
+        };
+      }
+
+      const employee = await this.storage.getUserById(data.employeeId);
+      if (!employee) {
+        return { success: false, error: 'Employee not found.' };
+      }
+
+      if (employee.department === 'Sales' ||
+          employee.employmentType === '1099' ||
+          employee.employmentType === 'CONTRACTOR') {
+        return {
+          success: false,
+          error: 'You are not eligible for PTO based on your department or employment type.'
+        };
+      }
+
+      const individualPolicies = await this.storage.getAllPtoPolicies();
+      const individualPolicy = individualPolicies.find((p: any) => p.employeeId === data.employeeId);
+      const deptSetting = employee.department
+        ? await this.storage.getDepartmentPtoSettingByDepartment(employee.department)
+        : null;
+      const companyPolicy = await this.storage.getCompanyPtoPolicy();
+
+      const defaultAllocation = getPtoAllocation(employee.employmentType, employee.department);
+      let vacationDays = defaultAllocation.vacationDays;
+      let sickDays = defaultAllocation.sickDays;
+      let personalDays = defaultAllocation.personalDays;
+
+      if (individualPolicy) {
+        vacationDays = individualPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+        sickDays = individualPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+        personalDays = individualPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+      } else if (deptSetting && !deptSetting.inheritFromCompany) {
+        vacationDays = deptSetting.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+        sickDays = deptSetting.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+        personalDays = deptSetting.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+      } else if (companyPolicy) {
+        vacationDays = companyPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+        sickDays = companyPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+        personalDays = companyPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+      }
+
+      const employeeRequests = await db.select()
+        .from(ptoRequests)
+        .where(eq(ptoRequests.employeeId, data.employeeId));
+
+      const currentYear = new Date().getFullYear();
+      const yearStart = `${currentYear}-01-01`;
+      const yearEnd = `${currentYear}-12-31`;
+
+      const approvedRequests = employeeRequests.filter(r =>
+        r.status === 'APPROVED' &&
+        r.startDate >= yearStart &&
+        r.startDate <= yearEnd
+      );
+      const pendingRequests = employeeRequests.filter(r => r.status === 'PENDING');
+
+      const usedVacation = approvedRequests
+        .filter(r => r.type === 'VACATION' || !r.type)
+        .reduce((sum, r) => sum + (r.days || 0), 0);
+      const usedSick = approvedRequests
+        .filter(r => r.type === 'SICK')
+        .reduce((sum, r) => sum + (r.days || 0), 0);
+      const usedPersonal = approvedRequests
+        .filter(r => r.type === 'PERSONAL')
+        .reduce((sum, r) => sum + (r.days || 0), 0);
+
+      const pendingVacation = pendingRequests
+        .filter(r => r.type === 'VACATION' || !r.type)
+        .reduce((sum, r) => sum + (r.days || 0), 0);
+      const pendingSick = pendingRequests
+        .filter(r => r.type === 'SICK')
+        .reduce((sum, r) => sum + (r.days || 0), 0);
+      const pendingPersonal = pendingRequests
+        .filter(r => r.type === 'PERSONAL')
+        .reduce((sum, r) => sum + (r.days || 0), 0);
+
+      const remainingVacation = Math.max(0, vacationDays - usedVacation - pendingVacation);
+      const remainingSick = Math.max(0, sickDays - usedSick - pendingSick);
+      const remainingPersonal = Math.max(0, personalDays - usedPersonal - pendingPersonal);
+
+      const remainingByType = {
+        VACATION: remainingVacation,
+        SICK: remainingSick,
+        PERSONAL: remainingPersonal
+      } as const;
+
+      if (days > remainingByType[requestType]) {
+        return {
+          success: false,
+          error: `You only have ${remainingByType[requestType]} ${requestType.toLowerCase()} day(s) available (including pending requests).`
+        };
       }
 
       await db.insert(ptoRequests).values({
@@ -528,6 +674,7 @@ export class SusanPTOManager {
         startDate: data.startDate.toISOString().split('T')[0],
         endDate: data.endDate.toISOString().split('T')[0],
         days: days,
+        type: requestType,
         reason: data.reason || 'PTO Request',
         status: 'PENDING',
         createdAt: new Date(),
