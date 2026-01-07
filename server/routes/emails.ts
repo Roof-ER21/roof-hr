@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { MailService } from '@sendgrid/mail';
 import { gmailService } from '../services/gmail-service';
+import { EmailService } from '../email-service';
 
 const router = Router();
 
@@ -30,6 +31,20 @@ const sendEmailSchema = z.object({
   subject: z.string().min(1),
   body: z.string().min(1),
   templateType: z.string()
+});
+
+const sendEmailWithAttachmentsSchema = z.object({
+  to: z.string().email(),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+  templateType: z.string().optional(),
+  attachments: z.array(z.object({
+    filename: z.string().min(1),
+    contentBase64: z.string().min(1),
+    contentType: z.string().optional()
+  })).min(1),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional()
 });
 
 // Send email endpoint
@@ -108,6 +123,49 @@ router.post('/send', async (req, res) => {
 
     res.status(500).json({ 
       error: 'Failed to send email',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Send email with attachments (uses EmailService for reliable attachments)
+router.post('/send-with-attachments', async (req, res) => {
+  try {
+    const { to, subject, body, attachments, cc } = sendEmailWithAttachmentsSchema.parse(req.body);
+
+    const emailService = new EmailService();
+    await emailService.initialize();
+
+    const normalizedAttachments = attachments.map((attachment) => ({
+      filename: attachment.filename,
+      content: Buffer.from(attachment.contentBase64, 'base64'),
+      contentType: attachment.contentType || 'application/octet-stream'
+    }));
+
+    await emailService.sendEmail({
+      to,
+      cc,
+      subject,
+      html: body.replace(/\n/g, '<br>'),
+      attachments: normalizedAttachments
+    });
+
+    res.json({
+      success: true,
+      message: 'Email sent successfully with attachments'
+    });
+  } catch (error) {
+    console.error('[EMAIL ATTACHMENTS ERROR]', error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Invalid email data',
+        details: error.errors
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to send email with attachments',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
