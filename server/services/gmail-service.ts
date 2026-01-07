@@ -71,19 +71,47 @@ class GmailService {
       
       // Build the email message
       const utf8Subject = `=?utf-8?B?${Buffer.from(options.subject).toString('base64')}?=`;
-      const messageParts = [
+      const hasText = !!options.text;
+      const hasHtml = !!options.html;
+      const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+      const headers = [
         `From: ${fromEmail}`,
         `To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`,
         options.cc ? `Cc: ${Array.isArray(options.cc) ? options.cc.join(', ') : options.cc}` : '',
         options.bcc ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}` : '',
-        'Content-Type: text/html; charset=utf-8',
+        hasText && hasHtml
+          ? `Content-Type: multipart/alternative; boundary="${boundary}"`
+          : `Content-Type: ${hasHtml ? 'text/html' : 'text/plain'}; charset=utf-8`,
         'MIME-Version: 1.0',
         `Subject: ${utf8Subject}`,
-        '',
-        options.html || options.text || ''
-      ].filter(Boolean).join('\n');
+      ].filter(Boolean);
 
-      const encodedMessage = Buffer.from(messageParts)
+      const messageParts = [...headers, ''];
+
+      if (hasText && hasHtml) {
+        messageParts.push(
+          `--${boundary}`,
+          'Content-Type: text/plain; charset=utf-8',
+          'Content-Transfer-Encoding: 7bit',
+          '',
+          options.text || '',
+          '',
+          `--${boundary}`,
+          'Content-Type: text/html; charset=utf-8',
+          'Content-Transfer-Encoding: 7bit',
+          '',
+          options.html || '',
+          '',
+          `--${boundary}--`
+        );
+      } else {
+        messageParts.push(options.html || options.text || '');
+      }
+
+      const message = messageParts.filter(Boolean).join('\r\n');
+
+      const encodedMessage = Buffer.from(message)
         .toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
