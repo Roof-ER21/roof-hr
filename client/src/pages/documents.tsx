@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
-import { MANAGER_ROLES } from '@shared/constants/roles';
+import { ADMIN_ROLES, MANAGER_ROLES } from '@shared/constants/roles';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -217,8 +217,8 @@ export default function Documents() {
     return matchesCategory && matchesStatus && matchesVisibility && matchesSearch;
   });
 
-  const canManageDocuments = user?.role === 'ADMIN' || user?.role === 'MANAGER';
-  const canDeleteDocuments = user?.role === 'ADMIN';
+  const canManageDocuments = user?.role ? MANAGER_ROLES.includes(user.role) : false;
+  const canDeleteDocuments = user?.role ? ADMIN_ROLES.includes(user.role) : false;
 
   if (isLoading) {
     return (

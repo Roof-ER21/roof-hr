@@ -15,7 +15,7 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import { ALL_HOLIDAYS } from '../shared/constants/holidays';
 import agentRoutes from './routes/agents';
@@ -4130,8 +4130,34 @@ router.patch('/api/reviews/:id', requireAuth, async (req: any, res) => {
 // Document routes
 router.get('/api/documents', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
     const documents = await storage.getAllDocuments();
-    res.json(documents);
+
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL ||
+      (user.role && ADMIN_ROLES.includes(user.role));
+    const isManager = user.role && MANAGER_ROLES.includes(user.role);
+
+    if (isAdmin) {
+      res.json(documents);
+      return;
+    }
+
+    if (isManager) {
+      const managerDocs = documents.filter(doc => {
+        if (doc.createdBy === user.id) return true;
+        if (doc.visibility === 'PUBLIC' || doc.visibility === 'EMPLOYEE') return true;
+        return false;
+      });
+      res.json(managerDocs);
+      return;
+    }
+
+    const employeeDocs = documents.filter(doc => {
+      if (doc.createdBy === user.id) return true;
+      if (doc.visibility === 'PUBLIC' || doc.visibility === 'EMPLOYEE') return true;
+      return false;
+    });
+    res.json(employeeDocs);
   } catch (error) {
     console.error('Error fetching documents:', error);
     res.status(500).json({ error: 'Failed to fetch documents' });

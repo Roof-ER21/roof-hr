@@ -86,13 +86,13 @@ const navigation = [
     href: '/documents',
     icon: FileText,
     // Admins get full, Manager gets limited (handled in children)
-    roles: [...ADMIN_ROLES, 'MANAGER'],
+    roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'],
     children: [
-      { name: 'All Documents', href: '/documents', icon: FileText, roles: [...ADMIN_ROLES, 'MANAGER'] },
+      { name: 'All Documents', href: '/documents', icon: FileText, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] },
       { name: 'Tools & Equipment', href: '/tools', icon: Package, roles: [...ADMIN_ROLES, 'MANAGER'] },
       // COI Tracking: Admins only (not Manager)
       { name: 'COI Tracking', href: '/coi-documents', icon: AlertTriangle, roles: ADMIN_ROLES },
-      { name: 'Contracts', href: '/contracts', icon: ScrollText, roles: [...ADMIN_ROLES, 'MANAGER'] }
+      { name: 'Contracts', href: '/contracts', icon: ScrollText, roles: [...ADMIN_ROLES, 'MANAGER', 'EMPLOYEE'] }
     ]
   },
   {

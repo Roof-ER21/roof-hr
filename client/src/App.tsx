@@ -103,9 +103,9 @@ function AuthenticatedRoutes() {
         <Route path="/recruiting" element={<EnhancedRecruiting />} />
         <Route path="/recruiting-analytics" element={<RecruitingAnalytics />} />
 
-        {/* Documents: Admin/Manager only */}
+        {/* Documents: Admin/Manager/Employee */}
         <Route path="/documents" element={
-          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+          <ProtectedRoute requiredRoles={[...MANAGER_ROLES, 'EMPLOYEE']}>
             <Documents />
           </ProtectedRoute>
         } />
@@ -176,9 +176,9 @@ function AuthenticatedRoutes() {
           </ProtectedRoute>
         } />
 
-        {/* Contracts: Admin/Manager only */}
+        {/* Contracts: Admin/Manager/Employee */}
         <Route path="/contracts" element={
-          <ProtectedRoute requiredRoles={MANAGER_ROLES}>
+          <ProtectedRoute requiredRoles={[...MANAGER_ROLES, 'EMPLOYEE']}>
             <Contracts />
           </ProtectedRoute>
         } />
