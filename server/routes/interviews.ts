@@ -445,6 +445,8 @@ Please use the HR system to record interview feedback.
           googleEventId = calendarEvent.id;
           console.log('[INTERVIEW] Google Calendar event created in interviewer\'s calendar:', googleEventId);
 
+          const resolvedMeetingLink = autoMeetLink || data.meetingLink;
+
           // Update interview with calendar event ID and auto-generated Meet link (for VIDEO)
           if (googleEventId) {
             const updateData: any = { googleEventId };
@@ -453,6 +455,42 @@ Please use the HR system to record interview feedback.
               updateData.meetingLink = autoMeetLink;
             }
             await storage.updateInterview(interview.id, updateData);
+          }
+
+          // Create panel member events directly in their calendars (no invites)
+          const panelEmails = panelMembers
+            .filter(member => member?.email && member.id !== interviewerDetails?.id)
+            .map(member => member!.email as string);
+          const uniquePanelEmails = Array.from(new Set(panelEmails));
+          if (uniquePanelEmails.length > 0) {
+            const panelDescription = `${description}\n\nPrimary Interviewer: ${interviewerDetails.firstName} ${interviewerDetails.lastName}`;
+            const panelLocation = data.type === 'IN_PERSON' ? data.location : resolvedMeetingLink;
+            const calendarTimeZone = interviewerTimezone || 'America/New_York';
+
+            for (const panelEmail of uniquePanelEmails) {
+              try {
+                await calendarService.createEventForUser(panelEmail, {
+                  summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+                  description: panelDescription,
+                  location: panelLocation,
+                  startDateTime,
+                  endDateTime,
+                  attendees: [],
+                  sendNotifications: false,
+                  timeZone: calendarTimeZone,
+                  reminders: {
+                    useDefault: false,
+                    overrides: [
+                      { method: 'email', minutes: 24 * 60 },
+                      { method: 'email', minutes: 60 },
+                      { method: 'popup', minutes: 15 }
+                    ]
+                  }
+                });
+              } catch (panelError: any) {
+                console.warn(`[INTERVIEW] Panel calendar event failed for ${panelEmail}:`, panelError?.message || panelError);
+              }
+            }
           }
         } else if (!interviewerDetails || !interviewerDetails.email) {
           console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available');
@@ -1407,12 +1445,50 @@ Please use the HR system to record interview feedback.
           googleEventId = calendarEvent.id;
           console.log('[SOURCER INTERVIEW] Google Calendar event created in interviewer\'s calendar:', googleEventId);
 
+          const resolvedMeetingLink = autoMeetLink || data.meetingLink;
+
           if (googleEventId) {
             const updateData: any = { googleEventId };
             if (data.type === 'VIDEO' && autoMeetLink) {
               updateData.meetingLink = autoMeetLink;
             }
             await storage.updateInterview(interview.id, updateData);
+          }
+
+          // Create panel member events directly in their calendars (no invites)
+          const panelEmails = panelMembers
+            .filter(member => member?.email && member.id !== interviewerDetails?.id)
+            .map(member => member!.email as string);
+          const uniquePanelEmails = Array.from(new Set(panelEmails));
+          if (uniquePanelEmails.length > 0) {
+            const panelDescription = `${description}\n\nPrimary Interviewer: ${interviewerDetails.firstName} ${interviewerDetails.lastName}`;
+            const panelLocation = data.type === 'IN_PERSON' ? data.location : resolvedMeetingLink;
+            const calendarTimeZone = interviewerTimezone || 'America/New_York';
+
+            for (const panelEmail of uniquePanelEmails) {
+              try {
+                await calendarService.createEventForUser(panelEmail, {
+                  summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ${candidateDetails.position}`,
+                  description: panelDescription,
+                  location: panelLocation,
+                  startDateTime,
+                  endDateTime,
+                  attendees: [],
+                  sendNotifications: false,
+                  timeZone: calendarTimeZone,
+                  reminders: {
+                    useDefault: false,
+                    overrides: [
+                      { method: 'email', minutes: 24 * 60 },
+                      { method: 'email', minutes: 60 },
+                      { method: 'popup', minutes: 15 }
+                    ]
+                  }
+                });
+              } catch (panelError: any) {
+                console.warn(`[SOURCER INTERVIEW] Panel calendar event failed for ${panelEmail}:`, panelError?.message || panelError);
+              }
+            }
           }
         } else if (!interviewerDetails || !interviewerDetails.email) {
           console.warn('[SOURCER INTERVIEW] Cannot create calendar event: interviewer email not available');
