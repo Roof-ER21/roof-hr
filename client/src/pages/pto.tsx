@@ -54,7 +54,17 @@ function PTO() {
   const [denyNotes, setDenyNotes] = useState('');
   // Status filter for PTO requests
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('ALL');
-  const [timeFilter, setTimeFilter] = useState<'ALL' | 'PAST'>('ALL');
+  const [timeFilter, setTimeFilter] = useState<'ALL' | 'PAST' | 'FUTURE'>('ALL');
+  const [analyticsStartDate, setAnalyticsStartDate] = useState(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    return format(start, 'yyyy-MM-dd');
+  });
+  const [analyticsEndDate, setAnalyticsEndDate] = useState(() => {
+    const now = new Date();
+    const end = new Date(now.getFullYear(), 11, 31);
+    return format(end, 'yyyy-MM-dd');
+  });
   // Admin PTO creation dialog
   const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
@@ -583,14 +593,55 @@ function PTO() {
       const endDate = parseLocalDate(request.endDate);
       return request.status === 'APPROVED' && endDate < today;
     }
+    if (timeFilter === 'FUTURE') {
+      const startDate = parseLocalDate(request.startDate);
+      return request.status === 'APPROVED' && startDate > today;
+    }
     return true;
   });
 
+  const analyticsRangeStart = parseLocalDate(analyticsStartDate);
+  const analyticsRangeEnd = parseLocalDate(analyticsEndDate);
+
+  const countOverlappingDays = (request: any, rangeStart: Date, rangeEnd: Date) => {
+    const requestStart = parseLocalDate(request.startDate);
+    const requestEnd = parseLocalDate(request.endDate);
+    const start = requestStart > rangeStart ? requestStart : rangeStart;
+    const end = requestEnd < rangeEnd ? requestEnd : rangeEnd;
+
+    if (start > end) return 0;
+    if (request.days <= 0.5 && requestStart.getTime() === requestEnd.getTime()) {
+      return request.days;
+    }
+
+    const diffTime = end.getTime() - start.getTime();
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  };
+
+  const countMonthUsage = (requests: any[], year: number, monthIndex: number) => {
+    const monthStart = new Date(year, monthIndex, 1);
+    const monthEnd = new Date(year, monthIndex + 1, 0);
+    return requests.reduce((sum, request) => {
+      return sum + countOverlappingDays(request, monthStart, monthEnd);
+    }, 0);
+  };
+
   const analytics = useMemo(() => {
-    const approvedPast = (ptoRequests || []).filter((request: any) => {
+    const approvedRequests = (ptoRequests || []).filter((request: any) => {
       if (request.status !== 'APPROVED') return false;
+      const requestStart = parseLocalDate(request.startDate);
+      const requestEnd = parseLocalDate(request.endDate);
+      return requestStart <= analyticsRangeEnd && requestEnd >= analyticsRangeStart;
+    });
+
+    const approvedPast = approvedRequests.filter((request: any) => {
       const endDate = parseLocalDate(request.endDate);
       return endDate < today;
+    });
+
+    const approvedFuture = approvedRequests.filter((request: any) => {
+      const startDate = parseLocalDate(request.startDate);
+      return startDate > today;
     });
 
     const currentYear = today.getFullYear();
@@ -601,13 +652,14 @@ function PTO() {
     const employeeUsage: Record<string, any> = {};
     const departmentUsage: Record<string, any> = {};
     let totalUsedDays = 0;
+    let totalFutureDays = 0;
 
     for (const request of approvedPastThisYear) {
       const employee = getUserById(request.employeeId);
       const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown';
       const department = employee?.department || 'Unassigned';
       const type = (request.type || 'VACATION') as 'VACATION' | 'SICK' | 'PERSONAL';
-      const days = Number(request.days || 0);
+      const days = countOverlappingDays(request, analyticsRangeStart, analyticsRangeEnd);
 
       totalUsedDays += days;
 
@@ -643,6 +695,10 @@ function PTO() {
       departmentUsage[department].totalDays += days;
     }
 
+    for (const request of approvedFuture) {
+      totalFutureDays += countOverlappingDays(request, analyticsRangeStart, analyticsRangeEnd);
+    }
+
     const employeesWithUsage = new Set(Object.keys(employeeUsage));
     const departmentsWithUsage = Object.keys(departmentUsage);
 
@@ -657,12 +713,16 @@ function PTO() {
     return {
       year: currentYear,
       totalUsedDays,
+      totalFutureDays,
       employeeCount: employeesWithUsage.size,
       departmentCount: departmentsWithUsage.length,
       employeeRows,
-      departmentRows
+      departmentRows,
+      janUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 0),
+      febUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 1),
+      decUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 11)
     };
-  }, [ptoRequests, today, users]);
+  }, [ptoRequests, today, users, analyticsRangeEnd, analyticsRangeStart]);
 
   // Helper function to calculate effective PTO for an employee
   const getEffectivePTO = (employee: any) => {
@@ -1166,6 +1226,17 @@ function PTO() {
               >
                 Past Approved
               </Button>
+              <Button
+                size="sm"
+                variant={timeFilter === 'FUTURE' ? 'default' : 'outline'}
+                onClick={() => {
+                  setStatusFilter('APPROVED');
+                  setTimeFilter('FUTURE');
+                }}
+                className={timeFilter === 'FUTURE' ? 'bg-secondary-900 hover:bg-secondary-800' : ''}
+              >
+                Upcoming Approved
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -1286,6 +1357,41 @@ function PTO() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <Label htmlFor="analytics-start">Range Start</Label>
+              <Input
+                id="analytics-start"
+                type="date"
+                value={analyticsStartDate}
+                onChange={(e) => setAnalyticsStartDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="analytics-end">Range End</Label>
+              <Input
+                id="analytics-end"
+                type="date"
+                value={analyticsEndDate}
+                onChange={(e) => setAnalyticsEndDate(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const now = new Date();
+                  const start = new Date(now.getFullYear(), 0, 1);
+                  const end = new Date(now.getFullYear(), 11, 31);
+                  setAnalyticsStartDate(format(start, 'yyyy-MM-dd'));
+                  setAnalyticsEndDate(format(end, 'yyyy-MM-dd'));
+                }}
+              >
+                This Year
+              </Button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-lg border p-3">
               <div className="text-sm text-muted-foreground">Total Used Days</div>
@@ -1298,6 +1404,24 @@ function PTO() {
             <div className="rounded-lg border p-3">
               <div className="text-sm text-muted-foreground">Departments</div>
               <div className="text-2xl font-semibold">{analytics.departmentCount}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Upcoming Approved Days</div>
+              <div className="text-2xl font-semibold">{analytics.totalFutureDays}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Jan Used Days</div>
+              <div className="text-2xl font-semibold">{analytics.janUsedDays}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Feb Used Days</div>
+              <div className="text-2xl font-semibold">{analytics.febUsedDays}</div>
+            </div>
+            <div className="rounded-lg border p-3 md:col-span-3">
+              <div className="text-sm text-muted-foreground">Dec Used Days</div>
+              <div className="text-2xl font-semibold">{analytics.decUsedDays}</div>
             </div>
           </div>
         </CardContent>
