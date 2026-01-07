@@ -2986,6 +2986,26 @@ class DrizzleStorage implements IStorage {
       .where(eq(equipmentAgreements.status, 'PENDING'));
   }
 
+  async getPendingEquipmentAgreementForEmployee(employeeId: string | null | undefined, employeeEmail: string): Promise<EquipmentAgreement | null> {
+    const whereClause = employeeId
+      ? and(
+          eq(equipmentAgreements.status, 'PENDING'),
+          or(
+            eq(equipmentAgreements.employeeId, employeeId),
+            eq(equipmentAgreements.employeeEmail, employeeEmail)
+          )
+        )
+      : and(
+          eq(equipmentAgreements.status, 'PENDING'),
+          eq(equipmentAgreements.employeeEmail, employeeEmail)
+        );
+
+    const [agreement] = await db.select().from(equipmentAgreements)
+      .where(whereClause)
+      .limit(1);
+    return agreement || null;
+  }
+
   async updateEquipmentAgreement(id: string, data: Partial<EquipmentAgreement>): Promise<EquipmentAgreement> {
     const [agreement] = await db.update(equipmentAgreements)
       .set({ ...data, updatedAt: new Date() })

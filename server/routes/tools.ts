@@ -1578,6 +1578,20 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
       .from(bundleItems)
       .where(eq(bundleItems.bundleId, bundleId));
 
+    // Fetch existing assignments to avoid duplicates
+    const existingAssignedTools = await db
+      .select({
+        toolId: toolAssignments.toolId,
+        name: toolInventory.name,
+        category: toolInventory.category
+      })
+      .from(toolAssignments)
+      .innerJoin(toolInventory, eq(toolAssignments.toolId, toolInventory.id))
+      .where(and(
+        eq(toolAssignments.employeeId, employeeId),
+        eq(toolAssignments.status, 'ASSIGNED')
+      ));
+
     // Pre-fetch all active inventory (before transaction - read-only)
     const allInventory = await db
       .select()
@@ -1609,10 +1623,12 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
         status: string;
       }> = [];
       const inventoryUpdates: { id: string; reduceBy: number }[] = [];
+      const usedExistingToolIds = new Set<string>();
 
       for (const item of items) {
         let toolId: string | null = null;
         let size: string | null = null;
+        const itemName = item.itemName.toLowerCase();
 
         // If item requires size (clothing), use employee's shirt size or provided selection
         if (item.requiresSize) {
@@ -1622,30 +1638,53 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
             continue; // Skip if no size available
           }
 
-          // Use in-memory lookup (prevents SQL injection)
           const sizePattern = size.toLowerCase();
-          const inventoryItem = allInventory.find(inv =>
-            inv.category === item.itemCategory &&
-            inv.name.toLowerCase().includes(sizePattern) &&
-            inv.availableQuantity >= item.quantity
+          const existingMatch = existingAssignedTools.find(existing =>
+            !usedExistingToolIds.has(existing.toolId) &&
+            existing.category === item.itemCategory &&
+            existing.name.toLowerCase().includes(sizePattern) &&
+            existing.name.toLowerCase().includes(itemName)
           );
 
-          if (inventoryItem) {
-            toolId = inventoryItem.id;
-            inventoryUpdates.push({ id: inventoryItem.id, reduceBy: item.quantity });
-            inventoryItem.availableQuantity -= item.quantity;
+          if (existingMatch) {
+            toolId = existingMatch.toolId;
+            usedExistingToolIds.add(existingMatch.toolId);
+          } else {
+            // Use in-memory lookup (prevents SQL injection)
+            const inventoryItem = allInventory.find(inv =>
+              inv.category === item.itemCategory &&
+              inv.name.toLowerCase().includes(sizePattern) &&
+              inv.availableQuantity >= item.quantity
+            );
+
+            if (inventoryItem) {
+              toolId = inventoryItem.id;
+              inventoryUpdates.push({ id: inventoryItem.id, reduceBy: item.quantity });
+              inventoryItem.availableQuantity -= item.quantity;
+            }
           }
         } else {
-          // For non-clothing items, find by category (in-memory)
-          const inventoryItem = allInventory.find(inv =>
-            inv.category === item.itemCategory &&
-            inv.availableQuantity >= item.quantity
+          const existingMatch = existingAssignedTools.find(existing =>
+            !usedExistingToolIds.has(existing.toolId) &&
+            existing.category === item.itemCategory &&
+            existing.name.toLowerCase().includes(itemName)
           );
 
-          if (inventoryItem) {
-            toolId = inventoryItem.id;
-            inventoryUpdates.push({ id: inventoryItem.id, reduceBy: item.quantity });
-            inventoryItem.availableQuantity -= item.quantity;
+          if (existingMatch) {
+            toolId = existingMatch.toolId;
+            usedExistingToolIds.add(existingMatch.toolId);
+          } else {
+            // For non-clothing items, find by category (in-memory)
+            const inventoryItem = allInventory.find(inv =>
+              inv.category === item.itemCategory &&
+              inv.availableQuantity >= item.quantity
+            );
+
+            if (inventoryItem) {
+              toolId = inventoryItem.id;
+              inventoryUpdates.push({ id: inventoryItem.id, reduceBy: item.quantity });
+              inventoryItem.availableQuantity -= item.quantity;
+            }
           }
         }
 

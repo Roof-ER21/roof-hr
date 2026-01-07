@@ -50,20 +50,77 @@ router.get('/api/equipment-agreements/:id', async (req: any, res) => {
 });
 
 // Create a new equipment agreement (HR sends to employee)
-router.post('/api/equipment-agreements', async (req: any, res) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
+  router.post('/api/equipment-agreements', async (req: any, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
-    const { employeeId, employeeName, employeeEmail, employeeRole, items, employeeStartDate } = req.body;
+      const { employeeId, employeeName, employeeEmail, employeeRole, items, employeeStartDate } = req.body;
 
-    if (!employeeName || !employeeEmail || !items) {
-      return res.status(400).json({ error: 'Missing required fields: employeeName, employeeEmail, items' });
-    }
+      if (!employeeName || !employeeEmail || !items) {
+        return res.status(400).json({ error: 'Missing required fields: employeeName, employeeEmail, items' });
+      }
 
-    // Generate unique access token
-    const accessToken = generateAccessToken();
+      const existingAgreement = await storage.getPendingEquipmentAgreementForEmployee(employeeId, employeeEmail);
+      if (existingAgreement) {
+        let updatedAgreement = existingAgreement;
+        let accessToken = existingAgreement.accessToken;
+        const updatePayload: Record<string, any> = {
+          sentAt: new Date(),
+          employeeRole: employeeRole || existingAgreement.employeeRole,
+          employeeStartDate: employeeStartDate || existingAgreement.employeeStartDate,
+          items: typeof items === 'string' ? items : JSON.stringify(items),
+        };
+
+        if (existingAgreement.tokenExpiry && new Date(existingAgreement.tokenExpiry) < new Date()) {
+          accessToken = generateAccessToken();
+          const tokenExpiry = new Date();
+          tokenExpiry.setDate(tokenExpiry.getDate() + 30);
+          updatePayload.accessToken = accessToken;
+          updatePayload.tokenExpiry = tokenExpiry;
+        } else {
+          updatePayload.accessToken = accessToken;
+        }
+
+        updatedAgreement = await storage.updateEquipmentAgreement(existingAgreement.id, updatePayload);
+
+        const formUrl = `${process.env.APP_URL || 'https://roofhr.up.railway.app'}/equipment-agreement/${accessToken}`;
+        let parsedItems: any[] = [];
+        try {
+          parsedItems = typeof updatedAgreement.items === 'string'
+            ? JSON.parse(updatedAgreement.items)
+            : updatedAgreement.items;
+        } catch (parseError) {
+          console.warn('[Equipment Agreement] Failed to parse items for resend:', parseError);
+        }
+
+        try {
+          const emailService = new EmailService();
+          await emailService.initialize();
+          const emailSent = await emailService.sendEquipmentAgreementEmail(
+            updatedAgreement.employeeName,
+            updatedAgreement.employeeEmail,
+            formUrl,
+            parsedItems
+          );
+
+          if (!emailSent) {
+            console.warn(`Equipment agreement reused but email failed to send to ${updatedAgreement.employeeEmail}`);
+          }
+        } catch (emailError) {
+          console.error('Error sending equipment agreement email:', emailError);
+        }
+
+        return res.status(200).json({
+          ...updatedAgreement,
+          formUrl: `/equipment-agreement/${accessToken}`,
+          reused: true
+        });
+      }
+
+      // Generate unique access token
+      const accessToken = generateAccessToken();
 
     // Set token expiry to 30 days from now
     const tokenExpiry = new Date();

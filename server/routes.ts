@@ -13,6 +13,7 @@ import {
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
   insertEmployeeReviewSchema, insertTaskSchema, insertCompanySettingsSchema,
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
+  equipmentChecklists,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
@@ -131,6 +132,196 @@ function countBusinessDays(startDate: Date, endDate: Date, holidaySet: Set<strin
   }
 
   return days;
+}
+
+type AssignedToolItem = { toolId: string; toolName: string; quantity: number };
+
+async function getActiveToolAssignmentIds(employeeId: string): Promise<Set<string>> {
+  const assignments = await db
+    .select({ toolId: toolAssignments.toolId })
+    .from(toolAssignments)
+    .where(and(
+      eq(toolAssignments.employeeId, employeeId),
+      eq(toolAssignments.status, 'ASSIGNED')
+    ));
+  return new Set(assignments.map(item => item.toolId));
+}
+
+async function findAvailableInventoryItem(params: {
+  itemName: string;
+  category: string;
+  quantity: number;
+  size?: string | null;
+}) {
+  const { itemName, category, quantity, size } = params;
+  const nameFilters = [
+    ilike(toolInventory.name, `%${itemName}%`)
+  ];
+
+  if (size) {
+    nameFilters.push(ilike(toolInventory.name, `%${size}%`));
+  }
+
+  const [byName] = await db
+    .select()
+    .from(toolInventory)
+    .where(and(
+      eq(toolInventory.isActive, true),
+      gte(toolInventory.availableQuantity, quantity),
+      ...nameFilters
+    ))
+    .limit(1);
+
+  if (byName) {
+    return byName;
+  }
+
+  const [byCategory] = await db
+    .select()
+    .from(toolInventory)
+    .where(and(
+      eq(toolInventory.isActive, true),
+      eq(toolInventory.category, category as any),
+      gte(toolInventory.availableQuantity, quantity)
+    ))
+    .limit(1);
+
+  return byCategory || null;
+}
+
+async function assignWelcomePackageToEmployee(params: {
+  bundleId: string;
+  employeeId: string;
+  assignedBy: string;
+  shirtSize?: string | null;
+  existingToolIds?: Set<string>;
+}) {
+  const { bundleId, employeeId, assignedBy, shirtSize, existingToolIds } = params;
+  const assignedToolIds = existingToolIds ? new Set(existingToolIds) : await getActiveToolAssignmentIds(employeeId);
+
+  const bundleItemsList = await db
+    .select()
+    .from(bundleItems)
+    .where(eq(bundleItems.bundleId, bundleId));
+
+  const assignmentId = uuidv4();
+  await db.insert(bundleAssignments).values({
+    id: assignmentId,
+    bundleId,
+    employeeId,
+    assignedBy,
+    assignedDate: new Date(),
+    status: 'PENDING' as const
+  });
+
+  const categoryMap: Record<string, string> = {
+    'CLOTHING': 'POLO',
+    'POLO': 'POLO',
+    'QUARTER_ZIP': 'POLO',
+    'LAPTOP': 'LAPTOP',
+    'IPAD': 'IPAD',
+    'LADDER': 'LADDER',
+    'BOOTS': 'BOOTS',
+    'TECHNOLOGY': 'OTHER',
+    'TOOLS': 'OTHER',
+    'FLASHLIGHT': 'OTHER',
+    'KEYBOARD': 'OTHER',
+    'CHARGER': 'OTHER',
+    'OTHER': 'OTHER'
+  };
+
+  const assignmentItems: Array<{
+    id: string;
+    assignmentId: string;
+    bundleItemId: string;
+    quantity: number;
+    size: string | null;
+    status: 'ASSIGNED' | 'UNAVAILABLE';
+  }> = [];
+  const assignedToolItems: AssignedToolItem[] = [];
+
+  for (const item of bundleItemsList) {
+    const size = item.requiresSize ? shirtSize || null : null;
+    let status: 'ASSIGNED' | 'UNAVAILABLE' = 'UNAVAILABLE';
+
+    if (item.requiresSize && !size) {
+      console.warn(`[Welcome Package] Missing size for item ${item.itemName} (${employeeId})`);
+    } else {
+      const toolCategory = categoryMap[item.itemCategory] || 'OTHER';
+      const inventoryItem = await findAvailableInventoryItem({
+        itemName: item.itemName,
+        category: toolCategory,
+        quantity: item.quantity,
+        size
+      });
+
+      if (inventoryItem && !assignedToolIds.has(inventoryItem.id)) {
+        await db.insert(toolAssignments).values({
+          id: uuidv4(),
+          toolId: inventoryItem.id,
+          employeeId,
+          assignedBy,
+          assignedDate: new Date(),
+          status: 'ASSIGNED',
+          condition: inventoryItem.condition,
+          notes: 'Assigned via welcome package during onboarding'
+        });
+
+        await db
+          .update(toolInventory)
+          .set({
+            availableQuantity: inventoryItem.availableQuantity - item.quantity,
+            updatedAt: new Date()
+          })
+          .where(eq(toolInventory.id, inventoryItem.id));
+
+        assignedToolIds.add(inventoryItem.id);
+        assignedToolItems.push({
+          toolId: inventoryItem.id,
+          toolName: inventoryItem.name,
+          quantity: item.quantity
+        });
+        status = 'ASSIGNED';
+      } else if (inventoryItem) {
+        console.warn(`[Welcome Package] Tool already assigned for ${employeeId}: ${inventoryItem.name}`);
+        status = 'ASSIGNED';
+      } else {
+        console.warn(`[Welcome Package] No inventory match for ${item.itemName} (${employeeId})`);
+      }
+    }
+
+    assignmentItems.push({
+      id: uuidv4(),
+      assignmentId,
+      bundleItemId: item.id,
+      quantity: item.quantity,
+      size,
+      status
+    });
+  }
+
+  if (assignmentItems.length > 0) {
+    await db.insert(bundleAssignmentItems).values(assignmentItems as any);
+  }
+
+  const allAssigned = assignmentItems.length > 0 && assignmentItems.every(item => item.status === 'ASSIGNED');
+  const anyAssigned = assignmentItems.some(item => item.status === 'ASSIGNED');
+
+  await db
+    .update(bundleAssignments)
+    .set({
+      status: allAssigned ? 'FULFILLED' : anyAssigned ? 'PARTIALLY_FULFILLED' : 'PENDING',
+      updatedAt: new Date()
+    })
+    .where(eq(bundleAssignments.id, assignmentId));
+
+  return {
+    assignmentId,
+    assignedToolItems,
+    assignedToolIds,
+    allAssigned,
+    anyAssigned
+  };
 }
 
 // Middleware
@@ -387,33 +578,30 @@ router.post('/api/public/equipment-checklist/:token', async (req, res) => {
     // Handle inventory based on checklist type
     if (checklist.type === 'ISSUED' && checklist.employeeId) {
       // ISSUED: Create tool assignments and decrease inventory
+      const assignedToolIds = await getActiveToolAssignmentIds(checklist.employeeId);
       for (const item of checklistItemsToInventory) {
         if (item.received) {
-          // Find matching inventory item
-          const inventoryItems = await db
-            .select()
-            .from(toolInventory)
-            .where(
-              or(
-                ilike(toolInventory.name, `%${item.name}%`),
-                and(
-                  eq(toolInventory.category, item.category as any),
-                  ilike(toolInventory.name, `%${item.name.split(' ')[0]}%`)
-                )
-              )
-            )
-            .limit(1);
+          const inventoryItem = await findAvailableInventoryItem({
+            itemName: item.name,
+            category: item.category,
+            quantity: 1
+          });
 
-          if (inventoryItems[0] && inventoryItems[0].availableQuantity > 0) {
+          if (inventoryItem && assignedToolIds.has(inventoryItem.id)) {
+            console.warn(`[Equipment Checklist] Tool already assigned for ${checklist.employeeId}: ${inventoryItem.name}`);
+            continue;
+          }
+
+          if (inventoryItem) {
             // Create tool assignment
             await db.insert(toolAssignments).values({
               id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              toolId: inventoryItems[0].id,
+              toolId: inventoryItem.id,
               employeeId: checklist.employeeId,
               assignedBy: 'system',
               assignedDate: new Date(),
               status: 'ASSIGNED',
-              condition: inventoryItems[0].condition,
+              condition: inventoryItem.condition,
               notes: `Assigned via equipment checklist signing`
             });
 
@@ -421,10 +609,12 @@ router.post('/api/public/equipment-checklist/:token', async (req, res) => {
             await db
               .update(toolInventory)
               .set({
-                availableQuantity: inventoryItems[0].availableQuantity - 1,
+                availableQuantity: inventoryItem.availableQuantity - 1,
                 updatedAt: new Date()
               })
-              .where(eq(toolInventory.id, inventoryItems[0].id));
+              .where(eq(toolInventory.id, inventoryItem.id));
+
+            assignedToolIds.add(inventoryItem.id);
           }
         }
       }
@@ -2955,60 +3145,53 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     let equipmentSigningUrl: string | undefined;
     if (welcomePackageId) {
       try {
-        const bundleItemsList = await db
-          .select()
-          .from(bundleItems)
-          .where(eq(bundleItems.bundleId, welcomePackageId));
-
-        const assignmentId = uuidv4();
-        await db.insert(bundleAssignments).values({
-          id: assignmentId,
+        const existingToolIds = await getActiveToolAssignmentIds(newEmployee.id);
+        const welcomePackageResult = await assignWelcomePackageToEmployee({
           bundleId: welcomePackageId,
           employeeId: newEmployee.id,
           assignedBy: user.id,
-          assignedDate: new Date(),
-          status: 'FULFILLED' as const
+          shirtSize,
+          existingToolIds
         });
-
-        for (const item of bundleItemsList) {
-          await db.insert(bundleAssignmentItems).values({
-            id: uuidv4(),
-            assignmentId,
-            bundleItemId: item.id,
-            quantity: item.quantity,
-            size: item.requiresSize ? shirtSize : null,
-            status: 'ASSIGNED'
-          });
-        }
         console.log(`[HIRE] Assigned welcome package to ${newEmployee.id}`);
 
         // Create equipment receipt for signing (locked until start date)
         try {
-          const receipt = await equipmentReceiptService.createReceipt({
-            employeeId: newEmployee.id,
-            employeeName: `${candidate.firstName} ${candidate.lastName}`,
-            position: candidate.position || 'Sales Representative',
-            startDate: new Date(startDate),
-            items: bundleItemsList.map(item => ({
-              toolId: item.id,
-              toolName: item.itemCategory + (item.requiresSize ? ` - ${shirtSize}` : ''),
-              quantity: item.quantity
-            })),
-            createdBy: user.id,
-          });
+          if (welcomePackageResult.assignedToolItems.length > 0) {
+            const aggregated = new Map<string, AssignedToolItem>();
+            for (const item of welcomePackageResult.assignedToolItems) {
+              const existing = aggregated.get(item.toolId);
+              if (existing) {
+                existing.quantity += item.quantity;
+              } else {
+                aggregated.set(item.toolId, { ...item });
+              }
+            }
 
-          // Generate signing token (locked until start date)
-          const signingToken = crypto.randomBytes(32).toString('hex');
-          await storage.createEquipmentReceiptToken({
-            id: signingToken,
-            receiptId: receipt.id,
-            startDate: new Date(startDate),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-          });
+            const receipt = await equipmentReceiptService.createReceipt({
+              employeeId: newEmployee.id,
+              employeeName: `${candidate.firstName} ${candidate.lastName}`,
+              position: candidate.position || 'Sales Representative',
+              startDate: new Date(startDate),
+              items: Array.from(aggregated.values()),
+              createdBy: user.id,
+            });
 
-          const baseUrl = process.env.CLIENT_URL || 'https://roofhr.up.railway.app';
-          equipmentSigningUrl = `${baseUrl}/sign-equipment/${signingToken}`;
-          console.log(`[HIRE] Created equipment receipt ${receipt.id} with signing URL`);
+            // Generate signing token (locked until start date)
+            const signingToken = crypto.randomBytes(32).toString('hex');
+            await storage.createEquipmentReceiptToken({
+              id: signingToken,
+              receiptId: receipt.id,
+              startDate: new Date(startDate),
+              expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            });
+
+            const baseUrl = process.env.CLIENT_URL || 'https://roofhr.up.railway.app';
+            equipmentSigningUrl = `${baseUrl}/sign-equipment/${signingToken}`;
+            console.log(`[HIRE] Created equipment receipt ${receipt.id} with signing URL`);
+          } else {
+            console.warn(`[HIRE] No inventory items assigned for welcome package ${welcomePackageId}`);
+          }
         } catch (receiptError) {
           console.error('[HIRE] Failed to create equipment receipt:', receiptError);
         }
@@ -3660,95 +3843,22 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
       console.error('Failed to create PTO policy:', error);
     }
     
+    let assignedToolIds = await getActiveToolAssignmentIds(newEmployee.id);
+    let welcomePackageToolItems: AssignedToolItem[] = [];
+
     // Assign welcome package if selected
     let welcomePackageAssigned = false;
     if (welcomePackageId) {
       try {
-        // Get bundle items
-        const bundleItemsList = await db
-          .select()
-          .from(bundleItems)
-          .where(eq(bundleItems.bundleId, welcomePackageId));
-        
-        // Create bundle assignment
-        const assignmentId = uuidv4();
-        await db.insert(bundleAssignments).values({
-          id: assignmentId,
+        const welcomePackageResult = await assignWelcomePackageToEmployee({
           bundleId: welcomePackageId,
           employeeId: newEmployee.id,
           assignedBy: user.id,
-          assignedDate: new Date(),
-          status: 'FULFILLED' as const
+          shirtSize,
+          existingToolIds: assignedToolIds
         });
-        
-        // Create assignment items with size selections and update inventory
-        for (const item of bundleItemsList) {
-          await db.insert(bundleAssignmentItems).values({
-            id: uuidv4(),
-            assignmentId,
-            bundleItemId: item.id, // Add the required bundle item ID
-            quantity: item.quantity,
-            size: item.requiresSize ? shirtSize : null,
-            status: 'ASSIGNED'
-          });
-          
-          // Update inventory for ALL bundle items (not just clothing)
-          // Map bundle item categories to tool inventory categories
-          const categoryMap: Record<string, string> = {
-            'CLOTHING': 'POLO',
-            'POLO': 'POLO',
-            'QUARTER_ZIP': 'POLO',
-            'LAPTOP': 'LAPTOP',
-            'IPAD': 'IPAD',
-            'LADDER': 'LADDER',
-            'BOOTS': 'BOOTS',
-            'TECHNOLOGY': 'OTHER',
-            'TOOLS': 'OTHER',
-            'FLASHLIGHT': 'OTHER',
-            'KEYBOARD': 'OTHER',
-            'CHARGER': 'OTHER',
-            'OTHER': 'OTHER'
-          };
-
-          const toolCategory = categoryMap[item.itemCategory] || 'OTHER';
-
-          // Find matching inventory item by name or category
-          const inventoryItems = await db
-            .select()
-            .from(toolInventory)
-            .where(
-              or(
-                eq(toolInventory.name, item.itemName),
-                and(
-                  ilike(toolInventory.name, `%${item.itemName}%`),
-                  eq(toolInventory.category, toolCategory as any)
-                )
-              )
-            );
-
-          if (inventoryItems[0] && inventoryItems[0].availableQuantity >= item.quantity) {
-            // Create tool assignment record
-            await db.insert(toolAssignments).values({
-              id: uuidv4(),
-              toolId: inventoryItems[0].id,
-              employeeId: newEmployee.id,
-              assignedBy: user.id,
-              assignedDate: new Date(),
-              status: 'ASSIGNED',
-              condition: inventoryItems[0].condition,
-              notes: `Assigned via welcome package during onboarding`
-            });
-
-            // Decrease available quantity
-            await db
-              .update(toolInventory)
-              .set({
-                availableQuantity: inventoryItems[0].availableQuantity - item.quantity,
-                updatedAt: new Date()
-              })
-              .where(eq(toolInventory.id, inventoryItems[0].id));
-          }
-        }
+        assignedToolIds = welcomePackageResult.assignedToolIds;
+        welcomePackageToolItems = welcomePackageResult.assignedToolItems;
         welcomePackageAssigned = true;
         console.log(`[Direct Hire] Welcome package assigned for ${firstName} ${lastName}`);
       } catch (err) {
@@ -3758,9 +3868,14 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
     
     // Assign tools and update inventory
     let toolsAssigned = 0;
+    const receiptItems: AssignedToolItem[] = [...welcomePackageToolItems];
     if (toolIds && toolIds.length > 0) {
       try {
         for (const toolId of toolIds) {
+          if (assignedToolIds.has(toolId)) {
+            console.warn(`[Direct Hire] Tool already assigned for ${newEmployee.id}: ${toolId}`);
+            continue;
+          }
           // Get tool details
           const tools = await db
             .select()
@@ -3791,56 +3906,71 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
               .where(eq(toolInventory.id, tool.id));
             
             toolsAssigned++;
+            assignedToolIds.add(tool.id);
+            receiptItems.push({
+              toolId: tool.id,
+              toolName: tool.name,
+              quantity: 1
+            });
           }
         }
         console.log(`[Direct Hire] ${toolsAssigned} tools assigned to ${firstName} ${lastName}`);
-
-        // Create equipment receipt if tools were assigned
-        if (toolsAssigned > 0) {
-          try {
-            // Get tool names for receipt
-            const toolDetails = await db
-              .select()
-              .from(toolInventory)
-              .where(eq(toolInventory.id, toolIds[0])); // Get first tool as example
-
-            // Fetch all assigned tool details
-            const assignedToolDetails: Array<{ toolId: string; toolName: string; quantity: number }> = [];
-            for (const toolId of toolIds) {
-              const tools = await db.select().from(toolInventory).where(eq(toolInventory.id, toolId));
-              if (tools[0]) {
-                assignedToolDetails.push({
-                  toolId: tools[0].id,
-                  toolName: tools[0].name,
-                  quantity: 1
-                });
-              }
-            }
-
-            if (assignedToolDetails.length > 0) {
-              await equipmentReceiptService.createReceipt({
-                employeeId: newEmployee.id,
-                employeeName: `${firstName} ${lastName}`,
-                position,
-                startDate: new Date(startDate),
-                items: assignedToolDetails,
-                createdBy: user.id
-              });
-              console.log(`[Direct Hire] Equipment receipt created for ${firstName} ${lastName}`);
-            }
-          } catch (receiptErr) {
-            console.error('Failed to create equipment receipt:', receiptErr);
-          }
-        }
       } catch (err) {
         console.error('Failed to assign tools:', err);
+      }
+    }
+
+    let equipmentSigningUrl: string | undefined;
+    if (receiptItems.length > 0) {
+      try {
+        const aggregated = new Map<string, AssignedToolItem>();
+        for (const item of receiptItems) {
+          const existing = aggregated.get(item.toolId);
+          if (existing) {
+            existing.quantity += item.quantity;
+          } else {
+            aggregated.set(item.toolId, { ...item });
+          }
+        }
+
+        const receipt = await equipmentReceiptService.createReceipt({
+          employeeId: newEmployee.id,
+          employeeName: `${firstName} ${lastName}`,
+          position,
+          startDate: new Date(startDate),
+          items: Array.from(aggregated.values()),
+          createdBy: user.id
+        });
+
+        const signingToken = crypto.randomBytes(32).toString('hex');
+        await storage.createEquipmentReceiptToken({
+          id: signingToken,
+          receiptId: receipt.id,
+          startDate: new Date(startDate),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        });
+
+        const baseUrl = process.env.CLIENT_URL || 'https://roofhr.up.railway.app';
+        equipmentSigningUrl = `${baseUrl}/sign-equipment/${signingToken}`;
+        console.log(`[Direct Hire] Equipment receipt created for ${firstName} ${lastName}`);
+      } catch (receiptErr) {
+        console.error('Failed to create equipment receipt:', receiptErr);
       }
     }
 
     // Send welcome email with credentials (from logged-in user's email)
     const emailService = new EmailService();
     await emailService.initialize();
-    const emailSuccess = await emailService.sendWelcomeEmail(newEmployee, tempPassword, user.email);
+    const emailSuccess = await emailService.sendWelcomeEmail(
+      newEmployee,
+      tempPassword,
+      user.email,
+      {
+        startDate: new Date(startDate),
+        equipmentSigningUrl,
+        includeEquipmentChecklist: true
+      }
+    );
 
     // Create onboarding tasks
     const onboardingTasks = [
@@ -3870,7 +4000,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
         title: 'Tools & Equipment Assignment',
         description: 'Receive and acknowledge assigned tools and equipment',
         dueDate: new Date(startDate),
-        status: toolsAssigned > 0 ? 'COMPLETED' : 'PENDING'
+        status: receiptItems.length > 0 ? 'COMPLETED' : 'PENDING'
       },
       {
         employeeId: newEmployee.id,
@@ -3996,7 +4126,7 @@ Company Representative                  Date
       onboarding: {
         emailSent: emailSuccess,
         tasksCreated: onboardingTasks.length,
-        toolsAssigned: toolsAssigned,
+        toolsAssigned: receiptItems.reduce((sum, item) => sum + item.quantity, 0),
         welcomePackageAssigned: welcomePackageAssigned,
         ptoBalanceCreated: true,
         googleDriveFolderCreated: googleDriveFolderCreated,
@@ -4664,6 +4794,38 @@ export function registerRoutes(app: express.Application) {
         return res.status(400).json({ error: 'Employee name and email are required' });
       }
 
+      const baseUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
+      const existingChecklist = await db
+        .select()
+        .from(equipmentChecklists)
+        .where(and(
+          eq(equipmentChecklists.status, 'PENDING'),
+          eq(equipmentChecklists.type, type),
+          employeeId
+            ? or(
+                eq(equipmentChecklists.employeeId, employeeId),
+                eq(equipmentChecklists.employeeEmail, employeeEmail)
+              )
+            : eq(equipmentChecklists.employeeEmail, employeeEmail)
+        ))
+        .limit(1);
+
+      if (existingChecklist[0]) {
+        const checklist = existingChecklist[0];
+        const formUrl = `${baseUrl}/equipment-checklist/${checklist.accessToken}`;
+        return res.json({
+          success: true,
+          checklist: {
+            id: checklist.id,
+            employeeName: checklist.employeeName,
+            type: checklist.type,
+            status: checklist.status,
+          },
+          formUrl,
+          message: 'Pending checklist already exists'
+        });
+      }
+
       // Generate unique token
       const accessToken = uuidv4();
 
@@ -4677,7 +4839,6 @@ export function registerRoutes(app: express.Application) {
       });
 
       // Generate form URL
-      const baseUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
       const formUrl = `${baseUrl}/equipment-checklist/${accessToken}`;
 
       res.json({
