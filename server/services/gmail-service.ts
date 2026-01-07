@@ -75,17 +75,22 @@ class GmailService {
       const hasHtml = !!options.html;
       const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-      const headers = [
+      const headers: string[] = [
         `From: ${fromEmail}`,
         `To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`,
-        options.cc ? `Cc: ${Array.isArray(options.cc) ? options.cc.join(', ') : options.cc}` : '',
-        options.bcc ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}` : '',
+        `Subject: ${utf8Subject}`,
+        'MIME-Version: 1.0',
         hasText && hasHtml
           ? `Content-Type: multipart/alternative; boundary="${boundary}"`
           : `Content-Type: ${hasHtml ? 'text/html' : 'text/plain'}; charset=utf-8`,
-        'MIME-Version: 1.0',
-        `Subject: ${utf8Subject}`,
-      ].filter(Boolean);
+      ];
+
+      if (options.cc) {
+        headers.push(`Cc: ${Array.isArray(options.cc) ? options.cc.join(', ') : options.cc}`);
+      }
+      if (options.bcc) {
+        headers.push(`Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}`);
+      }
 
       const messageParts = [...headers, ''];
 
@@ -109,7 +114,7 @@ class GmailService {
         messageParts.push(options.html || options.text || '');
       }
 
-      const message = messageParts.filter(Boolean).join('\r\n');
+      const message = messageParts.join('\r\n');
 
       const encodedMessage = Buffer.from(message)
         .toString('base64')
