@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { interviews, candidates, users } from '@shared/schema';
 import { gmailService } from '../services/gmail-service';
+import { ALL_SOURCER_EMAILS } from '../../shared/constants/roles';
 import { logger } from '../middleware/logger';
 import { eq, and, lt } from 'drizzle-orm';
 import { differenceInDays } from 'date-fns';
@@ -68,7 +69,7 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
       logger.warn('[Interview Overdue Job] Gmail not available, will update statuses but skip emails:', gmailError);
     }
 
-    for (const record of overdueInterviews) {
+  for (const record of overdueInterviews) {
       try {
         const interview = record.interview;
         const candidate = record.candidate;
@@ -85,6 +86,16 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
           ? `${interviewer.firstName} ${interviewer.lastName}`
           : interview.customInterviewerName || 'Unknown Interviewer';
         const interviewerEmail = interviewer?.email;
+        const sourcerCcList = Array.from(new Set([
+          'careers@theroofdocs.com',
+          ...ALL_SOURCER_EMAILS,
+        ].map((email) => email.toLowerCase()).filter(Boolean)));
+
+        const buildCcList = (extraEmail?: string) => {
+          const emails = new Set(sourcerCcList);
+          if (extraEmail) emails.add(extraEmail.toLowerCase());
+          return Array.from(emails);
+        };
 
         logger.info(
           `[Interview Overdue Job] Processing: ${candidateName} - ${daysOverdue} days overdue`
@@ -119,7 +130,7 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
           if (gmailReady) {
             await gmailService.sendEmail({
             to: 'careers@theroofdocs.com',
-            cc: interviewerEmail ? [interviewerEmail, 'support@theroofdocs.com'] : ['support@theroofdocs.com'],
+            cc: buildCcList(interviewerEmail),
             subject: `Interview Auto-Closed: ${candidateName} - No Feedback After 7 Days`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -171,7 +182,7 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
           if (gmailReady) {
             await gmailService.sendEmail({
             to: 'careers@theroofdocs.com',
-            cc: interviewerEmail ? [interviewerEmail, 'support@theroofdocs.com', 'info@theroofdocs.com'] : ['support@theroofdocs.com', 'info@theroofdocs.com'],
+            cc: buildCcList(interviewerEmail),
             subject: `URGENT: Interview Feedback Overdue - ${candidateName} (${daysOverdue} Days)`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -230,7 +241,7 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
 
           await gmailService.sendEmail({
             to: interviewerEmail,
-            cc: ['careers@theroofdocs.com'],
+            cc: sourcerCcList,
             subject: `Interview Feedback Needed: ${candidateName}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
