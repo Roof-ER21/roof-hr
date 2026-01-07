@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/queryClient';
 import { AppLayout } from '@/components/layout/app-layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { ADMIN_ROLES, MANAGER_ROLES, ONBOARDING_ADMIN_EMAILS } from '@shared/constants/roles';
+import { ADMIN_ROLES, MANAGER_ROLES, ONBOARDING_ADMIN_EMAILS, canAccessFacilities } from '@shared/constants/roles';
 import Dashboard from '@/pages/dashboard';
 import EnhancedEmployees from '@/pages/enhanced-employees';
 import PTO from '@/pages/pto';
@@ -53,6 +53,7 @@ import '@/lib/api-interceptor';
 
 function AuthenticatedRoutes() {
   const { user, isLoading, isInitialized } = useAuth();
+  const facilitiesAccess = canAccessFacilities(user);
   
   if (!isInitialized || isLoading) {
     return (
@@ -193,11 +194,9 @@ function AuthenticatedRoutes() {
 
         <Route path="/google-integration" element={<Navigate to="/settings?tab=google" replace />} />
 
-        {/* Attendance: Admin only */}
+        {/* Attendance: Admin + Facilities access */}
         <Route path="/attendance" element={
-          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
-            <AttendanceDashboard />
-          </ProtectedRoute>
+          facilitiesAccess ? <AttendanceDashboard /> : <Navigate to="/my-portal" replace />
         } />
         <Route path="/attendance/admin" element={
           <ProtectedRoute requiredRoles={ADMIN_ROLES}>
@@ -219,11 +218,9 @@ function AuthenticatedRoutes() {
           </ProtectedRoute>
         } />
 
-        {/* Meeting Rooms: Admin only */}
+        {/* Meeting Rooms: Admin + Facilities access */}
         <Route path="/meeting-rooms" element={
-          <ProtectedRoute requiredRoles={ADMIN_ROLES}>
-            <MeetingRooms />
-          </ProtectedRoute>
+          facilitiesAccess ? <MeetingRooms /> : <Navigate to="/my-portal" replace />
         } />
 
         {/* Onboarding Templates: Specific emails only */}

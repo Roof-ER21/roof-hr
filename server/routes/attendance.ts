@@ -3,7 +3,8 @@ import { storage } from '../storage';
 import { insertAttendanceSessionSchema, insertAttendanceCheckInSchema, type User } from '../../shared/schema';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { requireAuth, requireManager } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
+import { canAccessFacilities } from '../../shared/constants/roles';
 // @ts-ignore - json2csv doesn't have type definitions
 import { parse } from 'json2csv';
 import { AttendanceGoogleSync } from '../services/attendance-google-sync';
@@ -21,6 +22,16 @@ const router = Router();
 
 let attendanceGoogleSync: AttendanceGoogleSync | null = null;
 
+function requireFacilitiesAccess(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!canAccessFacilities(req.user)) {
+    return res.status(403).json({ error: 'Facilities access required' });
+  }
+  next();
+}
+
 // Initialize Google sync if available
 export function initializeAttendanceGoogleSync(googleSync: any) {
   if (googleSync) {
@@ -30,7 +41,7 @@ export function initializeAttendanceGoogleSync(googleSync: any) {
 }
 
 // Create a new attendance session (Manager only)
-router.post('/sessions', requireManager, async (req, res) => {
+router.post('/sessions', requireFacilitiesAccess, async (req, res) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -92,7 +103,7 @@ router.get('/sessions/:id', requireAuth, async (req, res) => {
 });
 
 // Get all sessions (Manager only)
-router.get('/sessions', requireManager, async (req, res) => {
+router.get('/sessions', requireFacilitiesAccess, async (req, res) => {
   try {
     const sessions = req.query.active === 'true' 
       ? await storage.getActiveAttendanceSessions()
@@ -116,7 +127,7 @@ router.get('/sessions', requireManager, async (req, res) => {
 });
 
 // Update session (Manager only) 
-router.patch('/sessions/:id', requireManager, async (req, res) => {
+router.patch('/sessions/:id', requireFacilitiesAccess, async (req, res) => {
   try {
     const session = await storage.updateAttendanceSession(req.params.id, req.body);
     res.json(session);
@@ -127,7 +138,7 @@ router.patch('/sessions/:id', requireManager, async (req, res) => {
 });
 
 // Update session notes (Manager only)
-router.patch('/sessions/:id/notes', requireManager, async (req, res) => {
+router.patch('/sessions/:id/notes', requireFacilitiesAccess, async (req, res) => {
   try {
     const { notes } = req.body;
     const session = await storage.updateAttendanceSession(req.params.id, { notes });
@@ -146,7 +157,7 @@ router.patch('/sessions/:id/notes', requireManager, async (req, res) => {
 });
 
 // Rotate session token (Manager only)
-router.post('/sessions/:id/rotate-token', requireManager, async (req, res) => {
+router.post('/sessions/:id/rotate-token', requireFacilitiesAccess, async (req, res) => {
   try {
     const session = await storage.rotateSessionToken(req.params.id);
     const proto = req.get('x-forwarded-proto') || req.protocol;
@@ -161,7 +172,7 @@ router.post('/sessions/:id/rotate-token', requireManager, async (req, res) => {
 });
 
 // Close session (Manager only)
-router.post('/sessions/:id/close', requireManager, async (req, res) => {
+router.post('/sessions/:id/close', requireFacilitiesAccess, async (req, res) => {
   try {
     const session = await storage.closeAttendanceSession(req.params.id);
     
@@ -288,7 +299,7 @@ router.post('/sessions/:id/check-in', async (req, res) => {
 });
 
 // Export session attendance as CSV (Manager only)
-router.get('/sessions/:id/export.csv', requireManager, async (req, res) => {
+router.get('/sessions/:id/export.csv', requireFacilitiesAccess, async (req, res) => {
   try {
     const session = await storage.getAttendanceSessionById(req.params.id);
     if (!session) {
@@ -321,7 +332,7 @@ router.get('/sessions/:id/export.csv', requireManager, async (req, res) => {
 });
 
 // Get attendance analytics (Manager only)
-router.get('/analytics', requireManager, async (req, res) => {
+router.get('/analytics', requireFacilitiesAccess, async (req, res) => {
   try {
     const { from, to, location } = req.query;
     

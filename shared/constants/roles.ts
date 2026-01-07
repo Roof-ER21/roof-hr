@@ -415,12 +415,11 @@ export const FACILITIES_ACCESS_EMAILS = [
 
 /**
  * Check if user has access to Facilities pages
- * Admins and managers get access by role, others need to be in FACILITIES_ACCESS_EMAILS
+ * Admins get access by role, others need to be in FACILITIES_ACCESS_EMAILS
  */
 export function canAccessFacilities(user: { role?: string; email?: string } | null): boolean {
   if (!user) return false;
   if (isAdmin(user)) return true;
-  if (isManager(user.role)) return true;
   if (user.email && FACILITIES_ACCESS_EMAILS.includes(user.email.toLowerCase())) return true;
   return false;
 }

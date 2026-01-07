@@ -9,7 +9,8 @@ import {
   type User
 } from '@shared/schema';
 import { eq, and, gte, lte, or } from 'drizzle-orm';
-import { requireAuth, requireManager } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
+import { canAccessFacilities } from '@shared/constants/roles';
 
 // Extend Express Request to include user
 declare global {
@@ -21,6 +22,16 @@ declare global {
 }
 
 const router = Router();
+
+function requireFacilitiesAccess(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!canAccessFacilities(req.user)) {
+    return res.status(403).json({ error: 'Facilities access required' });
+  }
+  next();
+}
 
 // GET /api/meeting-rooms - List all rooms (with optional filters)
 router.get('/', requireAuth, async (req, res) => {
@@ -78,7 +89,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // POST /api/meeting-rooms - Create new room (manager only)
-router.post('/', requireManager, async (req, res) => {
+router.post('/', requireFacilitiesAccess, async (req, res) => {
   try {
     const validatedData = insertMeetingRoomsSchema.parse(req.body);
 
@@ -101,7 +112,7 @@ router.post('/', requireManager, async (req, res) => {
 });
 
 // PUT /api/meeting-rooms/:id - Update room (manager only)
-router.put('/:id', requireManager, async (req, res) => {
+router.put('/:id', requireFacilitiesAccess, async (req, res) => {
   try {
     const validatedData = insertMeetingRoomsSchema.partial().parse(req.body);
 
@@ -129,7 +140,7 @@ router.put('/:id', requireManager, async (req, res) => {
 });
 
 // DELETE /api/meeting-rooms/:id - Deactivate room (manager only)
-router.delete('/:id', requireManager, async (req, res) => {
+router.delete('/:id', requireFacilitiesAccess, async (req, res) => {
   try {
     const updatedRoom = await db
       .update(meetingRooms)
