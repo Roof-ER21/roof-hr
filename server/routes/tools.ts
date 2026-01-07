@@ -23,7 +23,7 @@ import {
   insertBundleAssignmentSchema,
   insertBundleAssignmentItemSchema
 } from '@shared/schema';
-import { eq, and, desc, or, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, or, sql, inArray, ne } from 'drizzle-orm';
 import sgMail from '@sendgrid/mail';
 import { googleSheetsService } from '../services/google-sheets-service';
 import { googleDriveService } from '../services/google-drive-service';
@@ -1560,6 +1560,23 @@ router.post('/bundles/assign', requireAuth, checkRole(['ADMIN', 'MANAGER', 'TRUE
   try {
     const user = req.user!;
     const { bundleId, employeeId, itemSelections } = assignBundleSchema.parse(req.body);
+
+    const [existingAssignment] = await db
+      .select()
+      .from(bundleAssignments)
+      .where(and(
+        eq(bundleAssignments.bundleId, bundleId),
+        eq(bundleAssignments.employeeId, employeeId),
+        ne(bundleAssignments.status, 'CANCELLED')
+      ))
+      .limit(1);
+
+    if (existingAssignment) {
+      return res.status(409).json({
+        error: 'Bundle already assigned to this employee',
+        assignmentId: existingAssignment.id
+      });
+    }
 
     // Validate employee exists (before transaction)
     const [employee] = await db
