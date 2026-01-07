@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,7 @@ function PTO() {
   const [denyNotes, setDenyNotes] = useState('');
   // Status filter for PTO requests
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('ALL');
+  const [timeFilter, setTimeFilter] = useState<'ALL' | 'PAST'>('ALL');
   // Admin PTO creation dialog
   const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
@@ -82,9 +83,13 @@ function PTO() {
     'oliver.brown@theroofdocs.com'
   ];
   const canApprovePto = user?.email ? PTO_APPROVER_EMAILS.includes(user.email) : false;
+  const showAnalytics = canApprovePto;
 
   // Check if user is a manager/admin (to show full list vs personal list)
   const isManager = user?.role && ['ADMIN', 'SYSTEM_ADMIN', 'SUPER_ADMIN', 'REGIONAL_MANAGER', 'MANAGER'].includes(user.role);
+  const tabsGridClass = isAdmin
+    ? (showAnalytics ? 'grid-cols-5' : 'grid-cols-4')
+    : (showAnalytics ? 'grid-cols-2' : 'grid-cols-1');
 
   const { data: ptoRequests, isLoading } = useQuery({
     queryKey: ['/api/pto'],
@@ -566,6 +571,99 @@ function PTO() {
     }
   };
 
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+
+  const filteredPtoRequests = (ptoRequests || []).filter((request: any) => {
+    if (statusFilter !== 'ALL' && request.status !== statusFilter) return false;
+    if (timeFilter === 'PAST') {
+      const endDate = parseLocalDate(request.endDate);
+      return request.status === 'APPROVED' && endDate < today;
+    }
+    return true;
+  });
+
+  const analytics = useMemo(() => {
+    const approvedPast = (ptoRequests || []).filter((request: any) => {
+      if (request.status !== 'APPROVED') return false;
+      const endDate = parseLocalDate(request.endDate);
+      return endDate < today;
+    });
+
+    const currentYear = today.getFullYear();
+    const approvedPastThisYear = approvedPast.filter((request: any) => {
+      return parseLocalDate(request.startDate).getFullYear() === currentYear;
+    });
+
+    const employeeUsage: Record<string, any> = {};
+    const departmentUsage: Record<string, any> = {};
+    let totalUsedDays = 0;
+
+    for (const request of approvedPastThisYear) {
+      const employee = getUserById(request.employeeId);
+      const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown';
+      const department = employee?.department || 'Unassigned';
+      const type = (request.type || 'VACATION') as 'VACATION' | 'SICK' | 'PERSONAL';
+      const days = Number(request.days || 0);
+
+      totalUsedDays += days;
+
+      if (!employeeUsage[request.employeeId]) {
+        employeeUsage[request.employeeId] = {
+          employeeId: request.employeeId,
+          name: employeeName,
+          department,
+          vacationDays: 0,
+          sickDays: 0,
+          personalDays: 0,
+          totalDays: 0
+        };
+      }
+      if (type === 'VACATION') employeeUsage[request.employeeId].vacationDays += days;
+      if (type === 'SICK') employeeUsage[request.employeeId].sickDays += days;
+      if (type === 'PERSONAL') employeeUsage[request.employeeId].personalDays += days;
+      employeeUsage[request.employeeId].totalDays += days;
+
+      if (!departmentUsage[department]) {
+        departmentUsage[department] = {
+          department,
+          vacationDays: 0,
+          sickDays: 0,
+          personalDays: 0,
+          totalDays: 0,
+          employeeCount: 0
+        };
+      }
+      if (type === 'VACATION') departmentUsage[department].vacationDays += days;
+      if (type === 'SICK') departmentUsage[department].sickDays += days;
+      if (type === 'PERSONAL') departmentUsage[department].personalDays += days;
+      departmentUsage[department].totalDays += days;
+    }
+
+    const employeesWithUsage = new Set(Object.keys(employeeUsage));
+    const departmentsWithUsage = Object.keys(departmentUsage);
+
+    for (const department of departmentsWithUsage) {
+      const employeesInDepartment = Object.values(employeeUsage).filter((employee: any) => employee.department === department);
+      departmentUsage[department].employeeCount = employeesInDepartment.length;
+    }
+
+    const employeeRows = Object.values(employeeUsage).sort((a: any, b: any) => b.totalDays - a.totalDays);
+    const departmentRows = Object.values(departmentUsage).sort((a: any, b: any) => b.totalDays - a.totalDays);
+
+    return {
+      year: currentYear,
+      totalUsedDays,
+      employeeCount: employeesWithUsage.size,
+      departmentCount: departmentsWithUsage.length,
+      employeeRows,
+      departmentRows
+    };
+  }, [ptoRequests, today, users]);
+
   // Helper function to calculate effective PTO for an employee
   const getEffectivePTO = (employee: any) => {
     // Sales/1099 contractors get 0 PTO unless manually overridden
@@ -650,8 +748,9 @@ function PTO() {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-1'}`}>
+        <TabsList className={`grid w-full ${tabsGridClass}`}>
           <TabsTrigger value="requests">PTO Requests</TabsTrigger>
+          {showAnalytics && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
           {isAdmin && (
             <>
               <TabsTrigger value="company" disabled={!canEditPolicies}>
@@ -1016,14 +1115,20 @@ function PTO() {
               <Button
                 size="sm"
                 variant={statusFilter === 'ALL' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('ALL')}
+                onClick={() => {
+                  setStatusFilter('ALL');
+                  setTimeFilter('ALL');
+                }}
               >
                 All
               </Button>
               <Button
                 size="sm"
                 variant={statusFilter === 'PENDING' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('PENDING')}
+                onClick={() => {
+                  setStatusFilter('PENDING');
+                  setTimeFilter('ALL');
+                }}
                 className={statusFilter === 'PENDING' ? '' : 'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}
               >
                 Pending
@@ -1031,7 +1136,10 @@ function PTO() {
               <Button
                 size="sm"
                 variant={statusFilter === 'APPROVED' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('APPROVED')}
+                onClick={() => {
+                  setStatusFilter('APPROVED');
+                  setTimeFilter('ALL');
+                }}
                 className={statusFilter === 'APPROVED' ? 'bg-green-600 hover:bg-green-700' : 'border-green-300 text-green-700 hover:bg-green-50'}
               >
                 Approved
@@ -1039,10 +1147,24 @@ function PTO() {
               <Button
                 size="sm"
                 variant={statusFilter === 'DENIED' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('DENIED')}
+                onClick={() => {
+                  setStatusFilter('DENIED');
+                  setTimeFilter('ALL');
+                }}
                 className={statusFilter === 'DENIED' ? 'bg-red-600 hover:bg-red-700' : 'border-red-300 text-red-700 hover:bg-red-50'}
               >
                 Denied
+              </Button>
+              <Button
+                size="sm"
+                variant={timeFilter === 'PAST' ? 'default' : 'outline'}
+                onClick={() => {
+                  setStatusFilter('APPROVED');
+                  setTimeFilter('PAST');
+                }}
+                className={timeFilter === 'PAST' ? 'bg-secondary-900 hover:bg-secondary-800' : ''}
+              >
+                Past Approved
               </Button>
             </div>
           </div>
@@ -1062,9 +1184,8 @@ function PTO() {
                 </tr>
               </thead>
               <tbody>
-                {ptoRequests
-                  ?.filter((request: any) => statusFilter === 'ALL' || request.status === statusFilter)
-                  .map((request: any) => {
+                {filteredPtoRequests.length > 0 ? (
+                  filteredPtoRequests.map((request: any) => {
                   const employee = getUserById(request.employeeId);
                   return (
                     <tr key={request.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -1134,18 +1255,133 @@ function PTO() {
                       </td>
                     </tr>
                   );
-                })}
+                })
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                      No PTO requests match these filters.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
 
-      {/* PTO Calendar */}
-      <div className="mt-8">
-        <PtoCalendar />
+    {/* PTO Calendar */}
+    <div className="mt-8">
+      <PtoCalendar />
+    </div>
+  </TabsContent>
+
+    {/* PTO Analytics Tab */}
+    {showAnalytics && (
+    <TabsContent value="analytics" className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Used PTO Analytics ({analytics.year})</CardTitle>
+          <CardDescription>
+            Approved PTO that has already been taken this year (past end dates).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Total Used Days</div>
+              <div className="text-2xl font-semibold">{analytics.totalUsedDays}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Employees With Usage</div>
+              <div className="text-2xl font-semibold">{analytics.employeeCount}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Departments</div>
+              <div className="text-2xl font-semibold">{analytics.departmentCount}</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>By Department</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {analytics.departmentRows.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No past approved PTO found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 pr-3">Department</th>
+                      <th className="text-left py-2 pr-3">Employees</th>
+                      <th className="text-left py-2 pr-3">Vacation</th>
+                      <th className="text-left py-2 pr-3">Sick</th>
+                      <th className="text-left py-2 pr-3">Personal</th>
+                      <th className="text-left py-2 pr-3">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.departmentRows.map((row: any) => (
+                      <tr key={row.department} className="border-b">
+                        <td className="py-2 pr-3 font-medium">{row.department}</td>
+                        <td className="py-2 pr-3">{row.employeeCount}</td>
+                        <td className="py-2 pr-3">{row.vacationDays}</td>
+                        <td className="py-2 pr-3">{row.sickDays}</td>
+                        <td className="py-2 pr-3">{row.personalDays}</td>
+                        <td className="py-2 pr-3 font-semibold">{row.totalDays}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>By Employee</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {analytics.employeeRows.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No past approved PTO found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 pr-3">Employee</th>
+                      <th className="text-left py-2 pr-3">Department</th>
+                      <th className="text-left py-2 pr-3">Vacation</th>
+                      <th className="text-left py-2 pr-3">Sick</th>
+                      <th className="text-left py-2 pr-3">Personal</th>
+                      <th className="text-left py-2 pr-3">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.employeeRows.map((row: any) => (
+                      <tr key={row.employeeId} className="border-b">
+                        <td className="py-2 pr-3 font-medium">{row.name}</td>
+                        <td className="py-2 pr-3">{row.department}</td>
+                        <td className="py-2 pr-3">{row.vacationDays}</td>
+                        <td className="py-2 pr-3">{row.sickDays}</td>
+                        <td className="py-2 pr-3">{row.personalDays}</td>
+                        <td className="py-2 pr-3 font-semibold">{row.totalDays}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </TabsContent>
+    )}
 
     {/* Company Policy Tab */}
     <TabsContent value="company" className="space-y-4">
