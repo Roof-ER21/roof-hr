@@ -1770,7 +1770,7 @@ export default function EnhancedRecruiting() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="container mx-auto p-6 space-y-6">
+      <div className="mx-auto w-full max-w-none px-4 py-6 lg:px-6 2xl:px-10 space-y-6">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold">Recruitment Pipeline</h1>
