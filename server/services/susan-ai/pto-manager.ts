@@ -684,21 +684,21 @@ export class SusanPTOManager {
       console.log(`[SUSAN-PTO] Created PTO request ${requestId} for ${days} days`);
 
       // Get employee info for notification
-      const [employee] = await db.select()
+      const [employeeRecord] = await db.select()
         .from(users)
         .where(eq(users.id, data.employeeId))
         .limit(1);
 
       // Send confirmation email
-      if (employee) {
+      if (employeeRecord) {
         try {
           await this.emailService.initialize();
           await this.emailService.sendEmail({
-            to: employee.email,
+            to: employeeRecord.email,
             subject: 'PTO Request Submitted',
             html: `
               <h2>PTO Request Submitted</h2>
-              <p>Dear ${employee.firstName},</p>
+              <p>Dear ${employeeRecord.firstName},</p>
               <p>Your PTO request has been submitted and is pending approval.</p>
               <h3>Request Details:</h3>
               <ul>
