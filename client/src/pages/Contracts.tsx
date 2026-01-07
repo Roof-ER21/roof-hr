@@ -123,7 +123,8 @@ export default function Contracts() {
       const data = await response.json();
       console.log('Templates fetched:', data);
       return data;
-    }
+    },
+    enabled: isManager
   });
 
   const { data: contracts = [], isLoading: contractsLoading } = useQuery({
@@ -154,7 +155,8 @@ export default function Contracts() {
         throw new Error('Failed to fetch users');
       }
       return response.json();
-    }
+    },
+    enabled: isManager
   });
 
   const { data: candidates = [] } = useQuery({
@@ -167,7 +169,8 @@ export default function Contracts() {
         throw new Error('Failed to fetch candidates');
       }
       return response.json();
-    }
+    },
+    enabled: isManager
   });
 
   const { data: territories = [] } = useQuery({
@@ -180,7 +183,8 @@ export default function Contracts() {
         throw new Error('Failed to fetch territories');
       }
       return response.json();
-    }
+    },
+    enabled: isManager
   });
 
   const createTemplateMutation = useMutation({

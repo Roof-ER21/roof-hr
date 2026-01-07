@@ -64,7 +64,7 @@ const AUTO_FILLED_VARIABLES = [
 // Contract Templates
 
 // Get all contract templates
-router.get('/api/contract-templates', requireAuth, async (req: any, res) => {
+router.get('/api/contract-templates', requireAuth, requireManager, async (req: any, res) => {
   try {
     const user = req.user!;
     // For now, bypass auth to verify templates are working
