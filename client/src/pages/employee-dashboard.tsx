@@ -47,7 +47,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { employeeGetsPto } from '@shared/constants/roles';
+import { SUPER_ADMIN_EMAIL, employeeGetsPto } from '@shared/constants/roles';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,6 +112,14 @@ function EmployeeDashboard() {
 
   // Check if user can conduct interviews (Admins and Managers)
   const canConductInterviews = user?.role && ['ADMIN', 'MANAGER', 'SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'TRUE_ADMIN', 'TERRITORY_SALES_MANAGER'].includes(user.role);
+  const showOrgChart = user?.email === SUPER_ADMIN_EMAIL;
+
+  const tabsCount = 4 + (userGetsPto ? 1 : 0) + (canConductInterviews ? 1 : 0) + (showOrgChart ? 1 : 0);
+  const tabsGridClass =
+    tabsCount === 7 ? 'grid-cols-7' :
+    tabsCount === 6 ? 'grid-cols-6' :
+    tabsCount === 5 ? 'grid-cols-5' :
+    'grid-cols-4';
 
   // Event CRUD modal state
   const [showEventModal, setShowEventModal] = useState(false);
@@ -580,14 +588,14 @@ function EmployeeDashboard() {
         {/* Center Column - Activity & PTO */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs defaultValue="calendar" className="w-full">
-            <TabsList className={`grid w-full ${userGetsPto ? 'grid-cols-6' : 'grid-cols-5'}`}>
+            <TabsList className={`grid w-full ${tabsGridClass}`}>
               <TabsTrigger value="calendar">My Calendar</TabsTrigger>
               {userGetsPto && <TabsTrigger value="pto">My PTO</TabsTrigger>}
               <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
               <TabsTrigger value="pending">Pending Actions</TabsTrigger>
               <TabsTrigger value="activity">Recent Activity</TabsTrigger>
               {canConductInterviews && <TabsTrigger value="availability">My Availability</TabsTrigger>}
-              <TabsTrigger value="orgchart">Org Chart</TabsTrigger>
+              {showOrgChart && <TabsTrigger value="orgchart">Org Chart</TabsTrigger>}
             </TabsList>
 
             {/* Calendar Tab */}
@@ -1122,20 +1130,22 @@ function EmployeeDashboard() {
             )}
 
             {/* Org Chart Tab */}
-            <TabsContent value="orgchart" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <GitBranch className="w-5 h-5" />
-                    <CardTitle>Organization Chart</CardTitle>
-                  </div>
-                  <CardDescription>View the company structure and reporting relationships</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <OrgChart readOnly={true} />
-                </CardContent>
-              </Card>
-            </TabsContent>
+            {showOrgChart && (
+              <TabsContent value="orgchart" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <GitBranch className="w-5 h-5" />
+                      <CardTitle>Organization Chart</CardTitle>
+                    </div>
+                    <CardDescription>View the company structure and reporting relationships</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <OrgChart readOnly={true} />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
           </Tabs>
 
           {/* Team Directory Teaser - if user has team members */}

@@ -1648,9 +1648,8 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
     const halfDay = req.body.halfDay || false;
 
     if (halfDay) {
-      // For half-day requests, store as 1 day but flag it as half-day
-      // The halfDay flag will indicate it's actually 0.5 days
-      days = 1;
+      // For half-day requests, store as 0.5 days
+      days = 0.5;
     } else {
       // Calculate the number of days (inclusive)
       const diffTime = endDate.getTime() - startDate.getTime();
@@ -1669,6 +1668,98 @@ router.post('/api/pto', requireAuth, async (req: any, res) => {
         user.employmentType === 'CONTRACTOR') {
       return res.status(403).json({
         error: 'You are not eligible for PTO based on your department or employment type.'
+      });
+    }
+
+    // ========================================================================
+    // PTO BALANCE CHECK - Prevent requesting more than available
+    // ========================================================================
+    const requestTypeRaw = (req.body.type || 'VACATION').toString().toUpperCase();
+    const allowedTypes = ['VACATION', 'SICK', 'PERSONAL'] as const;
+    const requestType = allowedTypes.includes(requestTypeRaw as any)
+      ? (requestTypeRaw as typeof allowedTypes[number])
+      : null;
+
+    if (!requestType) {
+      return res.status(400).json({
+        error: 'Invalid PTO type',
+        message: 'PTO type must be VACATION, SICK, or PERSONAL.'
+      });
+    }
+
+    const individualPolicies = await storage.getAllPtoPolicies();
+    const individualPolicy = individualPolicies.find((p: any) => p.employeeId === user.id);
+    const deptSetting = user.department
+      ? await storage.getDepartmentPtoSettingByDepartment(user.department)
+      : null;
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+
+    const defaultAllocation = getPtoAllocation(user.employmentType, user.department);
+    let vacationDays = defaultAllocation.vacationDays;
+    let sickDays = defaultAllocation.sickDays;
+    let personalDays = defaultAllocation.personalDays;
+
+    if (individualPolicy) {
+      vacationDays = individualPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = individualPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = individualPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    } else if (deptSetting && !deptSetting.inheritFromCompany) {
+      vacationDays = deptSetting.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = deptSetting.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = deptSetting.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    } else if (companyPolicy) {
+      vacationDays = companyPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = companyPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = companyPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    }
+
+    const allPtoRequests = await storage.getAllPtoRequests();
+    const currentYear = new Date().getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+
+    const myRequests = allPtoRequests.filter(r => r.employeeId === user.id);
+    const approvedRequests = myRequests.filter(r =>
+      r.status === 'APPROVED' &&
+      r.startDate >= yearStart &&
+      r.startDate <= yearEnd
+    );
+    const pendingRequests = myRequests.filter(r => r.status === 'PENDING');
+
+    const usedVacation = approvedRequests
+      .filter(r => r.type === 'VACATION' || !r.type)
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedSick = approvedRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedPersonal = approvedRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+
+    const pendingVacation = pendingRequests
+      .filter(r => r.type === 'VACATION' || !r.type)
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const pendingSick = pendingRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const pendingPersonal = pendingRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+
+    const remainingVacation = Math.max(0, vacationDays - usedVacation - pendingVacation);
+    const remainingSick = Math.max(0, sickDays - usedSick - pendingSick);
+    const remainingPersonal = Math.max(0, personalDays - usedPersonal - pendingPersonal);
+
+    const remainingByType = {
+      VACATION: remainingVacation,
+      SICK: remainingSick,
+      PERSONAL: remainingPersonal
+    } as const;
+
+    if (days > remainingByType[requestType]) {
+      return res.status(400).json({
+        error: 'Insufficient PTO balance',
+        message: `You only have ${remainingByType[requestType]} ${requestType.toLowerCase()} day(s) available (including pending requests).`
       });
     }
 
