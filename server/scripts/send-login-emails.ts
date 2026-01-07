@@ -12,7 +12,7 @@ const LOGIN_RECIPIENTS = [
 ];
 
 const PRODUCTION_URL = 'https://roofhr.up.railway.app';
-const DEFAULT_PASSWORD = 'TRD2025!';
+const DEFAULT_PASSWORD = 'TRD2026!';
 
 async function sendLoginEmails() {
   console.log('🚀 Starting to send login emails...\n');

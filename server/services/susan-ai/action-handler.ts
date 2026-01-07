@@ -4231,11 +4231,11 @@ Should I proceed with scheduling this interview?`,
         // Send welcome email via the email service
         try {
           const emailService = new EmailService();
-          await emailService.sendWelcomeEmail(employee, 'Susan2025');
+          await emailService.sendWelcomeEmail(employee, 'TRD2026!');
 
           return {
             success: true,
-            message: `✅ Welcome email sent to ${employee.firstName} ${employee.lastName} (${employee.email}) with login credentials.\n\nPassword: Susan2025 (must be changed on first login)`
+            message: `✅ Welcome email sent to ${employee.firstName} ${employee.lastName} (${employee.email}) with login credentials.\n\nPassword: TRD2026! (must be changed on first login)`
           };
         } catch (emailError) {
           return {

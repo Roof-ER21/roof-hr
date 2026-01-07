@@ -17,7 +17,7 @@ async function testInterviewScheduling() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: 'ahmed.mahmoud@theroofdocs.com',
-      password: process.env.ADMIN_TEMP_PASSWORD || 'TRD2025!'
+      password: process.env.ADMIN_TEMP_PASSWORD || 'TRD2026!'
     })
   });
 

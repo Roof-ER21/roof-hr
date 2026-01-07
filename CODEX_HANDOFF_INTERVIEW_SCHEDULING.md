@@ -7,7 +7,7 @@
 
 ## Production
 - **URL**: https://roofhr.up.railway.app
-- **Login**: ahmed.mahmoud@theroofdocs.com / TRD2025!
+- **Login**: ahmed.mahmoud@theroofdocs.com / TRD2026!
 - **Deploy**: Auto-deploys on push to `main` branch
 
 ---
@@ -142,7 +142,7 @@ git add -A && git commit -m "fix: description" && git push origin main
 
 ### Browser Testing:
 1. Go to https://roofhr.up.railway.app/recruiting
-2. Login as ahmed.mahmoud@theroofdocs.com / TRD2025!
+2. Login as ahmed.mahmoud@theroofdocs.com / TRD2026!
 3. Click "Schedule Interview" on any candidate
 4. Select date, time, interviewer
 5. Watch console for `[CONFLICT CHECK]` logs

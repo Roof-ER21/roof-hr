@@ -1548,7 +1548,7 @@ router.post('/api/users/import', requireAuth, requireManager, async (req, res) =
     for (const row of data) {
       try {
         // Generate temporary password
-        const tempPassword = `Welcome${new Date().getFullYear()}!`;
+        const tempPassword = 'TRD2026!';
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
         
         await storage.createUser({
@@ -1624,10 +1624,7 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
         }
 
         // Custom password handling
-        let tempPassword = 'Susan2025';
-        if (emp.email.toLowerCase() === 'ahmed.mahmoud@theroofdocs.com') {
-          tempPassword = 'Roofer21!';
-        }
+        const tempPassword = 'TRD2026!';
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         // Map role from position
@@ -1755,7 +1752,7 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
 // Send welcome emails to selected employees
 router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async (req, res) => {
   try {
-    const { employeeIds, password = 'Susan2025' } = req.body;
+    const { employeeIds, password = 'TRD2026!' } = req.body;
 
     if (!employeeIds || (Array.isArray(employeeIds) && employeeIds.length === 0)) {
       return res.status(400).json({ error: 'No employees specified' });
@@ -2722,7 +2719,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
 
           if (!existingUser) {
             // Create employee profile from candidate data
-            const tempPassword = `Welcome${new Date().getFullYear()}!`;
+            const tempPassword = 'TRD2026!';
             const hashedPassword = await import('bcrypt').then(bcrypt => bcrypt.hash(tempPassword, 10));
 
             const newUser = await storage.createUser({
@@ -3094,7 +3091,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     }
 
     // Create employee account
-    const tempPassword = `Welcome${new Date().getFullYear()}!`;
+    const tempPassword = 'TRD2026!';
     const bcrypt = await import('bcrypt');
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
@@ -3786,7 +3783,7 @@ router.post('/api/employees/direct-hire', requireAuth, requireManager, async (re
     }
 
     // Generate temporary password (standard for all new hires)
-    const tempPassword = 'Welcome2024!';
+    const tempPassword = 'TRD2026!';
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
     
     // Create employee account with shirt size
@@ -4745,7 +4742,7 @@ export function registerRoutes(app: express.Application) {
       const user = req.user!;
       const success = await emailService.sendWelcomeEmail(
         testUser,
-        'TRD2025!', // Placeholder password since this is a test
+        'TRD2026!', // Placeholder password since this is a test
         user.email, // From user email
         {
           startDate: parsedStartDate,

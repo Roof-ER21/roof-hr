@@ -10,7 +10,7 @@ The ROOF-ER HR Management System is now live and ready for use! Your account has
 
 🔗 **System URL**: https://[DEPLOYMENT-URL].replit.app
 📧 **Username**: ahmed.mahmoud@theroofdocs.com
-🔑 **Temporary Password**: Welcome2025!Ahmed
+🔑 **Temporary Password**: TRD2026!
 
 **Important Security Notes:**
 - You will be required to change your password on first login
@@ -45,7 +45,7 @@ The ROOF-ER HR Management System is now live and ready for use! Your account has
 
 🔗 **System URL**: https://[DEPLOYMENT-URL].replit.app
 📧 **Username**: ford.barsi@theroofdocs.com
-🔑 **Temporary Password**: Welcome2025!Ford
+🔑 **Temporary Password**: TRD2026!
 
 **Important Security Notes:**
 - You will be required to change your password on first login
@@ -80,7 +80,7 @@ The ROOF-ER HR Management System is now live and ready for use! Your account has
 
 🔗 **System URL**: https://[DEPLOYMENT-URL].replit.app
 📧 **Username**: support@theroofdocs.com
-🔑 **Temporary Password**: Welcome2025!Jermaine
+🔑 **Temporary Password**: TRD2026!
 
 **Important Security Notes:**
 - You will be required to change your password on first login
@@ -115,7 +115,7 @@ The ROOF-ER HR Management System is now live and ready for use! Your account has
 
 🔗 **System URL**: https://[DEPLOYMENT-URL].replit.app
 📧 **Username**: oliver.brown@theroofdocs.com
-🔑 **Temporary Password**: Welcome2025!Oliver
+🔑 **Temporary Password**: TRD2026!
 
 **Important Security Notes:**
 - You will be required to change your password on first login
@@ -150,7 +150,7 @@ The ROOF-ER HR Management System is now live and ready for use! Your account has
 
 🔗 **System URL**: https://[DEPLOYMENT-URL].replit.app
 📧 **Username**: reese.samala@theroofdocs.com
-🔑 **Temporary Password**: Welcome2025!Reese
+🔑 **Temporary Password**: TRD2026!
 
 **Important Security Notes:**
 - You will be required to change your password on first login
@@ -185,7 +185,7 @@ The ROOF-ER HR Management System is now live and ready for use! Your account has
 
 🔗 **System URL**: https://[DEPLOYMENT-URL].replit.app
 📧 **Username**: careers@theroofdocs.com
-🔑 **Temporary Password**: Welcome2025!RyanF
+🔑 **Temporary Password**: TRD2026!
 
 **Important Security Notes:**
 - You will be required to change your password on first login

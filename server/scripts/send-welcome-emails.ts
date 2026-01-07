@@ -31,7 +31,7 @@ async function sendWelcomeEmails(productionUrl: string = 'https://your-app.repli
           <p><strong>Your Login Credentials:</strong></p>
           <ul>
             <li>Email: ${recipient.email}</li>
-            <li>Temporary Password: Welcome2025!</li>
+            <li>Temporary Password: TRD2026!</li>
           </ul>
           <p><em>Please change your password after your first login.</em></p>
         `;

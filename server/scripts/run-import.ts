@@ -35,10 +35,7 @@ async function runImport() {
       }
 
       // Generate password
-      let tempPassword = 'Susan2025';
-      if (emp.email.toLowerCase() === 'ahmed.mahmoud@theroofdocs.com') {
-        tempPassword = 'Roofer21!';
-      }
+      const tempPassword = 'TRD2026!';
       const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
       // Map role

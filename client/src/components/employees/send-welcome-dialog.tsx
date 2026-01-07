@@ -48,7 +48,7 @@ export function SendWelcomeDialog({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ employeeIds, password: 'Susan2025' })
+        body: JSON.stringify({ employeeIds, password: 'TRD2026!' })
       });
 
       if (!response.ok) {
@@ -119,7 +119,7 @@ export function SendWelcomeDialog({
             Send Welcome Emails
           </DialogTitle>
           <DialogDescription>
-            Select employees to send welcome emails with their login credentials (password: Susan2025).
+            Select employees to send welcome emails with their login credentials (password: TRD2026!).
           </DialogDescription>
         </DialogHeader>
 
