@@ -65,6 +65,7 @@ function PTO() {
     const end = new Date(now.getFullYear(), 11, 31);
     return format(end, 'yyyy-MM-dd');
   });
+  const [analyticsEmployeeId, setAnalyticsEmployeeId] = useState('ALL');
   // Admin PTO creation dialog
   const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
@@ -707,6 +708,16 @@ function PTO() {
       departmentUsage[department].employeeCount = employeesInDepartment.length;
     }
 
+    const employeeMonthUsage: Record<string, { jan: number; feb: number; dec: number }> = {};
+    for (const employeeId of employeesWithUsage) {
+      const employeeRequests = approvedPastThisYear.filter((request: any) => request.employeeId === employeeId);
+      employeeMonthUsage[employeeId] = {
+        jan: countMonthUsage(employeeRequests, currentYear, 0),
+        feb: countMonthUsage(employeeRequests, currentYear, 1),
+        dec: countMonthUsage(employeeRequests, currentYear, 11),
+      };
+    }
+
     const employeeRows = Object.values(employeeUsage).sort((a: any, b: any) => b.totalDays - a.totalDays);
     const departmentRows = Object.values(departmentUsage).sort((a: any, b: any) => b.totalDays - a.totalDays);
 
@@ -720,9 +731,22 @@ function PTO() {
       departmentRows,
       janUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 0),
       febUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 1),
-      decUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 11)
+      decUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 11),
+      employeeMonthUsage
     };
   }, [ptoRequests, today, users, analyticsRangeEnd, analyticsRangeStart]);
+
+  const analyticsEmployeeOptions = analytics.employeeRows;
+  const selectedMonthUsage = useMemo(() => {
+    if (analyticsEmployeeId === 'ALL') {
+      return {
+        jan: analytics.janUsedDays,
+        feb: analytics.febUsedDays,
+        dec: analytics.decUsedDays
+      };
+    }
+    return analytics.employeeMonthUsage[analyticsEmployeeId] || { jan: 0, feb: 0, dec: 0 };
+  }, [analytics, analyticsEmployeeId]);
 
   // Helper function to calculate effective PTO for an employee
   const getEffectivePTO = (employee: any) => {
@@ -1357,7 +1381,7 @@ function PTO() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
               <Label htmlFor="analytics-start">Range Start</Label>
               <Input
@@ -1375,6 +1399,22 @@ function PTO() {
                 value={analyticsEndDate}
                 onChange={(e) => setAnalyticsEndDate(e.target.value)}
               />
+            </div>
+            <div>
+              <Label htmlFor="analytics-employee">Employee</Label>
+              <Select value={analyticsEmployeeId} onValueChange={setAnalyticsEmployeeId}>
+                <SelectTrigger id="analytics-employee">
+                  <SelectValue placeholder="All employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All employees</SelectItem>
+                  {analyticsEmployeeOptions.map((employee: any) => (
+                    <SelectItem key={employee.employeeId} value={employee.employeeId}>
+                      {employee.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-end gap-2">
               <Button
@@ -1422,6 +1462,31 @@ function PTO() {
             <div className="rounded-lg border p-3 md:col-span-3">
               <div className="text-sm text-muted-foreground">Dec Used Days</div>
               <div className="text-2xl font-semibold">{analytics.decUsedDays}</div>
+            </div>
+          </div>
+          <div className="mt-6">
+            <div className="text-sm font-medium text-muted-foreground mb-3">
+              Jan/Feb/Dec Usage ({analyticsEmployeeId === 'ALL' ? 'All employees' : 'Selected employee'})
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {(['jan', 'feb', 'dec'] as const).map((monthKey) => {
+                const value = selectedMonthUsage[monthKey];
+                const maxValue = Math.max(selectedMonthUsage.jan, selectedMonthUsage.feb, selectedMonthUsage.dec, 1);
+                const heightPercent = Math.round((value / maxValue) * 100);
+                const label = monthKey === 'jan' ? 'Jan' : monthKey === 'feb' ? 'Feb' : 'Dec';
+                return (
+                  <div key={monthKey} className="flex flex-col items-center gap-2">
+                    <div className="w-full h-24 bg-muted/30 rounded-md flex items-end overflow-hidden">
+                      <div
+                        className="w-full bg-primary/80 transition-all duration-500 ease-out"
+                        style={{ height: `${heightPercent}%` }}
+                      />
+                    </div>
+                    <div className="text-sm font-medium">{label}</div>
+                    <div className="text-xs text-muted-foreground">{value} days</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </CardContent>
