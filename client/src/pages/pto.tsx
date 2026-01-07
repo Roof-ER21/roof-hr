@@ -1464,7 +1464,7 @@ function PTO() {
               <div className="text-2xl font-semibold">{analytics.decUsedDays}</div>
             </div>
           </div>
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="text-sm font-medium text-muted-foreground mb-3">
               Jan/Feb/Dec Usage ({analyticsEmployeeId === 'ALL' ? 'All employees' : 'Selected employee'})
             </div>
@@ -1472,13 +1472,14 @@ function PTO() {
               {(['jan', 'feb', 'dec'] as const).map((monthKey) => {
                 const value = selectedMonthUsage[monthKey];
                 const maxValue = Math.max(selectedMonthUsage.jan, selectedMonthUsage.feb, selectedMonthUsage.dec, 1);
-                const heightPercent = Math.round((value / maxValue) * 100);
+                const heightPercent = value === 0 ? 6 : Math.round((value / maxValue) * 100);
                 const label = monthKey === 'jan' ? 'Jan' : monthKey === 'feb' ? 'Feb' : 'Dec';
+                const barColor = monthKey === 'jan' ? 'bg-blue-500' : monthKey === 'feb' ? 'bg-emerald-500' : 'bg-amber-500';
                 return (
                   <div key={monthKey} className="flex flex-col items-center gap-2">
-                    <div className="w-full h-24 bg-muted/30 rounded-md flex items-end overflow-hidden">
+                    <div className="w-full h-20 bg-muted/30 rounded-md flex items-end overflow-hidden shadow-inner">
                       <div
-                        className="w-full bg-primary/80 transition-all duration-500 ease-out"
+                        className={`w-full ${barColor} transition-all duration-700 ease-out ${value === 0 ? 'opacity-40' : ''}`}
                         style={{ height: `${heightPercent}%` }}
                       />
                     </div>
