@@ -3104,6 +3104,37 @@ router.patch('/api/pto/:id', requireAuth, async (req: any, res) => {
   }
 });
 
+// Final admin review confirmation - clears pending note
+router.patch('/api/pto/:id/final-review', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user!;
+    if (!isCorePtoApprover(user.email)) {
+      return res.status(403).json({ error: 'Only core approvers can complete final review' });
+    }
+
+    const currentRequest = await storage.getPtoRequestById(req.params.id);
+    if (!currentRequest) {
+      return res.status(404).json({ error: 'PTO request not found' });
+    }
+
+    if (currentRequest.status !== 'APPROVED') {
+      return res.status(400).json({ error: 'Only approved requests can be finalized' });
+    }
+
+    const cleanedNotes = (currentRequest.reviewNotes || '').replace(/\(Pending final admin review.*?\)/i, '').trim() || null;
+    const updated = await storage.updatePtoRequest(req.params.id, {
+      reviewNotes: cleanedNotes,
+      reviewedBy: user.id,
+      reviewedAt: new Date(),
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    console.error('PTO final review error:', error);
+    res.status(500).json({ error: 'Failed to finalize PTO request' });
+  }
+});
+
 // Check if current user has any candidate assignments (for sidebar visibility)
 router.get('/api/user/has-candidate-assignments', requireAuth, async (req: any, res) => {
   try {

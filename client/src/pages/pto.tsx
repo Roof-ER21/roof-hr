@@ -639,6 +639,28 @@ function PTO() {
     updatePTOMutation.mutate({ id, status: 'APPROVED' });
   };
 
+  const finalizePtoMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/pto/${id}/final-review`, {
+        method: 'PATCH'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
+      toast({
+        title: 'Final review completed',
+        description: 'PTO request has been fully approved.'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to complete final review',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const handleDeny = (id: string) => {
     setDenyingRequestId(id);
     setDenyNotes('');
@@ -1967,8 +1989,18 @@ function PTO() {
                           </div>
                         )}
                         {pendingAdminReview && (
-                          <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                            Pending final admin review (within 48 hours).
+                          <div className="text-xs text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-2">
+                            <span>Pending final admin review (within 48 hours).</span>
+                            {isCoreApprover && (
+                              <Button
+                                size="xs"
+                                variant="secondary"
+                                onClick={() => finalizePtoMutation.mutate(request.id)}
+                                disabled={finalizePtoMutation.isPending}
+                              >
+                                {finalizePtoMutation.isPending ? 'Finalizing...' : 'Confirm'}
+                              </Button>
+                            )}
                           </div>
                         )}
                       </td>
