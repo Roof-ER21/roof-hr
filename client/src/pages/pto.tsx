@@ -29,6 +29,8 @@ const ptoSchema = z.object({
   endDate: z.string().min(1, "End date is required"),
   type: z.enum(['VACATION', 'SICK', 'PERSONAL']).default('VACATION'),
   reason: z.string().min(1, "Reason is required"),
+  halfDay: z.boolean().optional().default(false),
+  halfDayPeriod: z.enum(['AM', 'PM']).optional(),
 });
 
 type PTOFormData = z.infer<typeof ptoSchema>;
@@ -39,6 +41,8 @@ const adminPtoSchema = z.object({
   endDate: z.string().min(1, "End date is required"),
   type: z.enum(['VACATION', 'SICK', 'PERSONAL']).default('VACATION'),
   reason: z.string().optional(),
+  halfDay: z.boolean().optional().default(false),
+  halfDayPeriod: z.enum(['AM', 'PM']).optional(),
 });
 
 type AdminPTOFormData = z.infer<typeof adminPtoSchema>;
@@ -229,6 +233,8 @@ function PTO() {
       endDate: '',
       type: 'VACATION',
       reason: '',
+      halfDay: false,
+      halfDayPeriod: 'AM',
     }
   });
 
@@ -239,6 +245,8 @@ function PTO() {
       endDate: '',
       type: 'VACATION',
       reason: '',
+      halfDay: false,
+      halfDayPeriod: 'AM',
     }
   });
 
@@ -251,6 +259,8 @@ function PTO() {
       endDate: '',
       type: 'VACATION',
       reason: '',
+      halfDay: false,
+      halfDayPeriod: 'AM',
     }
   });
 
@@ -365,8 +375,49 @@ function PTO() {
     return days;
   };
 
+  const halfDaySuffixRegex = /\(?\s*half[-\s]?day\s*(AM|PM)?\s*\)?/i;
+  const extractHalfDayPeriod = (reason?: string) => {
+    if (!reason) return null;
+    const match = reason.match(/\bhalf[-\s]?day\b.*\b(AM|PM)\b/i) || reason.match(/\b(AM|PM)\b\s*half[-\s]?day/i);
+    if (!match) return null;
+    const period = match[1]?.toUpperCase();
+    return period === 'AM' || period === 'PM' ? period : null;
+  };
+  const stripHalfDaySuffix = (reason?: string) => {
+    if (!reason) return '';
+    return reason.replace(halfDaySuffixRegex, '').trim();
+  };
+  const appendHalfDaySuffix = (reason: string, period: 'AM' | 'PM' | undefined) => {
+    const normalizedReason = (reason || '').trim();
+    if (halfDaySuffixRegex.test(normalizedReason)) return normalizedReason;
+    const suffix = period ? `Half-day ${period}` : 'Half-day';
+    return normalizedReason ? `${normalizedReason} (${suffix})` : suffix;
+  };
+
   const watchedStartDate = form.watch('startDate');
   const watchedEndDate = form.watch('endDate');
+  const watchedHalfDay = form.watch('halfDay');
+
+  useEffect(() => {
+    if (watchedHalfDay && watchedStartDate) {
+      if (watchedEndDate !== watchedStartDate) {
+        form.setValue('endDate', watchedStartDate);
+      }
+    }
+  }, [watchedHalfDay, watchedStartDate, watchedEndDate, form]);
+
+  const watchedEditStart = editForm.watch('startDate');
+  const watchedEditEnd = editForm.watch('endDate');
+  const watchedEditHalfDay = editForm.watch('halfDay');
+
+  useEffect(() => {
+    if (watchedEditHalfDay && watchedEditStart) {
+      if (watchedEditEnd !== watchedEditStart) {
+        editForm.setValue('endDate', watchedEditStart);
+      }
+    }
+  }, [watchedEditHalfDay, watchedEditStart, watchedEditEnd, editForm]);
+
   const businessDaysPreview = useMemo(() => {
     if (!watchedStartDate || !watchedEndDate) return null;
     const start = parseLocalDate(watchedStartDate);
@@ -374,18 +425,30 @@ function PTO() {
     if (start > end) {
       return { days: 0, error: 'End date cannot be before start date' };
     }
+    if (watchedHalfDay) {
+      if (watchedStartDate !== watchedEndDate) {
+        return { days: 0, error: 'Half-day requests must be for a single date' };
+      }
+      const valid = isBusinessDay(start);
+      return { days: valid ? 0.5 : 0, error: valid ? null : 'Selected date is not a business day' };
+    }
     const days = countBusinessDaysBetween(start, end);
     return { days, error: days === 0 ? 'Selected range has no business days' : null };
-  }, [watchedStartDate, watchedEndDate]);
+  }, [watchedStartDate, watchedEndDate, watchedHalfDay]);
 
   const createPTOMutation = useMutation({
     mutationFn: async (data: PTOFormData) => {
       // Validate dates - parse as LOCAL time, not UTC
       const startDate = parseLocalDate(data.startDate);
       const endDate = parseLocalDate(data.endDate);
+      const isHalfDay = !!data.halfDay;
 
       if (startDate > endDate) {
         throw new Error('End date cannot be before start date');
+      }
+
+      if (isHalfDay && data.startDate !== data.endDate) {
+        throw new Error('Half-day requests must be for a single date');
       }
 
       const today = new Date();
@@ -400,10 +463,10 @@ function PTO() {
         const requestedDates: string[] = [];
         const currentDate = new Date(startDate);
 
-        while (currentDate <= endDate) {
-          requestedDates.push(format(currentDate, 'yyyy-MM-dd'));
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
+      while (currentDate <= endDate) {
+        requestedDates.push(format(currentDate, 'yyyy-MM-dd'));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
 
         const conflictingDates = requestedDates.filter(date =>
           blackoutDates.includes(date)
@@ -414,7 +477,13 @@ function PTO() {
         }
       }
 
-      const days = countBusinessDaysBetween(startDate, endDate);
+      let days = countBusinessDaysBetween(startDate, endDate);
+      if (isHalfDay) {
+        if (!isBusinessDay(startDate)) {
+          throw new Error('Selected date is not a business day');
+        }
+        days = 0.5;
+      }
       if (days <= 0) {
         throw new Error('Selected date range has no business days');
       }
@@ -423,8 +492,10 @@ function PTO() {
         startDate: data.startDate,
         endDate: data.endDate,
         type: data.type,
-        reason: data.reason,
-        days
+        reason: data.halfDay ? appendHalfDaySuffix(data.reason, data.halfDayPeriod) : data.reason,
+        days,
+        halfDay: data.halfDay,
+        halfDayPeriod: data.halfDayPeriod
       };
 
       const response = await fetch('/api/pto', {
@@ -585,12 +656,16 @@ function PTO() {
   };
 
   const handleEditRequest = (request: any) => {
+    const inferredHalfDay = request.days === 0.5;
+    const inferredPeriod = extractHalfDayPeriod(request.reason) || 'AM';
     setEditingRequest(request);
     editForm.reset({
       startDate: request.startDate || '',
       endDate: request.endDate || '',
       type: request.type || 'VACATION',
-      reason: request.reason || ''
+      reason: stripHalfDaySuffix(request.reason || ''),
+      halfDay: inferredHalfDay,
+      halfDayPeriod: inferredPeriod
     });
     setEditKeepApproved(request.status === 'APPROVED' && canApprovePto);
     setEditDialogOpen(true);
@@ -600,7 +675,10 @@ function PTO() {
     if (!editingRequest) return;
     editPTOMutation.mutate({
       id: editingRequest.id,
-      data,
+      data: {
+        ...data,
+        reason: data.halfDay ? appendHalfDaySuffix(data.reason, data.halfDayPeriod) : data.reason
+      },
       keepApproved: editKeepApproved && canApprovePto && editingRequest.status === 'APPROVED'
     });
   };
@@ -1366,9 +1444,37 @@ function PTO() {
                   <Input
                     id="endDate"
                     type="date"
+                    disabled={form.watch('halfDay')}
                     {...form.register('endDate')}
                   />
                 </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm font-medium">Half-day request</p>
+                    <p className="text-xs text-muted-foreground">Only one date; counts as 0.5 day.</p>
+                  </div>
+                  <Switch
+                    checked={!!form.watch('halfDay')}
+                    onCheckedChange={(value) => form.setValue('halfDay', value)}
+                  />
+                </div>
+                {form.watch('halfDay') && (
+                  <div>
+                    <Label htmlFor="halfDayPeriod">Half-day period</Label>
+                    <Select
+                      value={form.watch('halfDayPeriod') || 'AM'}
+                      onValueChange={(value: 'AM' | 'PM') => form.setValue('halfDayPeriod', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">Morning (AM)</SelectItem>
+                        <SelectItem value="PM">Afternoon (PM)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="text-xs text-muted-foreground">
                   Weekends and company holidays are not counted toward PTO.
                 </div>
@@ -1567,12 +1673,40 @@ function PTO() {
               <Input
                 id="editEndDate"
                 type="date"
+                disabled={editForm.watch('halfDay')}
                 {...editForm.register('endDate')}
               />
             </div>
             <div className="text-xs text-muted-foreground">
               Weekends and company holidays are not counted toward PTO.
             </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">Half-day request</p>
+                <p className="text-xs text-muted-foreground">Only one date; counts as 0.5 day.</p>
+              </div>
+              <Switch
+                checked={!!editForm.watch('halfDay')}
+                onCheckedChange={(value) => editForm.setValue('halfDay', value)}
+              />
+            </div>
+            {editForm.watch('halfDay') && (
+              <div>
+                <Label htmlFor="editHalfDayPeriod">Half-day period</Label>
+                <Select
+                  value={editForm.watch('halfDayPeriod') || 'AM'}
+                  onValueChange={(value: 'AM' | 'PM') => editForm.setValue('halfDayPeriod', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AM">Morning (AM)</SelectItem>
+                    <SelectItem value="PM">Afternoon (PM)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label htmlFor="editType">Type of Time Off</Label>
               <Select
