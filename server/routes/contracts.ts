@@ -531,9 +531,13 @@ router.get('/api/employee-contracts', requireAuth, requireManager, async (req, r
 
     // Fallback - shouldn't reach here with requireManager but just in case
     res.json([]);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching employee contracts:', error);
-    res.status(500).json({ error: 'Failed to fetch employee contracts' });
+    console.error('Error stack:', error?.stack);
+    res.status(500).json({
+      error: 'Failed to fetch employee contracts',
+      details: error?.message || 'Unknown error'
+    });
   }
 });
 
