@@ -1641,6 +1641,9 @@ export default function EnhancedRecruiting() {
     return candidateDate ? new Date(candidateDate).getTime() : 0;
   };
 
+  const normalizeDigits = (value?: string | null) =>
+    (value || '').replace(/\D/g, '');
+
   const filteredCandidates = candidates.filter(candidate => {
     // Handle combined DEAD filter option
     const matchesFilter = filterStatus === 'ALL' ||
@@ -1649,10 +1652,15 @@ export default function EnhancedRecruiting() {
     const matchesSourcer = filterSourcer === 'ALL' || (candidate as any).assignedTo === filterSourcer;
     const matchesReferral = filterReferral === '' ||
       (candidate.referralName && candidate.referralName.toLowerCase().includes(filterReferral.toLowerCase()));
+    const searchDigits = normalizeDigits(searchTerm);
+    const candidatePhone = candidate.phone || '';
+    const candidatePhoneDigits = normalizeDigits(candidatePhone);
     const matchesSearch = searchTerm === '' ||
       `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      candidate.position.toLowerCase().includes(searchTerm.toLowerCase());
+      candidate.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      candidatePhone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (searchDigits.length > 0 && candidatePhoneDigits.includes(searchDigits));
 
     // Date filter logic
     let matchesDate = true;
