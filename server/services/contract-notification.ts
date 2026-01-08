@@ -138,6 +138,7 @@ export async function notifyRecipientOfNewContract(
     const subject = `New Contract for Review: ${contractTitle}`;
     const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
     const fileLink = fileUrl ? `${appUrl}${fileUrl}` : '';
+    const signLink = `${appUrl}/contracts?contractId=${contractId}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Contract Ready for Review</h2>
@@ -160,9 +161,9 @@ export async function notifyRecipientOfNewContract(
         </ul>
         
         <div style="margin-top: 30px;">
-          <a href="${process.env.FRONTEND_URL || ''}/contracts/view/${contractId}" 
+          <a href="${signLink}" 
              style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
-            Review Contract
+            Review & Sign
           </a>
           ${fileUrl ? `
           <a href="${fileLink}" 

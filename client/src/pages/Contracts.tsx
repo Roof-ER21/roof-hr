@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,6 +64,7 @@ const signatureFormSchema = z.object({
 export default function Contracts() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
 
   // Check if user has manager permissions - needed early for queries
   const isManager = currentUser?.email === 'ahmed.mahmoud@theroofdocs.com' ||
@@ -146,6 +148,18 @@ export default function Contracts() {
     },
     enabled: !!currentUser?.id // Only run query when user is loaded
   });
+
+  useEffect(() => {
+    const contractId = searchParams.get('contractId');
+    if (!contractId || contractsLoading) return;
+    if (selectedContract?.id === contractId) return;
+    const match = contracts.find((contract) => contract.id === contractId);
+    if (!match) return;
+    setSelectedContract(match);
+    if (match.status === 'SENT' && match.employeeId === currentUser?.id) {
+      setIsSignDialogOpen(true);
+    }
+  }, [searchParams, contracts, contractsLoading, currentUser?.id, selectedContract?.id]);
 
   const { data: users = [] } = useQuery({
     queryKey: ['/api/users'],
