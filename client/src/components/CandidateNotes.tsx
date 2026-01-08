@@ -214,7 +214,11 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
                         <span>{format(new Date(note.createdAt), 'MMM d, yyyy h:mm a')}</span>
                       </div>
                     </div>
-                    {user?.role !== 'EMPLOYEE' && user?.id === note.authorId && (
+                    {(() => {
+                      const elevatedRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'];
+                      const canDelete = note.authorId === user?.id || elevatedRoles.includes(user?.role || '');
+                      if (!canDelete) return null;
+                      return (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -223,7 +227,8 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    )}
+                      );
+                    })()}
                   </div>
                   <p className="whitespace-pre-wrap">{note.content}</p>
                 </div>

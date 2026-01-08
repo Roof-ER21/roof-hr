@@ -740,6 +740,11 @@ class DrizzleStorage implements IStorage {
   async getCandidateNotesByCandidateId(candidateId: string): Promise<CandidateNote[]> {
     return await db.select().from(candidateNotes).where(eq(candidateNotes.candidateId, candidateId));
   }
+
+  async getCandidateNoteById(id: string): Promise<CandidateNote | null> {
+    const [note] = await db.select().from(candidateNotes).where(eq(candidateNotes.id, id));
+    return note || null;
+  }
   
   async deleteCandidateNote(id: string): Promise<void> {
     await db.delete(candidateNotes).where(eq(candidateNotes.id, id));

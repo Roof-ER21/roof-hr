@@ -3975,8 +3975,21 @@ router.post('/api/candidates/:candidateId/notes', requireAuth, async (req: any, 
   }
 });
 
-router.delete('/api/candidates/notes/:id', requireAuth, requireManager, async (req, res) => {
+router.delete('/api/candidates/notes/:id', requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
+    const note = await storage.getCandidateNoteById(req.params.id);
+    if (!note) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const isAuthor = note.authorId === user.id;
+
+    if (!isAdminOrManager && !isAuthor) {
+      return res.status(403).json({ error: 'Not allowed to delete this note' });
+    }
+
     await storage.deleteCandidateNote(req.params.id);
     res.json({ success: true });
   } catch (error) {
