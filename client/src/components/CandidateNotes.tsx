@@ -219,14 +219,16 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
                       const canDelete = note.authorId === user?.id || elevatedRoles.includes(user?.role || '') || user?.role === 'SOURCER';
                       if (!canDelete) return null;
                       return (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => deleteNoteMutation.mutate(note.id)}
-                        disabled={deleteNoteMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deleteNoteMutation.mutate(note.id)}
+                            disabled={deleteNoteMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       );
                     })()}
                   </div>

@@ -641,14 +641,25 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       recipientDepartment = 'New Hire'; // Default for candidates
     } else {
       // Get employee information
-      const employee = await storage.getUserById(req.body.employeeId);
+      const incomingId = req.body.employeeId;
+      if (!incomingId) {
+        return res.status(400).json({ error: 'Employee ID is required for employee contracts' });
+      }
+
+      let employee = await storage.getUserById(incomingId);
+      if (!employee && req.body.recipientEmail) {
+        // Fallback lookup by email if ID is stale
+        employee = await storage.getUserByEmail(req.body.recipientEmail);
+      }
+
       if (!employee) {
-        return res.status(404).json({ error: 'Employee not found' });
+        return res.status(404).json({ error: 'Employee not found', details: `No employee for id ${incomingId}` });
       }
       recipientName = `${employee.firstName} ${employee.lastName}`;
       recipientEmail = employee.email;
       recipientPosition = employee.position;
       recipientDepartment = employee.department;
+      contractPayload.employeeId = employee.id;
     }
 
     let parsedData = insertEmployeeContractSchema.parse({

@@ -1128,15 +1128,23 @@ export default function Contracts() {
                         </FormItem>
                       )}
                     />
-                    <DialogFooter>
-                      <Button type="submit" disabled={createContractMutation.isPending}>
-                        {createContractMutation.isPending ? 'Creating...' : 'Create Contract'}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+                <DialogFooter>
+                  <Button
+                    type="submit"
+                    disabled={
+                      createContractMutation.isPending ||
+                      !contractForm.watch('templateId') ||
+                      (contractForm.watch('recipientType') === 'EMPLOYEE' && !contractForm.watch('employeeId')) ||
+                      (contractForm.watch('recipientType') === 'CANDIDATE' && !contractForm.watch('candidateId'))
+                    }
+                  >
+                    {createContractMutation.isPending ? 'Creating...' : 'Create Contract'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
           </div>
         )}
       </div>
