@@ -49,7 +49,7 @@ import { CandidateDetailsDialog } from '@/components/recruiting/candidate-detail
 import { OfferNotesDialog } from '@/components/recruiting/offer-notes-dialog';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
-import { format, isSameDay, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
 import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
 
@@ -76,7 +76,7 @@ function DroppableColumn({ status, children, disabled = false }: { status: strin
 }
 
 const stages = {
-  APPLIED: { name: 'Application Review', next: 'SCREENING', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  APPLIED: { name: 'Called', next: 'SCREENING', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
   SCREENING: { name: 'Phone Screening', next: 'INTERVIEW', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
   INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
   OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
@@ -1626,6 +1626,21 @@ export default function EnhancedRecruiting() {
     createNewHireMutation.mutate(data);
   };
 
+  const applyQuickDateFilter = (days: number) => {
+    const now = new Date();
+    const start = startOfDay(subDays(now, Math.max(days - 1, 0)));
+    setFilterDateType('range');
+    setFilterDateSingle(undefined);
+    setFilterDateStart(start);
+    setFilterDateEnd(now);
+    setDateFilterOpen(false);
+  };
+
+  const getCandidateSortTimestamp = (candidate: Candidate) => {
+    const candidateDate = candidate.createdAt || candidate.appliedDate || candidate.updatedAt;
+    return candidateDate ? new Date(candidateDate).getTime() : 0;
+  };
+
   const filteredCandidates = candidates.filter(candidate => {
     // Handle combined DEAD filter option
     const matchesFilter = filterStatus === 'ALL' ||
@@ -1655,14 +1670,18 @@ export default function EnhancedRecruiting() {
     return matchesFilter && matchesPosition && matchesSourcer && matchesReferral && matchesSearch && matchesDate;
   });
 
+  const sortedCandidates = [...filteredCandidates].sort((a, b) => (
+    getCandidateSortTimestamp(b) - getCandidateSortTimestamp(a)
+  ));
+
   const candidatesByStatus = {
-    APPLIED: filteredCandidates.filter(c => c.status === 'APPLIED'),
-    SCREENING: filteredCandidates.filter(c => c.status === 'SCREENING'),
-    INTERVIEW: filteredCandidates.filter(c => c.status === 'INTERVIEW'),
-    OFFER: filteredCandidates.filter(c => c.status === 'OFFER'),
-    HIRED: filteredCandidates.filter(c => c.status === 'HIRED'),
+    APPLIED: sortedCandidates.filter(c => c.status === 'APPLIED'),
+    SCREENING: sortedCandidates.filter(c => c.status === 'SCREENING'),
+    INTERVIEW: sortedCandidates.filter(c => c.status === 'INTERVIEW'),
+    OFFER: sortedCandidates.filter(c => c.status === 'OFFER'),
+    HIRED: sortedCandidates.filter(c => c.status === 'HIRED'),
     // Combined DEAD column - shows DEAD_BY_US, DEAD_BY_CANDIDATE, and NO_SHOW
-    DEAD: filteredCandidates.filter(c => c.status === 'DEAD_BY_US' || c.status === 'DEAD_BY_CANDIDATE' || c.status === 'NO_SHOW'),
+    DEAD: sortedCandidates.filter(c => c.status === 'DEAD_BY_US' || c.status === 'DEAD_BY_CANDIDATE' || c.status === 'NO_SHOW'),
   };
   
   // Helper function to get next status
@@ -1980,6 +1999,20 @@ export default function EnhancedRecruiting() {
                 <PopoverContent className="w-auto p-4" align="start">
                   <div className="space-y-4">
                     <div className="space-y-2">
+                      <Label className="text-sm font-medium">Quick Range</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => applyQuickDateFilter(7)}>
+                          Past 7 days
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => applyQuickDateFilter(15)}>
+                          Past 15 days
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => applyQuickDateFilter(30)}>
+                          Past 30 days
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
                       <Label className="text-sm font-medium">Date Filter Type</Label>
                       <Select value={filterDateType} onValueChange={(value: 'all' | 'specific' | 'range') => {
                         setFilterDateType(value);
@@ -2218,7 +2251,7 @@ export default function EnhancedRecruiting() {
             ) : viewMode === 'list' ? (
               // List View
               <div className="space-y-4">
-                {filteredCandidates.map(candidate => (
+                {sortedCandidates.map(candidate => (
                   <div key={candidate.id} className="flex items-center gap-3">
                     <div className="flex-1">
                       <DraggableCandidateCard
@@ -3511,7 +3544,7 @@ export default function EnhancedRecruiting() {
               <SelectValue placeholder="Move to..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="APPLIED">Application Review</SelectItem>
+              <SelectItem value="APPLIED">Called</SelectItem>
               <SelectItem value="SCREENING">Phone Screening</SelectItem>
               <SelectItem value="INTERVIEW">Interview</SelectItem>
               <SelectItem value="OFFER">Offer</SelectItem>

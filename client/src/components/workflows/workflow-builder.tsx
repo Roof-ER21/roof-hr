@@ -564,7 +564,7 @@ export function WorkflowBuilder() {
                           This workflow is triggered when candidates move between stages:
                         </p>
                         <ul className="text-sm text-blue-600 mt-2 space-y-1">
-                          <li>• APPLIED → SCREENING: Initial application review</li>
+                          <li>• APPLIED → SCREENING: Initial call</li>
                           <li>• SCREENING → INTERVIEW: Phone screening passed</li>
                           <li>• INTERVIEW → OFFER: Interview process completed</li>
                           <li>• OFFER → HIRED: Offer accepted</li>
