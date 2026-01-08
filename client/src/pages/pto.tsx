@@ -23,6 +23,8 @@ import { useAuth } from '@/lib/auth';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
 import { employeeGetsPto, ADMIN_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
 import { PTO_POLICY } from '@shared/constants/pto-policy';
+import { apiRequest } from '@/lib/queryClient';
+import { apiRequest } from '@/lib/queryClient';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
