@@ -703,6 +703,7 @@ router.post('/api/public/equipment-checklist/:token', async (req, res) => {
 router.post('/api/auth/register', async (req, res) => {
   try {
     const data = registerSchema.parse(req.body);
+    const { welcomeEmailType, ...userData } = data;
 
     // Validate email domain - only @theroofdocs.com allowed
     const ALLOWED_DOMAIN = 'theroofdocs.com';
@@ -723,7 +724,7 @@ router.post('/api/auth/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(data.password, 10);
     
     const user = await storage.createUser({
-      ...data,
+      ...userData,
       passwordHash: hashedPassword,
       isActive: true,
       mustChangePassword: true, // New employees should change password on first login
@@ -732,7 +733,12 @@ router.post('/api/auth/register', async (req, res) => {
     // Initialize email service and send welcome email
     const emailService = new EmailService();
     await emailService.initialize();
-    const emailSent = await emailService.sendWelcomeEmail(user, temporaryPassword);
+    let emailSent = false;
+    if (welcomeEmailType !== 'none') {
+      emailSent = await emailService.sendWelcomeEmail(user, temporaryPassword, undefined, {
+        welcomeEmailType
+      });
+    }
     
     if (!emailSent) {
       console.warn('Failed to send welcome email to:', user.email);
@@ -771,7 +777,9 @@ router.post('/api/auth/register', async (req, res) => {
       emailSent,
       message: emailSent 
         ? 'Employee created successfully. Welcome email sent to ' + user.email
-        : 'Employee created successfully. Failed to send welcome email.'
+        : welcomeEmailType === 'none'
+          ? 'Employee created successfully. Welcome email skipped.'
+          : 'Employee created successfully. Failed to send welcome email.'
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -1485,6 +1493,41 @@ router.delete('/api/users/:id', requireAuth, requireManager, async (req, res) =>
   }
 });
 
+// Archive employee (Admin/Manager only)
+router.patch('/api/users/:id/archive', requireAuth, requireManager, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Prevent self-archive
+    if ((req as any).user.id === userId) {
+      return res.status(400).json({ error: 'Cannot archive your own account' });
+    }
+
+    const user = await storage.updateUser(userId, { isActive: false });
+    const { passwordHash, ...safeUser } = user;
+
+    res.json({ success: true, message: 'Employee archived successfully', user: safeUser });
+  } catch (error) {
+    console.error('Error archiving user:', error);
+    res.status(400).json({ error: 'Failed to archive employee' });
+  }
+});
+
+// Restore employee (Admin/Manager only)
+router.patch('/api/users/:id/restore', requireAuth, requireManager, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const user = await storage.updateUser(userId, { isActive: true, terminationDate: null });
+    const { passwordHash, ...safeUser } = user;
+
+    res.json({ success: true, message: 'Employee restored successfully', user: safeUser });
+  } catch (error) {
+    console.error('Error restoring user:', error);
+    res.status(400).json({ error: 'Failed to restore employee' });
+  }
+});
+
 // Export employees to CSV
 router.get('/api/users/export', requireAuth, requireManager, async (req, res) => {
   try {
@@ -1752,7 +1795,10 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
 // Send welcome emails to selected employees
 router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async (req, res) => {
   try {
-    const { employeeIds, password = 'TRD2026!' } = req.body;
+    const { employeeIds, password = 'TRD2026!', welcomeEmailType = 'insurance' } = req.body;
+    const normalizedEmailType = ['auto', 'insurance', 'retail', 'none'].includes(welcomeEmailType)
+      ? welcomeEmailType
+      : 'insurance';
 
     if (!employeeIds || (Array.isArray(employeeIds) && employeeIds.length === 0)) {
       return res.status(400).json({ error: 'No employees specified' });
@@ -1761,6 +1807,7 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
     const results = {
       sent: 0,
       failed: 0,
+      skipped: 0,
       errors: [] as string[]
     };
 
@@ -1778,25 +1825,22 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
       }
     }
 
+    if (normalizedEmailType === 'none') {
+      results.skipped = employees.length;
+      return res.json(results);
+    }
+
     for (const emp of employees) {
       try {
-        const appUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
-        await emailService.sendEmail({
-          to: emp.email,
-          subject: 'Welcome to TheRoofDocs - Your Account Has Been Created',
-          html: `
-            <h2>Welcome to TheRoofDocs, ${emp.firstName}!</h2>
-            <p>Your HR system account has been created. Here are your login credentials:</p>
-            <p><strong>Email:</strong> ${emp.email}</p>
-            <p><strong>Temporary Password:</strong> ${password}</p>
-            <p><strong>Login URL:</strong> <a href="${appUrl}/login">${appUrl}/login</a></p>
-            <p>Please log in and change your password immediately for security.</p>
-            <br>
-            <p>Best regards,</p>
-            <p>The HR Team</p>
-          `
+        const emailSent = await emailService.sendWelcomeEmail(emp, password, undefined, {
+          welcomeEmailType: normalizedEmailType
         });
-        results.sent++;
+        if (emailSent) {
+          results.sent++;
+        } else {
+          results.failed++;
+          results.errors.push(`${emp.email}: Failed to send welcome email`);
+        }
       } catch (error: any) {
         results.failed++;
         results.errors.push(`${emp.email}: ${error.message}`);

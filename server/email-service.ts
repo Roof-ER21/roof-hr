@@ -502,6 +502,7 @@ class EmailService {
       ccRecipients?: string[];  // CC recipients
       equipmentChecklistUrl?: string;  // Link to equipment checklist form
       equipmentSigningUrl?: string;  // Link to sign equipment receipt (locked until start date)
+      welcomeEmailType?: 'auto' | 'insurance' | 'retail';
     }
   ) {
     try {
@@ -510,6 +511,17 @@ class EmailService {
       const formattedDate = formatStartDate(startDate);
 
       const subject = `Welcome to Roof-ER! Your Start Date is ${formattedDate}`;
+
+      const normalizeWelcomeEmailType = () => {
+        if (options?.welcomeEmailType === 'insurance') return 'insurance';
+        if (options?.welcomeEmailType === 'retail') return 'retail';
+        const position = (user?.position || '').toString().toLowerCase();
+        if (position.includes('retail')) return 'retail';
+        if (position.includes('insurance')) return 'insurance';
+        return 'insurance';
+      };
+
+      const welcomeEmailType = normalizeWelcomeEmailType();
 
       // Build equipment checklist HTML
       const equipmentChecklistHtml = options?.includeEquipmentChecklist !== false ? `
@@ -566,7 +578,18 @@ class EmailService {
           </div>
       ` : '';
 
-      const html = `
+      const hrPortalHtml = temporaryPassword ? `
+          <div style="background-color: #fef3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+            <h3 style="margin-top: 0; color: #856404;">🔐 HR Portal Login</h3>
+            <p style="font-size: 15px; margin-bottom: 10px;">Access the HR system to view your employee information and documents:</p>
+            <p style="font-size: 15px; margin: 5px 0;"><strong>URL:</strong> <a href="https://roofhr.up.railway.app/login" style="color: #1155cc;">https://roofhr.up.railway.app/login</a></p>
+            <p style="font-size: 15px; margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
+            <p style="font-size: 15px; margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${temporaryPassword}</code></p>
+            <p style="font-size: 13px; color: #856404; margin-top: 10px;">⚠️ Please log in and change your password on first access.</p>
+          </div>
+          ` : '';
+
+      const insuranceHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
           <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
 
@@ -606,16 +629,7 @@ class EmailService {
             <span style="color: #cc0000;"><strong>You MUST complete this fully before your first day in office.</strong></span>
           </p>
 
-          ${temporaryPassword ? `
-          <div style="background-color: #fef3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-            <h3 style="margin-top: 0; color: #856404;">🔐 HR Portal Login</h3>
-            <p style="font-size: 15px; margin-bottom: 10px;">Access the HR system to view your employee information and documents:</p>
-            <p style="font-size: 15px; margin: 5px 0;"><strong>URL:</strong> <a href="https://roofhr.up.railway.app/login" style="color: #1155cc;">https://roofhr.up.railway.app/login</a></p>
-            <p style="font-size: 15px; margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
-            <p style="font-size: 15px; margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${temporaryPassword}</code></p>
-            <p style="font-size: 13px; color: #856404; margin-top: 10px;">⚠️ Please log in and change your password on first access.</p>
-          </div>
-          ` : ''}
+          ${hrPortalHtml}
 
           <p style="font-size: 15px; line-height: 1.7; color: #800080;">
             On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel, so no particular dress code is required.
@@ -644,6 +658,63 @@ class EmailService {
           </p>
         </div>
       `;
+
+      const retailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            We are so excited to have you join our <strong>Retail Division</strong> team with Roof ER. Your start date is <strong>${formattedDate} at 12:00 PM</strong>.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>8100 Boone Blvd Suite 400, Vienna, VA 22182</strong>.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO EXPECT:</strong></p>
+          <ul style="font-size: 15px; line-height: 1.7; color: #333;">
+            <li><strong>Day 1 & Day 2:</strong> Office-based training covering the fundamentals of your position</li>
+            <li><strong>Following Days:</strong> In-field training with our experienced field trainers</li>
+            <li><strong>Attire:</strong> Business-comfortable clothing for your office training days (we'll cover winter field preparation during training)</li>
+          </ul>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO BRING:</strong></p>
+          <ul style="font-size: 15px; line-height: 1.7; color: #333;">
+            <li>Notebook and pen - we highly recommend taking notes as we'll be covering essential aspects of your role from Day 1</li>
+            <li>Lunch (you may bring your own or purchase from nearby restaurants)</li>
+          </ul>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #cc0000;"><strong>IMPORTANT:</strong></p>
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            Please plan to arrive <strong>10-15 minutes early</strong> to ensure a smooth start to your first day.
+          </p>
+
+          ${hrPortalHtml}
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel shortly after joining the team.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            We look forward to welcoming you to the Roof ER Retail Division on <strong>${formattedDate}</strong>!
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            Feel free to reach out with any questions.
+          </p>
+
+          ${equipmentChecklistHtml}
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">Best regards,</p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            <strong>Bruno Nacipucha</strong><br>
+            <em>Retail Marketing Manager</em>
+          </p>
+        </div>
+      `;
+
+      const html = welcomeEmailType === 'retail' ? retailHtml : insuranceHtml;
 
       // Prepare attachments
       const attachments: EmailAttachment[] = [];

@@ -12,9 +12,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import {
   UserPlus, Search, Edit, Trash2, Users, Building, Calendar,
-  Phone, Mail, MapPin, Clock, TrendingUp, Award, Filter,
+  Phone, Mail, TrendingUp,
   Download, Upload, MoreVertical, Eye, Key, AlertTriangle, Send,
-  ArrowDownAZ, ArrowUpZA
+  ArrowDownAZ, ArrowUpZA, Archive, RotateCcw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
@@ -57,6 +57,7 @@ const employeeSchema = z.object({
 });
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
+type CreateEmployeePayload = EmployeeFormData & { password: string; welcomeEmailType?: 'auto' | 'insurance' | 'retail' | 'none' };
 
 interface Employee {
   id: string;
@@ -83,6 +84,7 @@ function EnhancedEmployees() {
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'analytics'>('grid');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -92,8 +94,11 @@ function EnhancedEmployees() {
   const [passwordResetEmployee, setPasswordResetEmployee] = useState<Employee | null>(null);
   const [createdEmployee, setCreatedEmployee] = useState<Employee | null>(null);
   const [showCreatedProfile, setShowCreatedProfile] = useState(false);
+  const [welcomeEmailType, setWelcomeEmailType] = useState<'auto' | 'insurance' | 'retail' | 'none'>('auto');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [employeeToArchive, setEmployeeToArchive] = useState<Employee | null>(null);
   const [showWelcomeDialog, setShowWelcomeDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -132,7 +137,7 @@ function EnhancedEmployees() {
   });
 
   const createEmployeeMutation = useMutation({
-    mutationFn: async (data: EmployeeFormData & { password: string }) => {
+    mutationFn: async (data: CreateEmployeePayload) => {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -246,6 +251,68 @@ function EnhancedEmployees() {
     }
   });
 
+  const archiveEmployeeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/users/${id}/archive`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to archive employee');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      setArchiveDialogOpen(false);
+      setEmployeeToArchive(null);
+      toast({
+        title: "Archived",
+        description: "Employee moved to archived list."
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const restoreEmployeeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/users/${id}/restore`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to restore employee');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      toast({
+        title: "Restored",
+        description: "Employee reactivated successfully."
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
   const onSubmit = (data: EmployeeFormData) => {
     if (selectedEmployee) {
       // Update existing employee
@@ -255,7 +322,7 @@ function EnhancedEmployees() {
       // Generate a more secure temporary password
       const randomNumbers = Math.floor(Math.random() * 9000) + 1000;
       const defaultPassword = `${data.firstName.charAt(0).toUpperCase()}${data.lastName.toLowerCase()}${randomNumbers}!`;
-      createEmployeeMutation.mutate({ ...data, password: defaultPassword });
+      createEmployeeMutation.mutate({ ...data, password: defaultPassword, welcomeEmailType });
     }
   };
 
@@ -283,12 +350,32 @@ function EnhancedEmployees() {
   const handleAddEmployee = () => {
     setSelectedEmployee(null);
     form.reset();
+    setWelcomeEmailType('auto');
     setIsDialogOpen(true);
   };
 
   const handleDeleteEmployee = (employee: Employee) => {
+    if (employee.isActive) {
+      toast({
+        title: "Archive first",
+        description: "Please archive the employee before permanently deleting.",
+        variant: "destructive"
+      });
+      return;
+    }
     setEmployeeToDelete(employee);
     setDeleteDialogOpen(true);
+  };
+
+  const handleArchiveEmployee = (employee: Employee) => {
+    setEmployeeToArchive(employee);
+    setArchiveDialogOpen(true);
+  };
+
+  const confirmArchive = () => {
+    if (employeeToArchive) {
+      archiveEmployeeMutation.mutate(employeeToArchive.id);
+    }
   };
 
   const confirmDelete = () => {
@@ -389,8 +476,11 @@ function EnhancedEmployees() {
 
       const matchesDepartment = departmentFilter === 'ALL' || employee.department === departmentFilter;
       const matchesRole = roleFilter === 'ALL' || employee.role === roleFilter;
+      const matchesStatus = statusFilter === 'ALL'
+        || (statusFilter === 'ACTIVE' && employee.isActive)
+        || (statusFilter === 'ARCHIVED' && !employee.isActive);
 
-      return matchesSearch && matchesDepartment && matchesRole;
+      return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
     })
     .sort((a: Employee, b: Employee) => {
       const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
@@ -402,6 +492,7 @@ function EnhancedEmployees() {
   const departments = Array.from(new Set(employees.map((emp: Employee) => emp.department)));
   const totalEmployees = employees.length;
   const activeEmployees = employees.filter((emp: Employee) => emp.isActive).length;
+  const archivedEmployees = employees.filter((emp: Employee) => !emp.isActive).length;
   const departmentStats = departments.map(dept => ({
     name: dept,
     count: employees.filter((emp: Employee) => emp.department === dept).length,
@@ -468,6 +559,7 @@ function EnhancedEmployees() {
             if (!open) {
               setSelectedEmployee(null);
               form.reset();
+              setWelcomeEmailType('auto');
             }
             setIsDialogOpen(open);
           }}>
@@ -603,6 +695,23 @@ function EnhancedEmployees() {
                     />
                   </div>
                 </div>
+
+                {!selectedEmployee && (
+                  <div>
+                    <Label>Welcome Email</Label>
+                    <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'auto' | 'insurance' | 'retail' | 'none')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select welcome email" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto (by position)</SelectItem>
+                        <SelectItem value="insurance">Insurance (Original)</SelectItem>
+                        <SelectItem value="retail">Retail</SelectItem>
+                        <SelectItem value="none">None (Do Not Send)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -731,10 +840,10 @@ function EnhancedEmployees() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Award className="h-8 w-8 text-yellow-600" />
+              <Archive className="h-8 w-8 text-yellow-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">New This Month</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">3</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Archived</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{archivedEmployees}</p>
               </div>
             </div>
           </CardContent>
@@ -810,6 +919,16 @@ function EnhancedEmployees() {
                 <SelectItem value="ADMIN">Admin</SelectItem>
                 <SelectItem value="TRUE_ADMIN">Super Admin</SelectItem>
                 <SelectItem value="CONTRACTOR">Contractor</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'ACTIVE' | 'ARCHIVED' | 'ALL')}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="ARCHIVED">Archived</SelectItem>
+                <SelectItem value="ALL">All</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -890,13 +1009,26 @@ function EnhancedEmployees() {
                             Reset Password
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteEmployee(employee)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Employee
-                          </DropdownMenuItem>
+                          {employee.isActive ? (
+                            <DropdownMenuItem onClick={() => handleArchiveEmployee(employee)}>
+                              <Archive className="h-4 w-4 mr-2" />
+                              Archive Employee
+                            </DropdownMenuItem>
+                          ) : (
+                            <>
+                              <DropdownMenuItem onClick={() => restoreEmployeeMutation.mutate(employee.id)}>
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                                Restore Employee
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteEmployee(employee)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Permanently
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -962,13 +1094,26 @@ function EnhancedEmployees() {
                               Reset Password
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => handleDeleteEmployee(employee)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Employee
-                            </DropdownMenuItem>
+                            {employee.isActive ? (
+                              <DropdownMenuItem onClick={() => handleArchiveEmployee(employee)}>
+                                <Archive className="h-4 w-4 mr-2" />
+                                Archive Employee
+                              </DropdownMenuItem>
+                            ) : (
+                              <>
+                                <DropdownMenuItem onClick={() => restoreEmployeeMutation.mutate(employee.id)}>
+                                  <RotateCcw className="h-4 w-4 mr-2" />
+                                  Restore Employee
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteEmployee(employee)}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Permanently
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -1029,13 +1174,26 @@ function EnhancedEmployees() {
                           Reset Password
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteEmployee(employee)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Employee
-                        </DropdownMenuItem>
+                        {employee.isActive ? (
+                          <DropdownMenuItem onClick={() => handleArchiveEmployee(employee)}>
+                            <Archive className="h-4 w-4 mr-2" />
+                            Archive Employee
+                          </DropdownMenuItem>
+                        ) : (
+                          <>
+                            <DropdownMenuItem onClick={() => restoreEmployeeMutation.mutate(employee.id)}>
+                              <RotateCcw className="h-4 w-4 mr-2" />
+                              Restore Employee
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteEmployee(employee)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Permanently
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1321,6 +1479,46 @@ function EnhancedEmployees() {
               className="bg-red-600 hover:bg-red-700"
             >
               Delete Employee
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Archive Confirmation Dialog */}
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Employee</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="flex items-start gap-3">
+                <Archive className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <p>Move this employee to the archived list?</p>
+                  {employeeToArchive && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded">
+                      <p className="font-semibold">
+                        {employeeToArchive.firstName} {employeeToArchive.lastName}
+                      </p>
+                      <p className="text-sm text-gray-600">{employeeToArchive.email}</p>
+                      <p className="text-sm text-gray-600">{employeeToArchive.position}</p>
+                    </div>
+                  )}
+                  <p className="mt-3 text-sm text-gray-600">
+                    Archived employees can be restored anytime. Use permanent delete only from the archived list.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setEmployeeToArchive(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmArchive}
+              className="bg-yellow-600 hover:bg-yellow-700"
+            >
+              Archive Employee
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

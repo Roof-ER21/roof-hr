@@ -10,9 +10,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Mail, Loader2 } from 'lucide-react';
 
 interface Employee {
   id: string;
@@ -37,18 +38,19 @@ export function SendWelcomeDialog({
   preselectedIds = []
 }: SendWelcomeDialogProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(preselectedIds));
+  const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail' | 'none'>('insurance');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const sendEmailsMutation = useMutation({
-    mutationFn: async (employeeIds: string[]) => {
+    mutationFn: async (payload: { employeeIds: string[]; welcomeEmailType: 'insurance' | 'retail' | 'none' }) => {
       const response = await fetch('/api/users/send-welcome-emails', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ employeeIds, password: 'TRD2026!' })
+        body: JSON.stringify({ ...payload, password: 'TRD2026!' })
       });
 
       if (!response.ok) {
@@ -59,9 +61,10 @@ export function SendWelcomeDialog({
       return response.json();
     },
     onSuccess: (data) => {
+      const skippedMessage = data.skipped > 0 ? ` ${data.skipped} skipped.` : '';
       toast({
         title: 'Welcome Emails Sent',
-        description: `Successfully sent ${data.sent} emails. ${data.failed > 0 ? `${data.failed} failed.` : ''}`,
+        description: `Successfully sent ${data.sent} emails.${skippedMessage} ${data.failed > 0 ? `${data.failed} failed.` : ''}`.trim(),
         variant: data.failed > 0 ? 'destructive' : 'default'
       });
       queryClient.invalidateQueries({ queryKey: ['/api/users'] });
@@ -104,7 +107,10 @@ export function SendWelcomeDialog({
       });
       return;
     }
-    sendEmailsMutation.mutate(Array.from(selectedIds));
+    sendEmailsMutation.mutate({
+      employeeIds: Array.from(selectedIds),
+      welcomeEmailType
+    });
   };
 
   const allSelected = selectedIds.size === employees.length;
@@ -124,6 +130,19 @@ export function SendWelcomeDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Welcome Email Type</label>
+            <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail' | 'none')}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select email type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="insurance">Insurance (Original)</SelectItem>
+                <SelectItem value="retail">Retail</SelectItem>
+                <SelectItem value="none">None (Do Not Send)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center space-x-2">
               <Checkbox

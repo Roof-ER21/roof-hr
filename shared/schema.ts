@@ -1840,6 +1840,7 @@ export const registerSchema = z.object({
   emergencyContact: z.string().optional(),
   emergencyPhone: z.string().optional(),
   shirtSize: z.enum(['S', 'M', 'L', 'XL', 'XXL', '3X']).optional(),
+  welcomeEmailType: z.enum(['auto', 'insurance', 'retail', 'none']).optional(),
 });
 
 export type LoginData = z.infer<typeof loginSchema>;
