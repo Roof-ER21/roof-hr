@@ -77,6 +77,9 @@ function PTO() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [adminPtoAutoApprove, setAdminPtoAutoApprove] = useState(true);
   const [adminEmployeeSearch, setAdminEmployeeSearch] = useState('');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<any | null>(null);
+  const [editKeepApproved, setEditKeepApproved] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -220,6 +223,16 @@ function PTO() {
   });
 
   const form = useForm<PTOFormData>({
+    resolver: zodResolver(ptoSchema),
+    defaultValues: {
+      startDate: '',
+      endDate: '',
+      type: 'VACATION',
+      reason: '',
+    }
+  });
+
+  const editForm = useForm<PTOFormData>({
     resolver: zodResolver(ptoSchema),
     defaultValues: {
       startDate: '',
@@ -477,6 +490,40 @@ function PTO() {
     }
   });
 
+  const editPTOMutation = useMutation({
+    mutationFn: async ({ id, data, keepApproved }: { id: string; data: PTOFormData; keepApproved: boolean }) => {
+      const response = await fetch(`/api/pto/${id}/edit`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ ...data, keepApproved })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update PTO request');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
+      setEditDialogOpen(false);
+      setEditingRequest(null);
+      toast({
+        title: 'Updated',
+        description: 'PTO request updated successfully'
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update PTO request',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const cancelPTOMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await fetch(`/api/pto/${id}/cancel`, {
@@ -535,6 +582,27 @@ function PTO() {
 
   const handleCancel = (id: string) => {
     cancelPTOMutation.mutate(id);
+  };
+
+  const handleEditRequest = (request: any) => {
+    setEditingRequest(request);
+    editForm.reset({
+      startDate: request.startDate || '',
+      endDate: request.endDate || '',
+      type: request.type || 'VACATION',
+      reason: request.reason || ''
+    });
+    setEditKeepApproved(request.status === 'APPROVED' && canApprovePto);
+    setEditDialogOpen(true);
+  };
+
+  const onEditSubmit = (data: PTOFormData) => {
+    if (!editingRequest) return;
+    editPTOMutation.mutate({
+      id: editingRequest.id,
+      data,
+      keepApproved: editKeepApproved && canApprovePto && editingRequest.status === 'APPROVED'
+    });
   };
 
   // Add mutations for policy management (must be before any conditional returns)
@@ -1474,6 +1542,86 @@ function PTO() {
         </div>
       </div>
 
+      <Dialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) setEditingRequest(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit PTO Request</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+            <div>
+              <Label htmlFor="editStartDate">Start Date</Label>
+              <Input
+                id="editStartDate"
+                type="date"
+                {...editForm.register('startDate')}
+              />
+            </div>
+            <div>
+              <Label htmlFor="editEndDate">End Date</Label>
+              <Input
+                id="editEndDate"
+                type="date"
+                {...editForm.register('endDate')}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Weekends and company holidays are not counted toward PTO.
+            </div>
+            <div>
+              <Label htmlFor="editType">Type of Time Off</Label>
+              <Select
+                value={editForm.watch('type')}
+                onValueChange={(value: 'VACATION' | 'SICK' | 'PERSONAL') => editForm.setValue('type', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="VACATION">Vacation</SelectItem>
+                  <SelectItem value="SICK">Sick</SelectItem>
+                  <SelectItem value="PERSONAL">Personal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="editReason">Reason</Label>
+              <Textarea
+                id="editReason"
+                {...editForm.register('reason')}
+                placeholder="Please provide a reason for your time off request"
+              />
+            </div>
+            {canApprovePto && editingRequest?.status === 'APPROVED' ? (
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <p className="text-sm font-medium">Keep Approved</p>
+                  <p className="text-xs text-muted-foreground">Toggle off to resubmit for approval.</p>
+                </div>
+                <Switch checked={editKeepApproved} onCheckedChange={setEditKeepApproved} />
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Changes will resubmit this request for approval.
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editPTOMutation.isPending}>
+                {editPTOMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* PTO Requests Table */}
       <Card>
         <CardHeader>
@@ -1610,6 +1758,18 @@ function PTO() {
                         )}
                       </td>
                       <td className="py-3 px-4">
+                        {(isOwnRequest || isManager) && ['PENDING', 'APPROVED'].includes(request.status) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditRequest(request)}
+                            disabled={editPTOMutation.isPending}
+                            className="mr-2"
+                          >
+                            <Edit className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
+                        )}
                         {request.status === 'PENDING' && canApprovePto && !isOwnRequest && (
                           <div className="flex space-x-2">
                             <Button
@@ -1632,7 +1792,7 @@ function PTO() {
                             </Button>
                           </div>
                         )}
-                        {request.status === 'PENDING' && isOwnRequest && (
+                        {isOwnRequest && ['PENDING', 'APPROVED'].includes(request.status) && (
                           <Button
                             variant="outline"
                             size="sm"

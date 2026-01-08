@@ -2254,6 +2254,447 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
   }
 });
 
+const notifyPtoApprovers = async (employee: any, details: { startDate: string; endDate: string; days: number; type: string; reason?: string; action: 'updated' | 'cancelled' | 'resubmitted' }) => {
+  try {
+    const approverEmails = getPTOApproversForEmployee(employee.email);
+    const emailService = new EmailService();
+    await emailService.initialize();
+
+    for (const approverEmail of approverEmails) {
+      try {
+        const approver = await storage.getUserByEmail(approverEmail);
+        if (approver) {
+          await storage.createNotification({
+            id: `pto-${details.action}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            userId: approver.id,
+            type: 'pto_request',
+            title: `PTO Request ${details.action === 'cancelled' ? 'Cancelled' : 'Updated'}`,
+            message: `${employee.firstName} ${employee.lastName} ${details.action} their PTO request for ${new Date(details.startDate).toLocaleDateString()} to ${new Date(details.endDate).toLocaleDateString()} (${details.days} days).`,
+            link: '/pto',
+            metadata: JSON.stringify({
+              employeeId: employee.id,
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              startDate: details.startDate,
+              endDate: details.endDate,
+              days: details.days,
+              type: details.type,
+              action: details.action
+            }),
+            read: false,
+            createdAt: new Date()
+          });
+        }
+
+        await emailService.sendEmail({
+          to: approverEmail,
+          subject: `PTO Request ${details.action === 'cancelled' ? 'Cancelled' : 'Updated'}: ${employee.firstName} ${employee.lastName}`,
+          html: `
+            <h2>PTO Request ${details.action === 'cancelled' ? 'Cancelled' : 'Updated'}</h2>
+            <p><strong>${employee.firstName} ${employee.lastName}</strong> (${employee.department || 'No Department'}) has ${details.action} their PTO request.</p>
+            <ul>
+              <li><strong>Start Date:</strong> ${new Date(details.startDate).toLocaleDateString()}</li>
+              <li><strong>End Date:</strong> ${new Date(details.endDate).toLocaleDateString()}</li>
+              <li><strong>Days:</strong> ${details.days}</li>
+              <li><strong>Type:</strong> ${details.type}</li>
+              <li><strong>Reason:</strong> ${details.reason || 'Not specified'}</li>
+            </ul>
+            <p>Review in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
+          `,
+          fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
+        });
+      } catch (error) {
+        console.error(`[PTO] Failed to notify approver ${approverEmail} about update:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('[PTO] Failed to notify approvers about update:', error);
+  }
+};
+
+const notifyEmployeePtoChangedByAdmin = async (employee: any, editor: any, details: { startDate: string; endDate: string; days: number; type: string; reason?: string }) => {
+  try {
+    await storage.createNotification({
+      id: `pto-admin-update-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      userId: employee.id,
+      type: 'pto_updated',
+      title: 'PTO Request Updated',
+      message: `Your PTO request was updated by ${editor.firstName || editor.email}. New dates: ${new Date(details.startDate).toLocaleDateString()} to ${new Date(details.endDate).toLocaleDateString()}.`,
+      link: '/pto',
+      metadata: JSON.stringify({
+        startDate: details.startDate,
+        endDate: details.endDate,
+        days: details.days,
+        type: details.type
+      }),
+      read: false,
+      createdAt: new Date()
+    });
+
+    const emailService = new EmailService();
+    await emailService.initialize();
+    await emailService.sendEmail({
+      to: employee.email,
+      subject: 'Your PTO Request Was Updated',
+      html: `
+        <h2>PTO Request Updated</h2>
+        <p>Hi ${employee.firstName || ''},</p>
+        <p>Your PTO request was updated by ${editor.firstName || editor.email}.</p>
+        <ul>
+          <li><strong>Start Date:</strong> ${new Date(details.startDate).toLocaleDateString()}</li>
+          <li><strong>End Date:</strong> ${new Date(details.endDate).toLocaleDateString()}</li>
+          <li><strong>Days:</strong> ${details.days}</li>
+          <li><strong>Type:</strong> ${details.type}</li>
+          <li><strong>Reason:</strong> ${details.reason || 'Not specified'}</li>
+        </ul>
+        <p>View your PTO requests in the <a href="https://roofhr.up.railway.app/pto">HR System</a>.</p>
+      `,
+      fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
+    });
+  } catch (error) {
+    console.error('[PTO] Failed to notify employee about admin update:', error);
+  }
+};
+
+const cancelPtoCalendarEvents = async (request: any) => {
+  try {
+    await googleCalendarService.initialize();
+    const employee = await storage.getUserById(request.employeeId);
+
+    if (request.googleEventId && employee?.email) {
+      try {
+        await googleCalendarService.updateEventWithId(employee.email, request.googleEventId, { status: 'cancelled' });
+        console.log(`[PTO Calendar] Cancelled employee calendar event: ${request.googleEventId}`);
+      } catch (delError) {
+        console.error('[PTO Calendar] Error cancelling employee event:', delError);
+      }
+    }
+
+    const hrCalendarId = process.env.HR_CALENDAR_ID;
+    if (request.hrCalendarEventId && hrCalendarId) {
+      try {
+        await googleCalendarService.updateEventWithId(hrCalendarId, request.hrCalendarEventId, { status: 'cancelled' });
+        console.log(`[PTO Calendar] Cancelled HR calendar event: ${request.hrCalendarEventId}`);
+      } catch (delError) {
+        console.error('[PTO Calendar] Error cancelling HR event:', delError);
+      }
+    }
+
+    await db.update(ptoRequests)
+      .set({ googleEventId: null, hrCalendarEventId: null })
+      .where(eq(ptoRequests.id, request.id));
+  } catch (calendarError) {
+    console.error('[PTO Calendar] Error deleting calendar events:', calendarError);
+  }
+};
+
+const revokeApprovedPtoEffects = async (request: any) => {
+  const policy = await storage.getPtoPolicyByEmployee(request.employeeId);
+  if (policy) {
+    const daysToRestore = request.days || 0;
+    const newUsedDays = Math.max(0, policy.usedDays - daysToRestore);
+    const newRemainingDays = policy.totalDays - newUsedDays;
+    await storage.updatePtoPolicy(policy.id, {
+      usedDays: newUsedDays,
+      remainingDays: newRemainingDays
+    });
+  }
+
+  await cancelPtoCalendarEvents(request);
+};
+
+const recreateApprovedPtoEvents = async (employee: any, request: any) => {
+  try {
+    await googleCalendarService.initialize();
+    const startDate = new Date(request.startDate);
+    const endDate = new Date(request.endDate);
+    endDate.setHours(23, 59, 59, 999);
+    const ptoTypeName = request.type || 'Time Off';
+
+    let employeeEventId: string | null = null;
+    let hrEventId: string | null = null;
+
+    if (employee?.email) {
+      try {
+        const employeeEvent = await googleCalendarService.createEventWithId(employee.email, {
+          summary: `PTO: ${ptoTypeName}`,
+          description: `Your approved ${ptoTypeName} time off.\n\nReason: ${request.reason || 'Not specified'}\nDays: ${request.days || 'N/A'}`,
+          start: { dateTime: startDate.toISOString(), timeZone: 'America/New_York' },
+          end: { dateTime: endDate.toISOString(), timeZone: 'America/New_York' },
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: 'email', minutes: 24 * 60 },
+              { method: 'popup', minutes: 60 }
+            ]
+          }
+        });
+        employeeEventId = employeeEvent?.id || null;
+      } catch (empCalError) {
+        console.error('[PTO Calendar] Error creating employee calendar event:', empCalError);
+      }
+    }
+
+    const hrCalendarId = process.env.HR_CALENDAR_ID;
+    if (hrCalendarId) {
+      try {
+        const hrEvent = await googleCalendarService.createEventWithId(hrCalendarId, {
+          summary: `PTO: ${employee.firstName} ${employee.lastName} - ${ptoTypeName}`,
+          description: `Employee: ${employee.firstName} ${employee.lastName}\nEmail: ${employee.email}\nDepartment: ${employee.department || 'N/A'}\nType: ${ptoTypeName}\nDays: ${request.days || 'N/A'}\nReason: ${request.reason || 'Not specified'}`,
+          start: { dateTime: startDate.toISOString(), timeZone: 'America/New_York' },
+          end: { dateTime: endDate.toISOString(), timeZone: 'America/New_York' }
+        });
+        hrEventId = hrEvent?.id || null;
+      } catch (hrCalError) {
+        console.error('[PTO Calendar] Error creating HR calendar event:', hrCalError);
+      }
+    }
+
+    await db.update(ptoRequests)
+      .set({ googleEventId: employeeEventId, hrCalendarEventId: hrEventId })
+      .where(eq(ptoRequests.id, request.id));
+  } catch (calendarError) {
+    console.error('[PTO Calendar] Error recreating calendar events:', calendarError);
+  }
+};
+
+router.patch('/api/pto/:id/edit', requireAuth, async (req: any, res) => {
+  try {
+    const user = req.user!;
+    const currentRequest = await storage.getPtoRequestById(req.params.id);
+    if (!currentRequest) {
+      return res.status(404).json({ error: 'PTO request not found' });
+    }
+
+    const isOwner = currentRequest.employeeId === user.id;
+    const isManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const canApprove = PTO_APPROVER_EMAILS.includes(user.email);
+    if (!isOwner && !isManager) {
+      return res.status(403).json({ error: 'You are not allowed to edit this PTO request' });
+    }
+
+    const employee = await storage.getUserById(currentRequest.employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found for PTO request' });
+    }
+
+    const startDateStr = req.body.startDate;
+    const endDateStr = req.body.endDate;
+    const reason = (req.body.reason || '').toString().trim();
+    const requestTypeRaw = (req.body.type || currentRequest.type || 'VACATION').toString().toUpperCase();
+    const allowedTypes = ['VACATION', 'SICK', 'PERSONAL'] as const;
+    const requestType = allowedTypes.includes(requestTypeRaw as any)
+      ? (requestTypeRaw as typeof allowedTypes[number])
+      : null;
+
+    if (!startDateStr || !endDateStr || !reason || !requestType) {
+      return res.status(400).json({ error: 'Start date, end date, reason, and type are required' });
+    }
+
+    if (employee.department === 'Sales' ||
+        employee.employmentType === '1099' ||
+        employee.employmentType === 'CONTRACTOR') {
+      return res.status(403).json({
+        error: 'Employee is not eligible for PTO based on department or employment type.'
+      });
+    }
+
+    const startDate = parseLocalDate(startDateStr);
+    const endDate = parseLocalDate(endDateStr);
+    const companyPolicy = await storage.getCompanyPtoPolicy();
+    const holidayEntries = parseHolidaySchedule(companyPolicy?.holidaySchedule);
+    const holidaySet = buildHolidaySet(holidayEntries.length ? holidayEntries : ALL_HOLIDAYS);
+    const halfDay = req.body.halfDay || false;
+
+    if (startDate > endDate) {
+      return res.status(400).json({ error: 'End date cannot be before start date' });
+    }
+
+    let days: number;
+    if (halfDay) {
+      if (startDateStr !== endDateStr) {
+        return res.status(400).json({ error: 'Half-day requests must be for a single date' });
+      }
+      if (!isBusinessDay(startDate, holidaySet)) {
+        return res.status(400).json({ error: 'Selected date is not a business day' });
+      }
+      days = 0.5;
+    } else {
+      days = countBusinessDays(startDate, endDate, holidaySet);
+      if (days <= 0) {
+        return res.status(400).json({ error: 'Selected date range has no business days' });
+      }
+    }
+
+    const individualPolicies = await storage.getAllPtoPolicies();
+    const individualPolicy = individualPolicies.find((p: any) => p.employeeId === employee.id);
+    const deptSetting = employee.department
+      ? await storage.getDepartmentPtoSettingByDepartment(employee.department)
+      : null;
+
+    const defaultAllocation = getPtoAllocation(employee.employmentType, employee.department);
+    let vacationDays = defaultAllocation.vacationDays;
+    let sickDays = defaultAllocation.sickDays;
+    let personalDays = defaultAllocation.personalDays;
+
+    if (individualPolicy) {
+      vacationDays = individualPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = individualPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = individualPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    } else if (deptSetting && !deptSetting.inheritFromCompany) {
+      vacationDays = deptSetting.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = deptSetting.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = deptSetting.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    } else if (companyPolicy) {
+      vacationDays = companyPolicy.vacationDays || PTO_POLICY.DEFAULT_VACATION_DAYS;
+      sickDays = companyPolicy.sickDays || PTO_POLICY.DEFAULT_SICK_DAYS;
+      personalDays = companyPolicy.personalDays || PTO_POLICY.DEFAULT_PERSONAL_DAYS;
+    }
+
+    const allPtoRequests = await storage.getAllPtoRequests();
+    const currentYear = new Date().getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+    const myRequests = allPtoRequests.filter(r => r.employeeId === employee.id && r.id !== currentRequest.id);
+    const approvedRequests = myRequests.filter(r =>
+      r.status === 'APPROVED' &&
+      r.startDate >= yearStart &&
+      r.startDate <= yearEnd
+    );
+    const pendingRequests = myRequests.filter(r => r.status === 'PENDING');
+
+    const usedVacation = approvedRequests
+      .filter(r => r.type === 'VACATION' || !r.type)
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedSick = approvedRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const usedPersonal = approvedRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+
+    const pendingVacation = pendingRequests
+      .filter(r => r.type === 'VACATION' || !r.type)
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const pendingSick = pendingRequests
+      .filter(r => r.type === 'SICK')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+    const pendingPersonal = pendingRequests
+      .filter(r => r.type === 'PERSONAL')
+      .reduce((sum, r) => sum + (r.days || 0), 0);
+
+    const remainingVacation = Math.max(0, vacationDays - usedVacation - pendingVacation);
+    const remainingSick = Math.max(0, sickDays - usedSick - pendingSick);
+    const remainingPersonal = Math.max(0, personalDays - usedPersonal - pendingPersonal);
+
+    const remainingByType = {
+      VACATION: remainingVacation,
+      SICK: remainingSick,
+      PERSONAL: remainingPersonal
+    } as const;
+
+    if (days > remainingByType[requestType]) {
+      return res.status(400).json({
+        error: 'Insufficient PTO balance',
+        message: `You only have ${remainingByType[requestType]} ${requestType.toLowerCase()} day(s) available.`
+      });
+    }
+
+    if (employee.department) {
+      const overlappingPTO = await db.select({
+        id: ptoRequests.id,
+        employeeId: ptoRequests.employeeId,
+        startDate: ptoRequests.startDate,
+        endDate: ptoRequests.endDate,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(ptoRequests)
+      .innerJoin(users, eq(users.id, ptoRequests.employeeId))
+      .where(and(
+        eq(users.department, employee.department),
+        eq(ptoRequests.status, 'APPROVED'),
+        ne(ptoRequests.employeeId, employee.id),
+        ne(ptoRequests.id, currentRequest.id),
+        or(
+          and(gte(ptoRequests.startDate, startDateStr), lte(ptoRequests.startDate, endDateStr)),
+          and(gte(ptoRequests.endDate, startDateStr), lte(ptoRequests.endDate, endDateStr)),
+          and(lte(ptoRequests.startDate, startDateStr), gte(ptoRequests.endDate, endDateStr)),
+          and(gte(ptoRequests.startDate, startDateStr), lte(ptoRequests.endDate, endDateStr))
+        )
+      ));
+
+      if (overlappingPTO.length > 0) {
+        const conflictingEmployee = overlappingPTO[0];
+        return res.status(400).json({
+          error: 'Department conflict',
+          message: `Cannot request PTO for these dates. ${conflictingEmployee.firstName} ${conflictingEmployee.lastName} in your department (${employee.department}) already has approved PTO during this period (${conflictingEmployee.startDate} to ${conflictingEmployee.endDate}). Please choose different dates.`,
+          conflictingEmployee: `${conflictingEmployee.firstName} ${conflictingEmployee.lastName}`,
+          conflictDates: { start: conflictingEmployee.startDate, end: conflictingEmployee.endDate }
+        });
+      }
+    }
+
+    const keepApproved = canApprove && req.body.keepApproved === true && currentRequest.status === 'APPROVED';
+    const nextStatus = keepApproved ? 'APPROVED' : 'PENDING';
+    const wasApproved = currentRequest.status === 'APPROVED';
+
+    if (wasApproved && !keepApproved) {
+      await revokeApprovedPtoEffects(currentRequest);
+    }
+
+    if (keepApproved && wasApproved) {
+      const policy = await storage.getPtoPolicyByEmployee(employee.id);
+      if (policy) {
+        const delta = (days || 0) - (currentRequest.days || 0);
+        const newUsedDays = Math.max(0, policy.usedDays + delta);
+        const newRemainingDays = policy.totalDays - newUsedDays;
+        await storage.updatePtoPolicy(policy.id, {
+          usedDays: newUsedDays,
+          remainingDays: newRemainingDays
+        });
+      }
+    }
+
+    const updatedRequest = await storage.updatePtoRequest(currentRequest.id, {
+      startDate: startDateStr,
+      endDate: endDateStr,
+      type: requestType,
+      reason,
+      days,
+      status: nextStatus as any,
+      reviewedBy: keepApproved ? user.id : null,
+      reviewedAt: keepApproved ? new Date() : null,
+      reviewNotes: keepApproved ? currentRequest.reviewNotes : null
+    });
+
+    if (keepApproved && wasApproved) {
+      await cancelPtoCalendarEvents(currentRequest);
+      await recreateApprovedPtoEvents(employee, updatedRequest);
+      await notifyEmployeePtoChangedByAdmin(employee, user, {
+        startDate: updatedRequest.startDate,
+        endDate: updatedRequest.endDate,
+        days: updatedRequest.days,
+        type: updatedRequest.type,
+        reason: updatedRequest.reason
+      });
+    } else {
+      await notifyPtoApprovers(employee, {
+        startDate: updatedRequest.startDate,
+        endDate: updatedRequest.endDate,
+        days: updatedRequest.days,
+        type: updatedRequest.type,
+        reason: updatedRequest.reason,
+        action: 'resubmitted'
+      });
+    }
+
+    res.json(updatedRequest);
+  } catch (error: any) {
+    console.error('PTO edit error:', error);
+    res.status(500).json({ error: error.message || 'Failed to update PTO request' });
+  }
+});
+
 // PTO Approvers - imported from shared/constants/roles.ts
 
 router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
@@ -2268,8 +2709,12 @@ router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
       return res.status(403).json({ error: 'You can only cancel your own PTO request' });
     }
 
-    if (currentRequest.status !== 'PENDING') {
-      return res.status(400).json({ error: 'Only pending PTO requests can be cancelled' });
+    if (!['PENDING', 'APPROVED'].includes(currentRequest.status)) {
+      return res.status(400).json({ error: 'Only pending or approved PTO requests can be cancelled' });
+    }
+
+    if (currentRequest.status === 'APPROVED') {
+      await revokeApprovedPtoEffects(currentRequest);
     }
 
     const ptoRequest = await storage.updatePtoRequest(req.params.id, {
@@ -2278,6 +2723,18 @@ router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
       reviewedBy: user.id,
       reviewedAt: new Date(),
     });
+
+    const employee = await storage.getUserById(currentRequest.employeeId);
+    if (employee) {
+      await notifyPtoApprovers(employee, {
+        startDate: currentRequest.startDate,
+        endDate: currentRequest.endDate,
+        days: currentRequest.days || 0,
+        type: currentRequest.type || 'VACATION',
+        reason: currentRequest.reason,
+        action: 'cancelled'
+      });
+    }
 
     res.json(ptoRequest);
   } catch (error: any) {
@@ -2320,7 +2777,7 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
         const newUsedDays = policy.usedDays + daysToUse;
         const newRemainingDays = policy.totalDays - newUsedDays;
 
-        await storage.updatePtoPolicy(currentRequest.employeeId, {
+        await storage.updatePtoPolicy(policy.id, {
           usedDays: newUsedDays,
           remainingDays: newRemainingDays
         });
@@ -2415,7 +2872,7 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
         const newUsedDays = Math.max(0, policy.usedDays - daysToRestore);
         const newRemainingDays = policy.totalDays - newUsedDays;
 
-        await storage.updatePtoPolicy(currentRequest.employeeId, {
+        await storage.updatePtoPolicy(policy.id, {
           usedDays: newUsedDays,
           remainingDays: newRemainingDays
         });
