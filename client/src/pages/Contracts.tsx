@@ -104,16 +104,21 @@ export default function Contracts() {
     return `${now.getFullYear()}-${month}-${day}`;
   };
 
-  const applyRecipientAutoFill = (fullName: string) => {
+  const applyRecipientAutoFill = (fullName: string, email?: string) => {
     const defaultDate = todayInput();
     setFieldValues((prev) => ({
       contractorName: fullName,
+      signatureName: fullName,
       name: fullName,
       employeeName: fullName,
       startDate: prev.startDate || defaultDate,
       effectiveDate: prev.effectiveDate || defaultDate,
       ...prev,
     }));
+
+    if (email) {
+      contractForm.setValue('content', contractForm.getValues('content').replace(/\{\{email\}\}/g, email));
+    }
     if (!contractForm.getValues('title')) {
       contractForm.setValue('title', selectedTemplate?.name || 'Contract');
     }
@@ -134,7 +139,7 @@ export default function Contracts() {
       if (match) {
         contractForm.setValue('employeeId', match.id);
         contractForm.setValue('candidateId', '');
-        applyRecipientAutoFill(`${match.firstName} ${match.lastName}`);
+        applyRecipientAutoFill(`${match.firstName} ${match.lastName}`, match.email);
       }
     } else {
       const match = candidates.find((c: any) =>
@@ -144,7 +149,7 @@ export default function Contracts() {
       if (match) {
         contractForm.setValue('candidateId', match.id);
         contractForm.setValue('employeeId', '');
-        applyRecipientAutoFill(`${match.firstName} ${match.lastName}`);
+        applyRecipientAutoFill(`${match.firstName} ${match.lastName}`, match.email);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

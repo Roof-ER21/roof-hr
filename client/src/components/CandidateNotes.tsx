@@ -225,6 +225,7 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
                             variant="ghost"
                             onClick={() => deleteNoteMutation.mutate(note.id)}
                             disabled={deleteNoteMutation.isPending}
+                            title="Delete note"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

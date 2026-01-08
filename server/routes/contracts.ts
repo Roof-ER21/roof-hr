@@ -623,16 +623,17 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
   try {
     const user = req.user!;
     const { fieldValues = {}, ...contractPayload } = req.body;
-    // Parse the request based on recipient type
-    let recipientName = '';
-    let recipientEmail = '';
-    let recipientPosition = '';
-    let recipientDepartment = '';
+  // Parse the request based on recipient type
+  let recipientName = '';
+  let recipientEmail = '';
+  let recipientPosition = '';
+  let recipientDepartment = '';
+  const rawFieldValues = fieldValues as Record<string, string>;
 
-    if (req.body.recipientType === 'CANDIDATE') {
-      // Get candidate information
-      const candidate = await storage.getCandidateById(req.body.candidateId);
-      if (!candidate) {
+  if (req.body.recipientType === 'CANDIDATE') {
+    // Get candidate information
+    const candidate = await storage.getCandidateById(req.body.candidateId);
+    if (!candidate) {
         return res.status(404).json({ error: 'Candidate not found' });
       }
       recipientName = `${candidate.firstName} ${candidate.lastName}`;
@@ -662,12 +663,25 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       contractPayload.employeeId = employee.id;
     }
 
+    const baseValues = buildBaseFieldValues({
+      recipientName,
+      recipientEmail,
+      recipientPosition,
+      recipientDepartment
+    });
+
+    const mergedFieldValues = {
+      ...baseValues,
+      ...rawFieldValues
+    };
+
     let parsedData = insertEmployeeContractSchema.parse({
       ...contractPayload,
       recipientName,
       recipientEmail,
       createdBy: user.id,
-      status: 'DRAFT' as const
+      status: 'DRAFT' as const,
+      fieldValues: mergedFieldValues
     });
 
     // If using a template, fetch it and populate the content
@@ -675,33 +689,25 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       const template = await storage.getContractTemplateById(parsedData.templateId);
       if (template) {
         const today = new Date().toLocaleDateString();
-        const baseValues = buildBaseFieldValues({
-          recipientName,
-          recipientEmail,
-          recipientPosition,
-          recipientDepartment
-        });
-
         const autoValues: Record<string, string> = {
-          ...baseValues,
+          ...mergedFieldValues,
           date: today,
-          startDate: today,
-          effectiveDate: today,
+          startDate: mergedFieldValues.startDate || today,
+          effectiveDate: mergedFieldValues.effectiveDate || today,
           companySignatureDate: today,
         };
 
-        const mergedFieldValues = { ...autoValues, ...(fieldValues || {}) };
         // Replace variables in template content
         let content = template.content;
 
         // Replace common variables
-        content = applyTemplateReplacements(content, mergedFieldValues);
+        content = applyTemplateReplacements(content, autoValues);
 
-        parsedData = { ...parsedData, content, fieldValues: mergedFieldValues };
+        parsedData = { ...parsedData, content, fieldValues: autoValues };
 
         if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
           const outputFileName = `contract_${recipientName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-          await contractPdfService.generateContract(template.fileName, mergedFieldValues, outputFileName);
+          await contractPdfService.generateContract(template.fileName, autoValues, outputFileName);
           parsedData = {
             ...parsedData,
             fileUrl: `/attached_assets/contract_templates/${outputFileName}`,
