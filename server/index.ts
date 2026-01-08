@@ -78,27 +78,73 @@ async function runMigrations() {
     `);
     logger.info('[Migration] ✅ Screener color column ready');
 
-    // Add signature address to employee contracts
+    // Ensure employee contracts table and columns exist (new public link flow)
     await db.execute(sql`
-      ALTER TABLE employee_contracts
-      ADD COLUMN IF NOT EXISTS signature_address TEXT
+      CREATE TABLE IF NOT EXISTS employee_contracts (
+        id TEXT PRIMARY KEY,
+        employee_id TEXT,
+        candidate_id TEXT,
+        recipient_type TEXT NOT NULL DEFAULT 'EMPLOYEE',
+        recipient_email TEXT NOT NULL DEFAULT '',
+        recipient_name TEXT NOT NULL DEFAULT '',
+        template_id TEXT,
+        title TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL DEFAULT '',
+        file_url TEXT,
+        file_name TEXT,
+        access_token TEXT,
+        token_expiry TIMESTAMP,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        sent_date TIMESTAMP,
+        viewed_date TIMESTAMP,
+        signed_date TIMESTAMP,
+        signature TEXT,
+        signature_address TEXT,
+        signature_ip TEXT,
+        rejection_reason TEXT,
+        notified_managers TEXT[],
+        field_values JSONB,
+        sent_by TEXT,
+        reminder_stages TEXT[],
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
     `);
-    logger.info('[Migration] ✅ Contract signature address column ready');
+    logger.info('[Migration] ✅ employee_contracts table ensured');
 
-    // Add contract field values and sender tracking
-    await db.execute(sql`
-      ALTER TABLE employee_contracts
-      ADD COLUMN IF NOT EXISTS field_values JSONB
-    `);
-    await db.execute(sql`
-      ALTER TABLE employee_contracts
-      ADD COLUMN IF NOT EXISTS sent_by TEXT
-    `);
-    await db.execute(sql`
-      ALTER TABLE employee_contracts
-      ADD COLUMN IF NOT EXISTS reminder_stages TEXT[]
-    `);
-    logger.info('[Migration] ✅ Contract field values and reminder columns ready');
+    // Backfill missing employee_contracts columns for existing deployments
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS employee_id TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS candidate_id TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS recipient_type TEXT NOT NULL DEFAULT 'EMPLOYEE'`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS recipient_email TEXT NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS recipient_name TEXT NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS template_id TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS file_url TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS file_name TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS access_token TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS token_expiry TIMESTAMP`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'DRAFT'`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS sent_date TIMESTAMP`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS viewed_date TIMESTAMP`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS signed_date TIMESTAMP`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS signature TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS signature_address TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS signature_ip TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS notified_managers TEXT[] DEFAULT '{}'::text[]`);
+    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN IF EXISTS notified_managers SET DEFAULT '{}'::text[]`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS field_values JSONB DEFAULT '{}'::jsonb`);
+    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN IF EXISTS field_values SET DEFAULT '{}'::jsonb`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS sent_by TEXT`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS reminder_stages TEXT[] DEFAULT '{}'::text[]`);
+    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN IF EXISTS reminder_stages SET DEFAULT '{}'::text[]`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()`);
+    await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()`);
+    logger.info('[Migration] ✅ employee_contracts columns aligned');
 
     logger.info('[Migration] All migrations completed successfully');
   } catch (error: any) {
