@@ -166,6 +166,8 @@ app.set('trust proxy', true);
 // Serve contract template PDFs
 const contractTemplatesDir = contractPdfService.getTemplatesDir();
 app.use('/contract-templates', express.static(contractTemplatesDir));
+// Backward-compat: serve from attached_assets path used by stored URLs
+app.use('/attached_assets/contract_templates', express.static(contractTemplatesDir));
 
 // Session configuration with security improvements
 app.use(session({

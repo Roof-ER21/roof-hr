@@ -1507,14 +1507,20 @@ export default function Contracts() {
             {selectedTemplate?.fileName || selectedTemplate?.fileUrl ? (
               <div className="space-y-2">
                 <h4 className="font-medium">PDF Preview:</h4>
+                {(() => {
+                  const rawUrl = selectedTemplate?.fileUrl || `/attached_assets/contract_templates/${selectedTemplate?.fileName}`;
+                  const previewUrl = rawUrl?.replace('/attached_assets/contract_templates', '/contract-templates');
+                  return (
                 <iframe
                   title="Template PDF"
-                  src={selectedTemplate?.fileUrl || `/attached_assets/contract_templates/${selectedTemplate?.fileName}`}
+                  src={previewUrl}
                   className="w-full h-[480px] border rounded"
                 />
+                  );
+                })()}
                 <div>
                   <a
-                    href={selectedTemplate?.fileUrl || `/attached_assets/contract_templates/${selectedTemplate?.fileName}`}
+                    href={(selectedTemplate?.fileUrl || `/attached_assets/contract_templates/${selectedTemplate?.fileName}`)?.replace('/attached_assets/contract_templates', '/contract-templates')}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center text-sm text-blue-600 hover:underline"
