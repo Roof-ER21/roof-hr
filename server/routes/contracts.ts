@@ -1315,5 +1315,115 @@ router.get('/api/public/contract/:token/download', async (req, res) => {
   }
 });
 
+// Admin endpoint to add retail templates
+router.post('/api/admin/contracts/add-retail-templates', requireAuth, async (req, res) => {
+  try {
+    // Check if user is admin
+    const user = (req as any).user;
+    if (!user || !['SUPER_ADMIN', 'ADMIN'].includes(user.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const results: any[] = [];
+    const existingTemplates = await storage.getAllContractTemplates();
+
+    // Retail Marketing template
+    const marketingExists = existingTemplates.some(t =>
+      t.name === 'Retail Marketing Representative Agreement' ||
+      t.fileName === 'retail_marketing_contractor_agreement.pdf'
+    );
+
+    if (!marketingExists) {
+      const marketingTemplate = await storage.createContractTemplate({
+        id: uuidv4(),
+        name: 'Retail Marketing Representative Agreement',
+        type: 'RETAIL',
+        territory: null,
+        content: 'Retail marketing contractor agreement',
+        fileUrl: '/attached_assets/contract_templates/retail_marketing_contractor_agreement.pdf',
+        fileName: 'retail_marketing_contractor_agreement.pdf',
+        variables: ['contractorName', 'effectiveDate', 'signatureName', 'signatureDate'],
+        isActive: true,
+        createdBy: user.email || 'admin'
+      });
+      results.push({ created: 'Retail Marketing Representative Agreement' });
+    } else {
+      results.push({ skipped: 'Retail Marketing Representative Agreement (already exists)' });
+    }
+
+    // Retail Sales template
+    const salesExists = existingTemplates.some(t =>
+      t.name === 'Retail Sales Consultant Agreement' ||
+      t.fileName === 'retail_sales_contractor_agreement.pdf'
+    );
+
+    if (!salesExists) {
+      const salesTemplate = await storage.createContractTemplate({
+        id: uuidv4(),
+        name: 'Retail Sales Consultant Agreement',
+        type: 'RETAIL',
+        territory: null,
+        content: 'Retail sales contractor agreement',
+        fileUrl: '/attached_assets/contract_templates/retail_sales_contractor_agreement.pdf',
+        fileName: 'retail_sales_contractor_agreement.pdf',
+        variables: ['contractorName', 'effectiveDate', 'signatureName', 'signatureDate'],
+        isActive: true,
+        createdBy: user.email || 'admin'
+      });
+      results.push({ created: 'Retail Sales Consultant Agreement' });
+    } else {
+      results.push({ skipped: 'Retail Sales Consultant Agreement (already exists)' });
+    }
+
+    // Update existing territory templates with new PDF files
+    const updateResults: any[] = [];
+
+    // Update Richmond templates
+    const richmondTemplates = existingTemplates.filter(t =>
+      t.territory === 'Richmond' || t.name?.toLowerCase().includes('richmond')
+    );
+    for (const template of richmondTemplates) {
+      await storage.updateContractTemplate(template.id, {
+        fileUrl: '/attached_assets/contract_templates/richmond_contractor_agreement.pdf',
+        fileName: 'richmond_contractor_agreement.pdf'
+      });
+      updateResults.push({ updated: `${template.name} -> richmond PDF` });
+    }
+
+    // Update DMV templates
+    const dmvTemplates = existingTemplates.filter(t =>
+      t.territory === 'DMV' || t.name?.toLowerCase().includes('dmv')
+    );
+    for (const template of dmvTemplates) {
+      await storage.updateContractTemplate(template.id, {
+        fileUrl: '/attached_assets/contract_templates/dmv_pa_contractor_agreement.pdf',
+        fileName: 'dmv_pa_contractor_agreement.pdf'
+      });
+      updateResults.push({ updated: `${template.name} -> dmv_pa PDF` });
+    }
+
+    // Update PA templates
+    const paTemplates = existingTemplates.filter(t =>
+      t.territory === 'PA' || (t.name?.toLowerCase().includes('pa ') || t.name?.toLowerCase().includes('pennsylvania'))
+    );
+    for (const template of paTemplates) {
+      await storage.updateContractTemplate(template.id, {
+        fileUrl: '/attached_assets/contract_templates/dmv_pa_contractor_agreement.pdf',
+        fileName: 'dmv_pa_contractor_agreement.pdf'
+      });
+      updateResults.push({ updated: `${template.name} -> dmv_pa PDF` });
+    }
+
+    res.json({
+      success: true,
+      templates: results,
+      updates: updateResults
+    });
+  } catch (error: any) {
+    console.error('Error adding retail templates:', error);
+    res.status(500).json({ error: 'Failed to add retail templates', details: error.message });
+  }
+});
+
 export { generateAccessToken };
 export default router;
