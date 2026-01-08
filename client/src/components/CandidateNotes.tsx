@@ -216,7 +216,7 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
                     </div>
                     {(() => {
                       const elevatedRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN', 'TERRITORY_SALES_MANAGER'];
-                      const canDelete = note.authorId === user?.id || elevatedRoles.includes(user?.role || '');
+                      const canDelete = note.authorId === user?.id || elevatedRoles.includes(user?.role || '') || user?.role === 'SOURCER';
                       if (!canDelete) return null;
                       return (
                       <Button

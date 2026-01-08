@@ -750,6 +750,11 @@ class DrizzleStorage implements IStorage {
     await db.delete(candidateNotes).where(eq(candidateNotes.id, id));
   }
 
+  async updateCandidateNote(id: string, data: Partial<InsertCandidateNote>): Promise<CandidateNote> {
+    const [note] = await db.update(candidateNotes).set({ ...data, updatedAt: new Date() }).where(eq(candidateNotes.id, id)).returning();
+    return note;
+  }
+
   // Employee Notes methods
   async createEmployeeNote(data: InsertEmployeeNote): Promise<EmployeeNote> {
     const id = uuidv4();

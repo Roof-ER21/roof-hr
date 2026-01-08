@@ -3975,6 +3975,34 @@ router.post('/api/candidates/:candidateId/notes', requireAuth, async (req: any, 
   }
 });
 
+router.patch('/api/candidates/notes/:id', requireAuth, async (req, res) => {
+  try {
+    const user = req.user!;
+    const note = await storage.getCandidateNoteById(req.params.id);
+    if (!note) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const isAuthor = note.authorId === user.id;
+    const isSourcerRole = ['SOURCER', 'EXTENDED_SOURCER'].includes(user.role || '');
+
+    if (!(isAdminOrManager || isAuthor || isSourcerRole)) {
+      return res.status(403).json({ error: 'Not allowed to edit this note' });
+    }
+
+    const { content, type } = req.body;
+    const updates: any = {};
+    if (content) updates.content = content;
+    if (type) updates.type = type;
+
+    const updated = await storage.updateCandidateNote(req.params.id, updates);
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ error: 'Failed to update note' });
+  }
+});
+
 router.delete('/api/candidates/notes/:id', requireAuth, async (req, res) => {
   try {
     const user = req.user!;
@@ -3985,8 +4013,9 @@ router.delete('/api/candidates/notes/:id', requireAuth, async (req, res) => {
 
     const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
     const isAuthor = note.authorId === user.id;
+    const isSourcerRole = ['SOURCER', 'EXTENDED_SOURCER'].includes(user.role || '');
 
-    if (!isAdminOrManager && !isAuthor) {
+    if (!(isAdminOrManager || isAuthor || isSourcerRole)) {
       return res.status(403).json({ error: 'Not allowed to delete this note' });
     }
 
