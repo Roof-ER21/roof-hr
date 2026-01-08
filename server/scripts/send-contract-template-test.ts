@@ -57,7 +57,6 @@ Roof HR
       body,
       contractorName: 'Test Candidate',
       effectiveDate: today,
-      signatureDate: today,
       templates
     })
   });

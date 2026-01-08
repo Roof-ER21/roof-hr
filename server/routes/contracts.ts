@@ -625,7 +625,7 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
           date: today,
           startDate: today,
           effectiveDate: today,
-          signatureDate: today,
+          companySignatureDate: today,
         };
 
         const mergedFieldValues = { ...autoValues, ...(fieldValues || {}) };
