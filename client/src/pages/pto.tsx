@@ -24,6 +24,8 @@ import { DEPARTMENTS } from '@/../../shared/constants/departments';
 import { employeeGetsPto, ADMIN_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
 import { PTO_POLICY } from '@shared/constants/pto-policy';
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 const ptoSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
@@ -124,7 +126,9 @@ function PTO() {
       });
       if (!response.ok) throw new Error('Failed to fetch PTO requests');
       return response.json();
-    }
+    },
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true
   });
 
   const { data: users } = useQuery({
@@ -137,7 +141,9 @@ function PTO() {
       });
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
-    }
+    },
+    refetchInterval: 300000,
+    refetchOnWindowFocus: true
   });
 
   const adminEligibleEmployees = (users || []).filter((u: any) => {
@@ -994,11 +1000,20 @@ function PTO() {
     return days;
   };
 
-  const countMonthUsage = (requests: any[], year: number, monthIndex: number) => {
+  const countMonthUsage = (
+    requests: any[],
+    year: number,
+    monthIndex: number,
+    rangeStart?: Date,
+    rangeEnd?: Date
+  ) => {
     const monthStart = new Date(year, monthIndex, 1);
     const monthEnd = new Date(year, monthIndex + 1, 0);
+    const start = rangeStart && rangeStart > monthStart ? rangeStart : monthStart;
+    const end = rangeEnd && rangeEnd < monthEnd ? rangeEnd : monthEnd;
+    if (start > end) return 0;
     return requests.reduce((sum, request) => {
-      return sum + countOverlappingDays(request, monthStart, monthEnd);
+      return sum + countOverlappingDays(request, start, end);
     }, 0);
   };
 
@@ -1021,8 +1036,17 @@ function PTO() {
     });
 
     const currentYear = today.getFullYear();
+    const yearStart = new Date(currentYear, 0, 1);
+    const yearEnd = new Date(currentYear, 11, 31);
     const approvedPastThisYear = approvedPast.filter((request: any) => {
-      return parseLocalDate(request.startDate).getFullYear() === currentYear;
+      const requestStart = parseLocalDate(request.startDate);
+      const requestEnd = parseLocalDate(request.endDate);
+      return requestStart <= yearEnd && requestEnd >= yearStart;
+    });
+    const approvedFutureThisYear = approvedFuture.filter((request: any) => {
+      const requestStart = parseLocalDate(request.startDate);
+      const requestEnd = parseLocalDate(request.endDate);
+      return requestStart <= yearEnd && requestEnd >= yearStart;
     });
 
     const employeeUsage: Record<string, any> = {};
@@ -1095,17 +1119,37 @@ function PTO() {
     }
 
     const employeeMonthUsage: Record<string, { jan: number; feb: number; dec: number }> = {};
+    const employeeMonthlyUsage: Record<string, { usedDays: number[]; upcomingDays: number[] }> = {};
     for (const employeeId of employeesWithUsage) {
       const employeeRequests = approvedPastThisYear.filter((request: any) => request.employeeId === employeeId);
+      const employeeFutureRequests = approvedFutureThisYear.filter((request: any) => request.employeeId === employeeId);
       employeeMonthUsage[employeeId] = {
-        jan: countMonthUsage(employeeRequests, currentYear, 0),
-        feb: countMonthUsage(employeeRequests, currentYear, 1),
-        dec: countMonthUsage(employeeRequests, currentYear, 11),
+        jan: countMonthUsage(employeeRequests, currentYear, 0, analyticsRangeStart, analyticsRangeEnd),
+        feb: countMonthUsage(employeeRequests, currentYear, 1, analyticsRangeStart, analyticsRangeEnd),
+        dec: countMonthUsage(employeeRequests, currentYear, 11, analyticsRangeStart, analyticsRangeEnd),
+      };
+      employeeMonthlyUsage[employeeId] = {
+        usedDays: MONTH_LABELS.map((_, monthIndex) =>
+          countMonthUsage(employeeRequests, currentYear, monthIndex, analyticsRangeStart, analyticsRangeEnd)
+        ),
+        upcomingDays: MONTH_LABELS.map((_, monthIndex) =>
+          countMonthUsage(employeeFutureRequests, currentYear, monthIndex, analyticsRangeStart, analyticsRangeEnd)
+        )
       };
     }
 
     const employeeRows = Object.values(employeeUsage).sort((a: any, b: any) => b.totalDays - a.totalDays);
     const departmentRows = Object.values(departmentUsage).sort((a: any, b: any) => b.totalDays - a.totalDays);
+    const monthlyUsage = MONTH_LABELS.map((label, monthIndex) => ({
+      label,
+      usedDays: countMonthUsage(approvedPastThisYear, currentYear, monthIndex, analyticsRangeStart, analyticsRangeEnd),
+      upcomingDays: countMonthUsage(approvedFutureThisYear, currentYear, monthIndex, analyticsRangeStart, analyticsRangeEnd),
+    }));
+    const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const nextMonthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+    const nextMonthUpcomingDays = approvedFuture.reduce((sum: number, request: any) => {
+      return sum + countOverlappingDays(request, nextMonthStart, nextMonthEnd);
+    }, 0);
 
     return {
       year: currentYear,
@@ -1115,10 +1159,14 @@ function PTO() {
       departmentCount: departmentsWithUsage.length,
       employeeRows,
       departmentRows,
-      janUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 0),
-      febUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 1),
-      decUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 11),
+      janUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 0, analyticsRangeStart, analyticsRangeEnd),
+      febUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 1, analyticsRangeStart, analyticsRangeEnd),
+      decUsedDays: countMonthUsage(approvedPastThisYear, currentYear, 11, analyticsRangeStart, analyticsRangeEnd),
       employeeMonthUsage,
+      employeeMonthlyUsage,
+      monthlyUsage,
+      nextMonthUpcomingDays,
+      nextMonthLabel: format(nextMonthStart, 'MMM yyyy'),
       typeTotals,
       employeeTypeTotals
     };
@@ -1142,6 +1190,29 @@ function PTO() {
     }
     return analytics.employeeTypeTotals[analyticsEmployeeId] || { VACATION: 0, SICK: 0, PERSONAL: 0 };
   }, [analytics, analyticsEmployeeId]);
+
+  const selectedMonthlyUsage = useMemo(() => {
+    if (analyticsEmployeeId === 'ALL') {
+      return analytics.monthlyUsage || MONTH_LABELS.map((label) => ({ label, usedDays: 0, upcomingDays: 0 }));
+    }
+    const entry = analytics.employeeMonthlyUsage?.[analyticsEmployeeId];
+    if (!entry) {
+      return MONTH_LABELS.map((label) => ({ label, usedDays: 0, upcomingDays: 0 }));
+    }
+    return MONTH_LABELS.map((label, index) => ({
+      label,
+      usedDays: entry.usedDays[index] || 0,
+      upcomingDays: entry.upcomingDays[index] || 0
+    }));
+  }, [analytics, analyticsEmployeeId]);
+
+  const maxMonthlyDays = useMemo(() => {
+    const maxValue = Math.max(
+      ...selectedMonthlyUsage.map((month) => month.usedDays + month.upcomingDays),
+      1
+    );
+    return maxValue;
+  }, [selectedMonthlyUsage]);
 
   const typeTotalDays = selectedTypeTotals.VACATION + selectedTypeTotals.SICK + selectedTypeTotals.PERSONAL;
 
@@ -2049,10 +2120,14 @@ function PTO() {
               <div className="text-2xl font-semibold">{analytics.departmentCount}</div>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
             <div className="rounded-lg border p-3">
               <div className="text-sm text-muted-foreground">Upcoming Approved Days</div>
               <div className="text-2xl font-semibold">{analytics.totalFutureDays}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-sm text-muted-foreground">Upcoming {analytics.nextMonthLabel}</div>
+              <div className="text-2xl font-semibold">{formatDays(analytics.nextMonthUpcomingDays)}</div>
             </div>
             <div className="rounded-lg border p-3">
               <div className="text-sm text-muted-foreground">Jan Used Days</div>
@@ -2062,7 +2137,7 @@ function PTO() {
               <div className="text-sm text-muted-foreground">Feb Used Days</div>
               <div className="text-2xl font-semibold">{analytics.febUsedDays}</div>
             </div>
-            <div className="rounded-lg border p-3 md:col-span-3">
+            <div className="rounded-lg border p-3 md:col-span-2">
               <div className="text-sm text-muted-foreground">Dec Used Days</div>
               <div className="text-2xl font-semibold">{analytics.decUsedDays}</div>
             </div>
@@ -2088,6 +2163,53 @@ function PTO() {
                     </div>
                     <div className="text-sm font-medium">{label}</div>
                     <div className="text-xs text-muted-foreground">{value} days</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-6">
+            <div className="text-sm font-medium text-muted-foreground mb-3">
+              PTO by Month ({analyticsEmployeeId === 'ALL' ? 'All employees' : 'Selected employee'})
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mb-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                Used days
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+                Upcoming days
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+              {selectedMonthlyUsage.map((month) => {
+                const totalDays = month.usedDays + month.upcomingDays;
+                const totalPercent = totalDays === 0 ? 6 : Math.max(Math.round((totalDays / maxMonthlyDays) * 100), 10);
+                const usedPercent = totalDays === 0 ? 0 : Math.round((month.usedDays / totalDays) * 100);
+                const upcomingPercent = totalDays === 0 ? 0 : 100 - usedPercent;
+                return (
+                  <div key={month.label} className="flex flex-col items-center gap-2">
+                    <div className="w-full h-24 bg-muted/30 rounded-md flex items-end overflow-hidden shadow-inner">
+                      <div className="w-full flex flex-col justify-end" style={{ height: `${totalPercent}%` }}>
+                        {upcomingPercent > 0 && (
+                          <div
+                            className="w-full bg-sky-400/80 transition-all duration-700 ease-out"
+                            style={{ height: `${upcomingPercent}%` }}
+                          />
+                        )}
+                        {usedPercent > 0 && (
+                          <div
+                            className="w-full bg-emerald-500 transition-all duration-700 ease-out"
+                            style={{ height: `${usedPercent}%` }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-sm font-medium">{month.label}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {formatDays(month.usedDays)} used • {formatDays(month.upcomingDays)} upcoming
+                    </div>
                   </div>
                 );
               })}
