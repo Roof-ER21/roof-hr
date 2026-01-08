@@ -237,7 +237,7 @@ export async function notifyContractSentInternal(
 }
 
 export async function notifyContractReminder(
-  contract: { id: string; recipientName: string; recipientEmail: string; title: string; fileUrl?: string },
+  contract: { id: string; recipientName: string; recipientEmail: string; title: string; fileUrl?: string; accessToken?: string | null },
   senderEmail: string | undefined,
   daysSinceSent: number,
   includeRecipient: boolean,
@@ -258,7 +258,10 @@ export async function notifyContractReminder(
     const subject = `Contract Follow-Up (${daysSinceSent} days): ${contract.title} - ${contract.recipientName}`;
     const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
     const baseUrl = appUrl.replace(/\/+$/, '');
-    const signLink = `${baseUrl}/contracts?contractId=${contract.id}`;
+    // Use public link with token for recipient, authenticated link for internal users
+    const signLink = contract.accessToken
+      ? `${baseUrl}/contract/${contract.accessToken}`
+      : `${baseUrl}/contracts?contractId=${contract.id}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #f59e0b;">Contract Follow-Up</h2>
@@ -287,7 +290,8 @@ export async function notifyRecipientOfNewContract(
   contractTitle: string,
   contractId: string,
   senderEmail?: string, // Email of the user sending this (for Gmail impersonation)
-  fileUrl?: string
+  fileUrl?: string,
+  accessToken?: string // Optional token for public access link (no login required)
 ) {
   try {
     // Initialize Gmail service
@@ -296,8 +300,19 @@ export async function notifyRecipientOfNewContract(
     const subject = `New Contract for Review: ${contractTitle}`;
     const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
     const baseUrl = appUrl.replace(/\/+$/, '');
-    const fileLink = fileUrl ? `${baseUrl}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}` : '';
-    const signLink = `${baseUrl}/contracts?contractId=${contractId}`;
+
+    // Use public link with token if available (no login required)
+    // Otherwise fall back to authenticated link
+    const signLink = accessToken
+      ? `${baseUrl}/contract/${accessToken}`
+      : `${baseUrl}/contracts?contractId=${contractId}`;
+
+    // For PDF download, use token-based link if available
+    const fileLink = accessToken && fileUrl
+      ? `${baseUrl}/api/public/contract/${accessToken}/download`
+      : fileUrl
+        ? `${baseUrl}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}`
+        : '';
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Contract Ready for Review</h2>

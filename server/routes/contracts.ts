@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import crypto from 'crypto';
 import { storage } from '../storage';
 import { insertContractTemplateSchema, insertEmployeeContractSchema } from '../../shared/schema';
 import { v4 as uuidv4 } from 'uuid';
@@ -851,17 +852,25 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
       if (updateData.status === 'SENT' && contract.status === 'DRAFT') {
         updateData.sentDate = new Date();
         updateData.sentBy = user.id;
-        
+
+        // Generate access token for public link (no login required)
+        const accessToken = generateAccessToken();
+        const tokenExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        updateData.accessToken = accessToken;
+        updateData.tokenExpiry = tokenExpiry;
+
         const updatedContract = await storage.updateEmployeeContract(req.params.id, updateData);
-        
+
         // Send notification to the recipient via Gmail (from manager's email)
+        // Pass accessToken so email uses public link
         await notifyRecipientOfNewContract(
           contract.recipientEmail,
           contract.recipientName,
           contract.title,
           req.params.id,
           user.email, // Pass sender's email for Gmail impersonation
-          updatedContract.fileUrl || contract.fileUrl || undefined
+          updatedContract.fileUrl || contract.fileUrl || undefined,
+          accessToken // Pass token for public link
         );
 
         await notifyContractSentInternal(
@@ -1111,4 +1120,200 @@ router.post('/api/employee-contracts/:id/rescind', requireAuth, requireManager, 
   }
 });
 
+// ============================================
+// Public Routes (No Authentication Required)
+// ============================================
+
+// Helper function to generate access token
+function generateAccessToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Get contract by token (public form access - no login required)
+router.get('/api/public/contract/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const contract = await storage.getEmployeeContractByToken(token);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found or invalid token' });
+    }
+
+    // Check token expiry
+    if (contract.tokenExpiry && new Date(contract.tokenExpiry) < new Date()) {
+      return res.status(410).json({ error: 'This contract link has expired. Please contact HR for a new link.' });
+    }
+
+    // Check if already signed
+    if (contract.status === 'SIGNED') {
+      return res.status(200).json({
+        ...contract,
+        alreadySigned: true,
+        message: 'This contract has already been signed'
+      });
+    }
+
+    // Check if rejected or rescinded
+    if (contract.status === 'REJECTED' || contract.status === 'RESCINDED') {
+      return res.status(400).json({
+        error: `This contract has been ${contract.status.toLowerCase()}`
+      });
+    }
+
+    // Mark as viewed if not already
+    if (contract.status === 'SENT' && !contract.viewedDate) {
+      await storage.updateEmployeeContract(contract.id, {
+        status: 'VIEWED',
+        viewedDate: new Date()
+      });
+    }
+
+    // Return contract data for viewing (exclude sensitive internal fields)
+    res.json({
+      id: contract.id,
+      recipientName: contract.recipientName,
+      recipientEmail: contract.recipientEmail,
+      title: contract.title,
+      content: contract.content,
+      fileUrl: contract.fileUrl,
+      fileName: contract.fileName,
+      status: contract.status,
+      fieldValues: contract.fieldValues,
+      createdAt: contract.createdAt
+    });
+  } catch (error: any) {
+    console.error('Error fetching contract by token:', error);
+    res.status(500).json({ error: 'Failed to fetch contract' });
+  }
+});
+
+// Sign contract (public form submission - no login required)
+router.post('/api/public/contract/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { signature, signatureAddress } = req.body;
+
+    if (!signature) {
+      return res.status(400).json({ error: 'Signature is required' });
+    }
+
+    const contract = await storage.getEmployeeContractByToken(token);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found or invalid token' });
+    }
+
+    // Check token expiry
+    if (contract.tokenExpiry && new Date(contract.tokenExpiry) < new Date()) {
+      return res.status(410).json({ error: 'This contract link has expired. Please contact HR for a new link.' });
+    }
+
+    // Check if already signed
+    if (contract.status === 'SIGNED') {
+      return res.status(400).json({ error: 'This contract has already been signed' });
+    }
+
+    // Check if rejected or rescinded
+    if (contract.status === 'REJECTED' || contract.status === 'RESCINDED') {
+      return res.status(400).json({
+        error: `This contract has been ${contract.status.toLowerCase()} and cannot be signed`
+      });
+    }
+
+    const signedDate = new Date();
+    const signatureIp = req.ip || (req.headers['x-forwarded-for'] as string) || 'unknown';
+
+    // Apply signature to PDF if there's a file
+    let updatedFileUrl = contract.fileUrl;
+    if (contract.fileUrl && contract.fileName) {
+      try {
+        const signedFileName = `signed_${Date.now()}_${contract.fileName}`;
+        const templateFileName = contract.fileName;
+
+        await contractPdfService.applySignatureToPdf(
+          templateFileName,
+          signature,
+          signedDate,
+          signedFileName,
+          templateFileName
+        );
+
+        updatedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;
+      } catch (pdfError) {
+        console.error('Error applying signature to PDF:', pdfError);
+        // Continue without PDF update - signature is still captured
+      }
+    }
+
+    // Update contract with signature
+    const updatedContract = await storage.updateEmployeeContract(contract.id, {
+      status: 'SIGNED',
+      signature,
+      signatureAddress: signatureAddress || null,
+      signatureIp,
+      signedDate,
+      fileUrl: updatedFileUrl
+    });
+
+    // Send notification to managers and HR
+    const retailFlag = await isRetailContract(contract.templateId);
+    await notifyManagersAndHROfSignedContract({
+      contractId: contract.id,
+      employeeName: contract.recipientName,
+      contractTitle: contract.title,
+      signedDate,
+      signature,
+      fileUrl: updatedFileUrl || undefined
+    }, contract.sentBy || undefined, retailFlag);
+
+    res.json({
+      success: true,
+      message: 'Contract signed successfully',
+      contract: {
+        id: updatedContract.id,
+        status: updatedContract.status,
+        signedDate: updatedContract.signedDate
+      }
+    });
+  } catch (error: any) {
+    console.error('Error signing contract:', error);
+    res.status(500).json({ error: 'Failed to sign contract' });
+  }
+});
+
+// Download contract PDF (public access via token)
+router.get('/api/public/contract/:token/download', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const contract = await storage.getEmployeeContractByToken(token);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found or invalid token' });
+    }
+
+    // Check token expiry
+    if (contract.tokenExpiry && new Date(contract.tokenExpiry) < new Date()) {
+      return res.status(410).json({ error: 'This contract link has expired' });
+    }
+
+    if (!contract.fileUrl || !contract.fileName) {
+      return res.status(404).json({ error: 'No PDF file available for this contract' });
+    }
+
+    // Construct file path
+    const filePath = path.join(process.cwd(), contract.fileUrl.replace(/^\//, ''));
+
+    res.download(filePath, contract.fileName, (err) => {
+      if (err) {
+        console.error('Error downloading contract PDF:', err);
+        res.status(500).json({ error: 'Failed to download contract' });
+      }
+    });
+  } catch (error: any) {
+    console.error('Error downloading contract:', error);
+    res.status(500).json({ error: 'Failed to download contract' });
+  }
+});
+
+export { generateAccessToken };
 export default router;

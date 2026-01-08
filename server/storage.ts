@@ -417,6 +417,7 @@ export interface IStorage {
   getAllEmployeeContracts(): Promise<EmployeeContract[]>;
   updateEmployeeContract(id: string, data: Partial<InsertEmployeeContract>): Promise<EmployeeContract>;
   deleteEmployeeContract(id: string): Promise<void>;
+  getEmployeeContractByToken(token: string): Promise<EmployeeContract | null>;
 
   // Action handler methods for Susan AI
   getCandidateByName(name: string): Promise<Candidate | null>;
@@ -2438,6 +2439,12 @@ class DrizzleStorage implements IStorage {
   
   async deleteEmployeeContract(id: string): Promise<void> {
     await db.delete(employeeContracts).where(eq(employeeContracts.id, id));
+  }
+
+  async getEmployeeContractByToken(token: string): Promise<EmployeeContract | null> {
+    const [contract] = await db.select().from(employeeContracts)
+      .where(eq(employeeContracts.accessToken, token));
+    return contract || null;
   }
 
   // Additional PTO Policy Methods for Three-Level System

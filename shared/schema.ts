@@ -285,6 +285,8 @@ export const employeeContracts = pgTable('employee_contracts', {
   content: text('content').notNull(), // Final contract content
   fileUrl: text('file_url'), // URL to attached PDF file
   fileName: text('file_name'), // Original file name for reference
+  accessToken: text('access_token'),
+  tokenExpiry: timestamp('token_expiry'),
   status: text('status').$type<'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED' | 'RESCINDED'>().notNull().default('DRAFT'),
   sentDate: timestamp('sent_date'),
   viewedDate: timestamp('viewed_date'),

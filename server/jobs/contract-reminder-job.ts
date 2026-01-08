@@ -47,7 +47,8 @@ export async function checkContractReminders(): Promise<void> {
           recipientName: contract.recipientName,
           recipientEmail: contract.recipientEmail,
           title: contract.title,
-          fileUrl: contract.fileUrl || undefined
+          fileUrl: contract.fileUrl || undefined,
+          accessToken: contract.accessToken || undefined
         },
         senderEmail,
         daysSinceSent,

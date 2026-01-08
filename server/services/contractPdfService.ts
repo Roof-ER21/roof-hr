@@ -21,7 +21,52 @@ export interface ContractFieldValues {
   contractorSignDate?: string;
   signatureName?: string;
   signatureDate?: string;
+  // Address fields - multi-line format to match company address style
+  contractorAddress?: string;      // Full formatted multi-line address
+  contractorStreet?: string;       // Street address
+  contractorCity?: string;
+  contractorState?: string;
+  contractorZip?: string;
   [key: string]: string | undefined;
+}
+
+// Helper function to format contractor address in multi-line format
+// matching the company address style:
+//   Street Address
+//   City, State ZIP
+export function formatContractorAddress(address: {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+} | string): string {
+  if (typeof address === 'string') {
+    return address; // Already formatted
+  }
+
+  const lines: string[] = [];
+
+  if (address.street) {
+    lines.push(address.street);
+  }
+
+  const cityStateZip: string[] = [];
+  if (address.city) cityStateZip.push(address.city);
+  if (address.state) {
+    if (cityStateZip.length > 0) {
+      cityStateZip[cityStateZip.length - 1] += ',';
+    }
+    cityStateZip.push(address.state);
+  }
+  if (address.zip) {
+    cityStateZip.push(address.zip);
+  }
+
+  if (cityStateZip.length > 0) {
+    lines.push(cityStateZip.join(' '));
+  }
+
+  return lines.join('\n');
 }
 
 export class ContractPdfService {
