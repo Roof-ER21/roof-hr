@@ -36,7 +36,7 @@ const contractFormSchema = z.object({
   recipientType: z.enum(['EMPLOYEE', 'CANDIDATE']).default('EMPLOYEE'),
   employeeId: z.string().optional(),
   candidateId: z.string().optional(),
-  templateId: z.string().optional(),
+  templateId: z.string().min(1, 'Template is required'),
   title: z.string().min(1, 'Contract title is required'),
   content: z.string().min(1, 'Contract content is required'),
   fieldValues: z.record(z.string()).optional()
@@ -704,7 +704,7 @@ export default function Contracts() {
                   Upload Master Contract
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[700px]">
+            <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Upload Master Contract Template</DialogTitle>
                   <DialogDescription>
@@ -1021,7 +1021,7 @@ export default function Contracts() {
                       name="templateId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Template (Optional)</FormLabel>
+                          <FormLabel>Template</FormLabel>
                           <Select 
                             onValueChange={(value) => {
                               if (value === 'custom') {
@@ -1048,11 +1048,10 @@ export default function Contracts() {
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select template or create custom" />
+                                <SelectValue placeholder="Select template" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="custom">Custom Contract</SelectItem>
                               {templates.filter((t: ContractTemplate) => t.isActive).map((template: ContractTemplate) => (
                                 <SelectItem key={template.id} value={template.id}>
                                   {template.name} ({template.type})

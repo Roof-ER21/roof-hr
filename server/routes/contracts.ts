@@ -722,7 +722,7 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Invalid contract data', details: error.errors });
     }
-    res.status(500).json({ error: 'Failed to create employee contract' });
+    res.status(500).json({ error: 'Failed to create employee contract', details: error?.message || 'Unknown error' });
   }
 });
 
