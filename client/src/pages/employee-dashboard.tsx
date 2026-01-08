@@ -203,10 +203,45 @@ function EmployeeDashboard() {
   }, [currentMonth]);
 
   const getEventsForDay = (day: Date) => {
+    const isDateOnly = (value?: string) => !!value && /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const parseLocalDate = (value: string) => {
+      const [year, month, dayNum] = value.split('-').map(Number);
+      return new Date(year, month - 1, dayNum);
+    };
+    const parseEventDate = (value: string, preferLocalDateOnly: boolean) => {
+      if (preferLocalDateOnly) {
+        const datePart = value.split('T')[0];
+        if (isDateOnly(datePart)) {
+          return parseLocalDate(datePart);
+        }
+      }
+      if (value.includes('T')) {
+        return new Date(value);
+      }
+      if (isDateOnly(value)) {
+        return parseLocalDate(value);
+      }
+      return new Date(value);
+    };
+
+    const dayKey = new Date(day.getFullYear(), day.getMonth(), day.getDate());
     return calendarEvents.filter(event => {
-      const eventStart = new Date(event.startDate);
-      const eventEnd = new Date(event.endDate);
-      return day >= new Date(eventStart.toDateString()) && day <= new Date(eventEnd.toDateString());
+      const isAllDayEvent = event.allDay || event.type === 'PTO' || isDateOnly(event.startDate) || isDateOnly(event.endDate);
+      const eventStart = parseEventDate(event.startDate, isAllDayEvent);
+      const eventEnd = parseEventDate(event.endDate, isAllDayEvent);
+
+      if (!eventStart || !eventEnd || Number.isNaN(eventStart.getTime()) || Number.isNaN(eventEnd.getTime())) {
+        return false;
+      }
+
+      const startDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+      let endDay = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate());
+
+      if (isDateOnly(event.endDate) && event.source === 'google_calendar') {
+        endDay = new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate() - 1);
+      }
+
+      return dayKey >= startDay && dayKey <= endDay;
     });
   };
 
