@@ -16,6 +16,7 @@ import { config, validateConfig } from './config';
 import { rateLimit, sanitizeInput, configureCORS, securityLogger, clearRateLimit } from './middleware/security';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { requestLogger, logger } from './middleware/logger';
+import { contractPdfService } from './services/contractPdfService';
 
 async function createAdminUser() {
   try {
@@ -77,6 +78,13 @@ async function runMigrations() {
     `);
     logger.info('[Migration] ✅ Screener color column ready');
 
+    // Add signature address to employee contracts
+    await db.execute(sql`
+      ALTER TABLE employee_contracts
+      ADD COLUMN IF NOT EXISTS signature_address TEXT
+    `);
+    logger.info('[Migration] ✅ Contract signature address column ready');
+
     logger.info('[Migration] All migrations completed successfully');
   } catch (error: any) {
     // If the column already exists, that's fine
@@ -95,7 +103,7 @@ const app = express();
 app.set('trust proxy', true);
 
 // Serve contract template PDFs
-const contractTemplatesDir = path.resolve(process.cwd(), 'attached_assets', 'contract_templates');
+const contractTemplatesDir = contractPdfService.getTemplatesDir();
 app.use('/contract-templates', express.static(contractTemplatesDir));
 
 // Session configuration with security improvements

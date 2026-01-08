@@ -840,10 +840,13 @@ router.delete('/api/employee-contracts/:id', requireAuth, requireManager, async 
 router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) => {
   try {
     const user = req.user!;
-    const { signature } = req.body;
+    const { signature, signatureAddress } = req.body;
 
     if (!signature) {
       return res.status(400).json({ error: 'Signature required' });
+    }
+    if (!signatureAddress) {
+      return res.status(400).json({ error: 'Mailing address required' });
     }
 
     const contract = await storage.getEmployeeContractById(req.params.id);
@@ -893,6 +896,7 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
     const updatedContract = await storage.updateEmployeeContract(req.params.id, {
       status: 'SIGNED',
       signature,
+      signatureAddress,
       signatureIp,
       signedDate,
       ...(signedFileUrl ? { fileUrl: signedFileUrl, fileName: signedFileName } : {})

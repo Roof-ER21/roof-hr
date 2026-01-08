@@ -55,6 +55,7 @@ const contractFormSchema = z.object({
 
 const signatureFormSchema = z.object({
   signature: z.string().min(1, 'Signature is required'),
+  signatureAddress: z.string().min(1, 'Mailing address is required'),
   signatureDate: z.string().min(1, 'Date is required'),
   agreeToSign: z.boolean().refine(val => val === true, {
     message: 'You must agree to the electronic signature terms'
@@ -110,6 +111,7 @@ export default function Contracts() {
     resolver: zodResolver(signatureFormSchema),
     defaultValues: {
       signature: '',
+      signatureAddress: '',
       signatureDate: new Date().toISOString().split('T')[0],
       agreeToSign: false
     }
@@ -295,10 +297,10 @@ export default function Contracts() {
   });
 
   const signContractMutation = useMutation({
-    mutationFn: (data: { id: string; signature: string; signatureDate: string }) =>
+    mutationFn: (data: { id: string; signature: string; signatureAddress: string; signatureDate: string }) =>
       apiRequest(`/api/employee-contracts/${data.id}/sign`, {
         method: 'POST',
-        body: JSON.stringify({ signature: data.signature, signatureDate: data.signatureDate }),
+        body: JSON.stringify({ signature: data.signature, signatureAddress: data.signatureAddress, signatureDate: data.signatureDate }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/employee-contracts'] });
@@ -356,6 +358,7 @@ export default function Contracts() {
       signContractMutation.mutate({
         id: selectedContract.id,
         signature: data.signature,
+        signatureAddress: data.signatureAddress,
         signatureDate: data.signatureDate
       });
     }
@@ -1292,6 +1295,19 @@ export default function Contracts() {
               Please type your full legal name and confirm the date to electronically sign this contract
             </DialogDescription>
           </DialogHeader>
+          {selectedContract?.fileUrl && (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <a
+                href={selectedContract.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-blue-600 hover:underline"
+              >
+                <File className="h-4 w-4 mr-2" />
+                View contract PDF
+              </a>
+            </div>
+          )}
           <Form {...signatureForm}>
             <form onSubmit={signatureForm.handleSubmit(onSubmitSignature)} className="space-y-4">
               <FormField
@@ -1304,6 +1320,23 @@ export default function Contracts() {
                       <Input
                         placeholder="e.g., John Michael Smith"
                         className="text-lg"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={signatureForm.control}
+                name="signatureAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mailing address</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Street address, city, state, ZIP"
+                        className="min-h-[90px]"
                         {...field}
                       />
                     </FormControl>

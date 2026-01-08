@@ -290,6 +290,7 @@ export const employeeContracts = pgTable('employee_contracts', {
   viewedDate: timestamp('viewed_date'),
   signedDate: timestamp('signed_date'),
   signature: text('signature'), // Base64 encoded signature or signature URL
+  signatureAddress: text('signature_address'),
   signatureIp: text('signature_ip'), // IP address when signed
   rejectionReason: text('rejection_reason'),
   notifiedManagers: text('notified_managers').array(), // Track which managers have been notified
