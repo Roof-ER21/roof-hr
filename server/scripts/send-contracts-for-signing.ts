@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { storage } from '../storage';
 import { contractPdfService } from '../services/contractPdfService';
 import { notifyRecipientOfNewContract } from '../services/contract-notification';
