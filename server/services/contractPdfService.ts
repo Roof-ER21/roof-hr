@@ -27,15 +27,15 @@ export class ContractPdfService {
   private templatesDir: string;
 
   constructor() {
-    const cwdDir = path.resolve(process.cwd(), 'attached_assets', 'contract_templates');
-    const fallbackDir = path.join(__dirname, '../../attached_assets/contract_templates');
-    if (fsSync.existsSync(cwdDir)) {
-      this.templatesDir = cwdDir;
-    } else if (fsSync.existsSync(fallbackDir)) {
-      this.templatesDir = fallbackDir;
-    } else {
-      this.templatesDir = cwdDir;
-    }
+    const candidates = [
+      path.resolve(process.cwd(), 'attached_assets', 'contract_templates'),
+      path.resolve(process.cwd(), 'app', 'attached_assets', 'contract_templates'),
+      path.resolve(__dirname, '..', 'attached_assets', 'contract_templates'),
+      path.resolve(__dirname, '..', '..', 'attached_assets', 'contract_templates'),
+    ];
+
+    const existingDir = candidates.find((dir) => fsSync.existsSync(dir));
+    this.templatesDir = existingDir || candidates[0];
   }
 
   getTemplatesDir(): string {
