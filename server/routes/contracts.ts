@@ -352,6 +352,7 @@ router.post('/api/contracts/generate-from-template',
         startDate: today,
         effectiveDate: today,
         signatureDate: today,
+        companySignatureDate: today,
       };
 
       const mergedFieldValues = { ...autoValues, ...(fieldValues || {}) };

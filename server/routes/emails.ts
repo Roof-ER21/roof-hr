@@ -202,6 +202,7 @@ router.post('/send-contract-test', async (req, res) => {
       contractorName: data.contractorName || 'Test Candidate',
       effectiveDate: data.effectiveDate || today,
       signatureDate: data.signatureDate || today,
+      companySignatureDate: today,
     };
     if (data.signatureName) {
       contractValues.signatureName = data.signatureName;

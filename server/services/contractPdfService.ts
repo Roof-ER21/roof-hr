@@ -17,6 +17,7 @@ export interface ContractFieldValues {
   companyRepresentative?: string;
   companyRepTitle?: string;
   companySignDate?: string;
+  companySignatureDate?: string;
   contractorSignDate?: string;
   signatureName?: string;
   signatureDate?: string;
@@ -55,7 +56,7 @@ export class ContractPdfService {
       return [
         { page: 0, name: 'effectiveDate', valueKey: 'effectiveDate', readOnly: true, x: 312.27, bottom: 180.32, width: 66.0, height: 14 },
         { page: 0, name: 'contractorName', valueKey: 'contractorName', readOnly: true, x: 440.99, bottom: 193.24, width: 99.0, height: 14 },
-        { page: 9, name: 'companySignatureDate', valueKey: 'signatureDate', readOnly: true, x: 360.0, bottom: 510.0, width: 132.0, height: 16 },
+        { page: 9, name: 'companySignatureDate', valueKey: 'companySignatureDate', readOnly: true, x: 360.0, bottom: 510.0, width: 132.0, height: 16 },
         { page: 9, name: 'signatureName', valueKey: 'signatureName', readOnly: false, x: 72.0, bottom: 397.57, width: 181.5, height: 16 },
         { page: 9, name: 'signatureDate', valueKey: 'signatureDate', readOnly: true, x: 360.0, bottom: 397.57, width: 132.0, height: 16 },
       ];
@@ -161,19 +162,29 @@ export class ContractPdfService {
       setValue(key, value);
     }
 
+    const layoutKey = this.getTemplateLayoutKey(templateFileName);
+    const useGenericMappings = layoutKey !== 'roof_docs_contractor';
     const nameValue = values.contractorName || values.employeeName || values.name;
     const dateValue = values.effectiveDate || values.date || values.startDate;
     const signatureDateValue = values.signatureDate || dateValue;
-    setValue('name', nameValue);
-    setValue('employeeName', nameValue);
+    const companySignatureDateValue = values.companySignatureDate || signatureDateValue;
+    if (useGenericMappings) {
+      setValue('name', nameValue);
+      setValue('employeeName', nameValue);
+    }
     setValue('contractorName', nameValue);
-    setValue('date', dateValue);
+    if (useGenericMappings) {
+      setValue('date', dateValue);
+    }
     setValue('effectiveDate', dateValue);
-    setValue('startDate', dateValue);
+    if (useGenericMappings) {
+      setValue('startDate', dateValue);
+    }
     setValue('signatureDate', signatureDateValue);
+    setValue('companySignatureDate', companySignatureDateValue);
 
     const layoutResult = this.applyTemplateFieldLayout(pdfDoc, templateFileName, values);
-    let fieldsFilled = 0;
+    let fieldsFilled = layoutResult.fieldsAdded;
     let hasEditableFields = layoutResult.hasEditableFields;
     try {
       const form = pdfDoc.getForm();
