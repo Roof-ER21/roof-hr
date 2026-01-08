@@ -543,18 +543,58 @@ export default function Contracts() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusMap: { [key: string]: { variant: any; label: string } } = {
-      DRAFT: { variant: 'secondary', label: 'Draft' },
-      SENT: { variant: 'outline', label: 'Sent' },
-      VIEWED: { variant: 'outline', label: 'Viewed' },
-      SIGNED: { variant: 'default', label: 'Signed' },
-      REJECTED: { variant: 'destructive', label: 'Rejected' },
-      RESCINDED: { variant: 'destructive', label: 'Rescinded' }
+  const getStatusBadge = (contract: EmployeeContract) => {
+    const status = contract.status;
+    const statusLabels: Record<string, string> = {
+      DRAFT: 'Draft',
+      SENT: 'Sent',
+      VIEWED: 'Viewed',
+      SIGNED: 'Signed',
+      REJECTED: 'Rejected',
+      RESCINDED: 'Rescinded'
     };
-    
-    const config = statusMap[status] || { variant: 'secondary', label: status };
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+
+    const label = statusLabels[status] || status;
+    const sentDate = contract.sentDate ? new Date(contract.sentDate) : null;
+    const daysSinceSent = sentDate
+      ? Math.floor((Date.now() - sentDate.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    if (status === 'SIGNED') {
+      return (
+        <Badge variant="secondary" className="border border-emerald-200 bg-emerald-100 text-emerald-800">
+          {label}
+        </Badge>
+      );
+    }
+
+    if (status === 'SENT' || status === 'VIEWED') {
+      let className = 'border border-sky-200 bg-sky-100 text-sky-800';
+      if (daysSinceSent !== null && daysSinceSent >= 5) {
+        className = 'border border-red-200 bg-red-100 text-red-800';
+      } else if (daysSinceSent !== null && daysSinceSent >= 2) {
+        className = 'border border-amber-200 bg-amber-100 text-amber-800';
+      }
+      return (
+        <Badge variant="secondary" className={className}>
+          {label}
+        </Badge>
+      );
+    }
+
+    if (status === 'REJECTED' || status === 'RESCINDED') {
+      return (
+        <Badge variant="destructive">
+          {label}
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="secondary">
+        {label}
+      </Badge>
+    );
   };
 
   const normalizedSearch = contractSearch.trim().toLowerCase();
@@ -1063,7 +1103,7 @@ export default function Contracts() {
                   myContracts.map((contract: EmployeeContract) => (
                     <TableRow key={contract.id}>
                       <TableCell className="font-medium">{contract.title}</TableCell>
-                      <TableCell>{getStatusBadge(contract.status)}</TableCell>
+                      <TableCell>{getStatusBadge(contract)}</TableCell>
                       <TableCell>
                         {contract.sentDate ?
                           format(new Date(contract.sentDate), 'MMM dd, yyyy') :
@@ -1200,7 +1240,7 @@ export default function Contracts() {
                           {contract.recipientName || 'Unknown'}
                         </TableCell>
                         <TableCell>{contract.title}</TableCell>
-                        <TableCell>{getStatusBadge(contract.status)}</TableCell>
+                        <TableCell>{getStatusBadge(contract)}</TableCell>
                         <TableCell>
                           {format(new Date(contract.createdAt), 'MMM dd, yyyy')}
                         </TableCell>
