@@ -1320,7 +1320,7 @@ router.post('/api/admin/contracts/add-retail-templates', requireAuth, async (req
   try {
     // Check if user is admin
     const user = (req as any).user;
-    if (!user || !['SUPER_ADMIN', 'ADMIN'].includes(user.role)) {
+    if (!user || !['SUPER_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(user.role)) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
