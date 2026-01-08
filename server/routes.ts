@@ -16,7 +16,7 @@ import {
   equipmentChecklists,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
+import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import { ALL_HOLIDAYS } from '../shared/constants/holidays';
 import agentRoutes from './routes/agents';
@@ -1860,10 +1860,27 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
     let ptoRequests;
     // Use role groups to check for admin/manager access (includes TRUE_ADMIN, SYSTEM_ADMIN, HR_ADMIN, etc.)
     const isAdminOrManager = ADMIN_ROLES.includes(req.user.role) || MANAGER_ROLES.includes(req.user.role);
+    const deptApprover = getDepartmentApproverEntry(req.user.email);
+    const isDeptApprover = !!deptApprover && (!req.user.department || deptApprover.department.toLowerCase() === req.user.department.toLowerCase());
+
     if (isAdminOrManager) {
       ptoRequests = await storage.getAllPtoRequests().catch((err) => {
         console.error('[PTO] Failed to fetch all PTO requests:', err.message);
         return [];
+      });
+    } else if (isDeptApprover && deptApprover) {
+      const allPto = await storage.getAllPtoRequests().catch((err) => {
+        console.error('[PTO] Failed to fetch all PTO requests:', err.message);
+        return [];
+      });
+      const allUsers = await storage.getAllUsers().catch((err) => {
+        console.error('[PTO] Failed to fetch users:', err.message);
+        return [];
+      });
+      const userMap = new Map(allUsers.map((u: any) => [u.id, u]));
+      ptoRequests = allPto.filter((request: any) => {
+        const employee = userMap.get(request.employeeId);
+        return employee?.department?.toLowerCase() === deptApprover.department.toLowerCase();
       });
     } else {
       ptoRequests = await storage.getPtoRequestsByEmployeeId(req.user.id).catch((err) => {
@@ -2133,7 +2150,7 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
     // Get appropriate approvers based on who is requesting
     // Ford/Reese requests go to Oliver & Ahmed only
     // Everyone else goes to all 4 approvers
-    const approverEmails = getPTOApproversForEmployee(user.email);
+    const approverEmails = getPTOApproversForEmployee(user.email, user.department);
 
     // Send notifications asynchronously without blocking the response
     (async () => {
@@ -2256,7 +2273,7 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
 
 const notifyPtoApprovers = async (employee: any, details: { startDate: string; endDate: string; days: number; type: string; reason?: string; action: 'updated' | 'cancelled' | 'resubmitted' }) => {
   try {
-    const approverEmails = getPTOApproversForEmployee(employee.email);
+    const approverEmails = getPTOApproversForEmployee(employee.email, employee.department);
     const emailService = new EmailService();
     await emailService.initialize();
 
@@ -2743,16 +2760,13 @@ router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
   }
 });
 
-router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) => {
+router.patch('/api/pto/:id', requireAuth, async (req: any, res) => {
   try {
     const user = req.user!;
     const { status, reviewNotes } = req.body;
 
-    // Only designated approvers can approve/deny PTO requests
-    if ((status === 'APPROVED' || status === 'DENIED') && !PTO_APPROVER_EMAILS.includes(user.email)) {
-      return res.status(403).json({
-        error: 'Only Ford Barsi, Ahmed, Reese, or Oliver can approve or deny PTO requests'
-      });
+    if (!['APPROVED', 'DENIED'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid PTO status update' });
     }
 
     // Get the current PTO request to know which employee and how many days
@@ -2761,10 +2775,30 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
       return res.status(404).json({ error: 'PTO request not found' });
     }
 
+    const employee = await storage.getUserById(currentRequest.employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const isCoreApprover = isCorePtoApprover(user.email);
+    const deptApprover = getDepartmentApproverEntry(user.email);
+    const isDeptApprover = !!deptApprover && employee.department?.toLowerCase() === deptApprover.department.toLowerCase();
+    const needsFinalReview = status === 'APPROVED' && !isCoreApprover;
+    const effectiveReviewNotes = needsFinalReview
+      ? (reviewNotes ? `${reviewNotes} (Pending final admin review within 48 hours)` : 'Pending final admin review within 48 hours')
+      : reviewNotes;
+
+    // Only designated approvers can approve/deny PTO requests
+    if ((status === 'APPROVED' || status === 'DENIED') && !(isCoreApprover || isDeptApprover)) {
+      return res.status(403).json({
+        error: 'Only designated approvers can approve or deny PTO requests'
+      });
+    }
+
     // Update the PTO request status
     const ptoRequest = await storage.updatePtoRequest(req.params.id, {
       status,
-      reviewNotes,
+      reviewNotes: effectiveReviewNotes,
       reviewedBy: user.id,
       reviewedAt: new Date(),
     });
@@ -2785,7 +2819,6 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
 
       // Create Google Calendar events for approved PTO
       try {
-        const employee = await storage.getUserById(currentRequest.employeeId);
         if (employee && employee.email) {
           await googleCalendarService.initialize();
 
@@ -2881,7 +2914,6 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
       // Delete Google Calendar events if they exist
       try {
         await googleCalendarService.initialize();
-        const employee = await storage.getUserById(currentRequest.employeeId);
 
         // Delete employee calendar event
         if (currentRequest.googleEventId && employee?.email) {
@@ -2916,7 +2948,6 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
     // Send notifications to the employee when their PTO request is approved or denied
     if (status === 'APPROVED' || status === 'DENIED') {
       try {
-        const employee = await storage.getUserById(currentRequest.employeeId);
         if (employee) {
           const statusText = status === 'APPROVED' ? 'Approved' : 'Denied';
           const statusEmoji = status === 'APPROVED' ? '✅' : '❌';
@@ -2927,7 +2958,7 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
             userId: employee.id,
             type: status === 'APPROVED' ? 'pto_approved' : 'pto_denied',
             title: `PTO Request ${statusText}`,
-            message: `Your PTO request from ${currentRequest.startDate} to ${currentRequest.endDate} has been ${statusText.toLowerCase()}.${reviewNotes ? ` Notes: ${reviewNotes}` : ''}`,
+            message: `Your PTO request from ${currentRequest.startDate} to ${currentRequest.endDate} has been ${statusText.toLowerCase()}.${needsFinalReview ? ' This approval is pending final admin review (within 48 hours).' : ''}${effectiveReviewNotes ? ` Notes: ${effectiveReviewNotes}` : ''}`,
             link: '/pto',
             metadata: JSON.stringify({
               ptoRequestId: currentRequest.id,
@@ -2935,7 +2966,7 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
               endDate: currentRequest.endDate,
               days: currentRequest.days,
               reviewedBy: user.email,
-              reviewNotes: reviewNotes || null
+              reviewNotes: effectiveReviewNotes || null
             }),
             read: false,
           });
@@ -2946,6 +2977,10 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
             try {
               const emailService = new EmailService();
               await emailService.initialize();
+
+              const finalReviewNote = needsFinalReview
+                ? '<div style="margin: 15px 0; padding: 12px; border-left: 4px solid #f59e0b; background: #fffbeb; color: #92400e;">This approval is pending final admin review for conflicts. You will be notified within 48 hours if anything changes.</div>'
+                : '';
 
               const emailHtml = `
                 <!DOCTYPE html>
@@ -2977,8 +3012,9 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
                         <p><strong>End Date:</strong> ${currentRequest.endDate}</p>
                         <p><strong>Days:</strong> ${currentRequest.days || 'N/A'}</p>
                         ${currentRequest.reason ? `<p><strong>Reason:</strong> ${currentRequest.reason}</p>` : ''}
-                        ${reviewNotes ? `<p><strong>Reviewer Notes:</strong> ${reviewNotes}</p>` : ''}
+                        ${effectiveReviewNotes ? `<p><strong>Reviewer Notes:</strong> ${effectiveReviewNotes}</p>` : ''}
                       </div>
+                      ${finalReviewNote}
 
                       ${status === 'APPROVED' ? '<p>Your time off has been added to the calendar. Enjoy your break!</p>' : '<p>If you have questions about this decision, please reach out to your manager or HR.</p>'}
 
@@ -3011,6 +3047,53 @@ router.patch('/api/pto/:id', requireAuth, requireManager, async (req: any, res) 
       } catch (notifError) {
         console.error('[PTO Notification] Error creating notifications:', notifError);
         // Don't fail the request if notifications fail
+      }
+    }
+
+    if (!isCoreApprover && (status === 'APPROVED' || status === 'DENIED')) {
+      try {
+        const emailService = new EmailService();
+        await emailService.initialize();
+        for (const approverEmail of PTO_APPROVER_EMAILS) {
+          const approver = await storage.getUserByEmail(approverEmail);
+          if (approver) {
+            await storage.createNotification({
+              id: `pto-dept-${status.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              userId: approver.id,
+              type: 'pto_request',
+              title: `PTO ${status === 'APPROVED' ? 'Approved' : 'Denied'} by Department Approver`,
+              message: `${user.firstName || user.email} ${status.toLowerCase()} a PTO request for ${employee.firstName} ${employee.lastName}.`,
+              link: '/pto',
+              metadata: JSON.stringify({
+                ptoRequestId: currentRequest.id,
+                employeeId: employee.id,
+                employeeName: `${employee.firstName} ${employee.lastName}`,
+                status
+              }),
+              read: false,
+              createdAt: new Date()
+            });
+          }
+
+          await emailService.sendEmail({
+            to: approverEmail,
+            subject: `PTO ${status === 'APPROVED' ? 'Approved' : 'Denied'} by Department Approver`,
+            html: `
+              <h2>PTO ${status === 'APPROVED' ? 'Approved' : 'Denied'} by Department Approver</h2>
+              <p>${user.firstName || user.email} has ${status.toLowerCase()} a PTO request for ${employee.firstName} ${employee.lastName}.</p>
+              <ul>
+                <li><strong>Department:</strong> ${employee.department || 'N/A'}</li>
+                <li><strong>Dates:</strong> ${new Date(currentRequest.startDate).toLocaleDateString()} - ${new Date(currentRequest.endDate).toLocaleDateString()}</li>
+                <li><strong>Days:</strong> ${currentRequest.days}</li>
+                <li><strong>Type:</strong> ${currentRequest.type || 'VACATION'}</li>
+              </ul>
+              <p>Review in the <a href="https://roofhr.up.railway.app/pto">HR System</a> if overrides are needed.</p>
+            `,
+            fromUserEmail: process.env.GOOGLE_USER_EMAIL || 'info@theroofdocs.com'
+          });
+        }
+      } catch (adminNotifyError) {
+        console.error('[PTO] Failed to notify core approvers of department decision:', adminNotifyError);
       }
     }
 

@@ -194,6 +194,10 @@ export const PTO_APPROVER_EMAILS = [
   'oliver.brown@theroofdocs.com'
 ];
 
+export const PTO_DEPARTMENT_APPROVERS = [
+  { email: 'greg.campbell@theroofdocs.com', department: 'Production' }
+];
+
 // Senior managers (Ford/Reese) - their PTO requests only go to Oliver & Ahmed
 export const SENIOR_MANAGER_EMAILS = [
   'ford.barsi@theroofdocs.com',
@@ -214,17 +218,38 @@ export const PTO_REMINDER_RECIPIENTS = PTO_APPROVER_EMAILS;
  * Ford/Reese requests go only to Oliver & Ahmed
  * Everyone else's requests go to all 4 approvers
  */
-export function getPTOApproversForEmployee(employeeEmail: string): string[] {
+export function getDepartmentApproverForDepartment(department?: string | null): string[] {
+  if (!department) return [];
+  const normalized = department.toLowerCase();
+  return PTO_DEPARTMENT_APPROVERS
+    .filter((entry) => entry.department.toLowerCase() === normalized)
+    .map((entry) => entry.email);
+}
+
+export function getDepartmentApproverEntry(email?: string | null) {
+  if (!email) return null;
+  const normalized = email.toLowerCase();
+  return PTO_DEPARTMENT_APPROVERS.find((entry) => entry.email.toLowerCase() === normalized) || null;
+}
+
+export function getPTOApproversForEmployee(employeeEmail: string, employeeDepartment?: string | null): string[] {
   if (SENIOR_MANAGER_EMAILS.includes(employeeEmail.toLowerCase())) {
     return SENIOR_PTO_APPROVER_EMAILS; // Ford/Reese → Oliver & Ahmed only
   }
-  return PTO_APPROVER_EMAILS; // Everyone else → all 4
+  const departmentApprovers = getDepartmentApproverForDepartment(employeeDepartment);
+  const allApprovers = [...PTO_APPROVER_EMAILS, ...departmentApprovers];
+  return Array.from(new Set(allApprovers));
 }
 
 // Check if user can approve PTO (email-based restriction)
 export function canApprovePtoRequests(user: { role?: string; email?: string } | null): boolean {
   if (!user) return false;
   return PTO_APPROVER_EMAILS.includes(user.email || '');
+}
+
+export function isCorePtoApprover(email?: string | null): boolean {
+  if (!email) return false;
+  return PTO_APPROVER_EMAILS.includes(email.toLowerCase());
 }
 
 // Legacy function - now delegates to email-based check

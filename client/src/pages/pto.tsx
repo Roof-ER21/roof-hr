@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/lib/auth';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
-import { employeeGetsPto, ADMIN_ROLES } from '@shared/constants/roles';
+import { employeeGetsPto, ADMIN_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
 import { PTO_POLICY } from '@shared/constants/pto-policy';
 
 const ptoSchema = z.object({
@@ -100,13 +100,12 @@ function PTO() {
   const isAdmin = user?.role && ADMIN_ROLES.includes(user.role);
 
   // PTO Approvers - Only these users can approve/deny PTO requests
-  const PTO_APPROVER_EMAILS = [
-    'ford.barsi@theroofdocs.com',
-    'ahmed.mahmoud@theroofdocs.com',
-    'reese.samala@theroofdocs.com',
-    'oliver.brown@theroofdocs.com'
-  ];
-  const canApprovePto = user?.email ? PTO_APPROVER_EMAILS.includes(user.email) : false;
+  const isCoreApprover = user?.email ? PTO_APPROVER_EMAILS.includes(user.email) : false;
+  const deptApproverEntry = user?.email
+    ? PTO_DEPARTMENT_APPROVERS.find((entry) => entry.email.toLowerCase() === user.email.toLowerCase())
+    : null;
+  const canApprovePto = isCoreApprover || !!deptApproverEntry;
+  const isDepartmentApprover = !!deptApproverEntry;
   const showAnalytics = canApprovePto;
 
   // Check if user is a manager/admin (to show full list vs personal list)
@@ -667,7 +666,7 @@ function PTO() {
       halfDay: inferredHalfDay,
       halfDayPeriod: inferredPeriod
     });
-    setEditKeepApproved(request.status === 'APPROVED' && canApprovePto);
+    setEditKeepApproved(request.status === 'APPROVED' && isCoreApprover);
     setEditDialogOpen(true);
   };
 
@@ -1731,7 +1730,7 @@ function PTO() {
                 placeholder="Please provide a reason for your time off request"
               />
             </div>
-            {canApprovePto && editingRequest?.status === 'APPROVED' ? (
+            {isCoreApprover && editingRequest?.status === 'APPROVED' ? (
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div>
                   <p className="text-sm font-medium">Keep Approved</p>
@@ -1760,7 +1759,9 @@ function PTO() {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <CardTitle>{isManager ? 'All PTO Requests' : 'My PTO Requests'}</CardTitle>
+            <CardTitle>
+              {isManager ? 'All PTO Requests' : isDepartmentApprover ? 'Department PTO Requests' : 'My PTO Requests'}
+            </CardTitle>
             {/* Status Filter Bar */}
             <div className="flex gap-2 flex-wrap">
               <Button
@@ -1852,6 +1853,10 @@ function PTO() {
                   const isCancelled = isCancelledRequest(request);
                   const statusLabel = isCancelled ? 'CANCELLED' : request.status;
                   const isOwnRequest = request.employeeId === user?.id;
+                  const canApproveThisRequest = isCoreApprover || (!!deptApproverEntry && employee?.department === deptApproverEntry.department);
+                  const pendingAdminReview = request.status === 'APPROVED' &&
+                    typeof request.reviewNotes === 'string' &&
+                    request.reviewNotes.toLowerCase().includes('pending final admin review');
                   return (
                     <tr key={request.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="py-3 px-4">
@@ -1890,6 +1895,11 @@ function PTO() {
                             <span className="font-medium">{isCancelled ? 'Note' : 'Reason'}:</span> {request.reviewNotes}
                           </div>
                         )}
+                        {pendingAdminReview && (
+                          <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                            Pending final admin review (within 48 hours).
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         {(isOwnRequest || isManager) && ['PENDING', 'APPROVED'].includes(request.status) && (
@@ -1904,7 +1914,7 @@ function PTO() {
                             Edit
                           </Button>
                         )}
-                        {request.status === 'PENDING' && canApprovePto && !isOwnRequest && (
+                        {request.status === 'PENDING' && canApproveThisRequest && !isOwnRequest && (
                           <div className="flex space-x-2">
                             <Button
                               variant="outline"
@@ -1937,7 +1947,7 @@ function PTO() {
                             Cancel
                           </Button>
                         )}
-                        {request.status === 'PENDING' && !canApprovePto && !isOwnRequest && (
+                        {request.status === 'PENDING' && !canApproveThisRequest && !isOwnRequest && (
                           <span className="text-sm text-muted-foreground">Pending approval</span>
                         )}
                       </td>
