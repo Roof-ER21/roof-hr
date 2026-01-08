@@ -136,9 +136,10 @@ export async function notifyRecipientOfNewContract(
     await gmailService.initialize();
 
     const subject = `New Contract for Review: ${contractTitle}`;
-    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
-    const fileLink = fileUrl ? `${appUrl}${fileUrl}` : '';
-    const signLink = `${appUrl}/contracts?contractId=${contractId}`;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
+    const baseUrl = appUrl.replace(/\/+$/, '');
+    const fileLink = fileUrl ? `${baseUrl}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}` : '';
+    const signLink = `${baseUrl}/contracts?contractId=${contractId}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Contract Ready for Review</h2>
