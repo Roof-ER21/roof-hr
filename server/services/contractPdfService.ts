@@ -322,7 +322,8 @@ export class ContractPdfService {
     signedDate: Date,
     outputFileName: string,
     layoutFileName?: string,
-    signatureAddress?: string
+    signatureAddress?: string,
+    signerName?: string
   ): Promise<string> {
     const pdfDoc = await this.loadTemplate(sourceFileName);
     const pages = pdfDoc.getPages();
@@ -385,6 +386,30 @@ export class ContractPdfService {
         font,
         color: rgb(0, 0, 0),
       });
+    }
+
+    // Layout-specific: fill contractor mailing address block (page ~8) similar to company block
+    if (layoutKey === 'roof_docs_contractor' && signatureAddress) {
+      const targetIndex = Math.min(7, pages.length - 1); // page 8 (0-based)
+      const addrPage = pages[targetIndex];
+      const startY = addrPage.getHeight() - 370; // tuned to land in address block
+      const x = 240;
+
+      const lines: string[] = [];
+      if (signerName) lines.push(signerName);
+      signatureAddress.split('\n').map((l) => l.trim()).filter(Boolean).forEach((line) => lines.push(line));
+
+      let y = startY;
+      for (const line of lines) {
+        addrPage.drawText(line, {
+          x,
+          y,
+          size: 11,
+          font,
+          color: rgb(0, 0, 0),
+        });
+        y -= 16;
+      }
     }
 
     const outputPath = await this.savePdf(pdfDoc, outputFileName);

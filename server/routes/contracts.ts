@@ -993,7 +993,8 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
           signedDate,
           signedFileName,
           layoutFileName,
-          signatureAddress
+          signatureAddress,
+          contract.recipientName
         );
         signedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;
       } catch (error) {
@@ -1245,7 +1246,8 @@ router.post('/api/public/contract/:token', async (req, res) => {
           signedDate,
           signedFileName,
           templateFileName,
-          signatureAddress || undefined
+          signatureAddress || undefined,
+          contract.recipientName
         );
 
         updatedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;
