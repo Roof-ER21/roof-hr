@@ -198,12 +198,14 @@ router.post('/send-contract-test', async (req, res) => {
 
     const templateDir = contractPdfService.getTemplatesDir();
     const today = new Date().toLocaleDateString();
-    const contractValues = {
+    const contractValues: Record<string, string> = {
       contractorName: data.contractorName || 'Test Candidate',
       effectiveDate: data.effectiveDate || today,
-      signatureName: data.signatureName || data.contractorName || 'Test Candidate',
       signatureDate: data.signatureDate || today,
     };
+    if (data.signatureName) {
+      contractValues.signatureName = data.signatureName;
+    }
 
     const templates = data.templates?.length
       ? data.templates
