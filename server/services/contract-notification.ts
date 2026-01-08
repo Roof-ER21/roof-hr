@@ -1,6 +1,6 @@
 import { storage } from '../storage';
 import { gmailService } from './gmail-service';
-import { CONTRACT_ALERT_RECIPIENTS } from '@shared/constants/roles';
+import { CONTRACT_CORE_ALERT_RECIPIENTS, RETAIL_CONTRACT_ALERT_RECIPIENTS, HR_ROLES, TOP_LEADERSHIP_EMAILS } from '@shared/constants/roles';
 
 interface ContractSignedNotification {
   contractId: string;
@@ -11,33 +11,64 @@ interface ContractSignedNotification {
   fileUrl?: string;
 }
 
-export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification, senderEmail?: string) {
-  try {
-    // Initialize Gmail service
-    await gmailService.initialize();
+const normalizeEmail = (email?: string | null) => (email || '').trim().toLowerCase();
 
-    // FIXED: Only notify specific people, NOT all managers company-wide
-    const allUsers = await storage.getAllUsers();
-    const managers = allUsers.filter((u: any) =>
-      u.email && CONTRACT_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
-    );
-    console.log(`[Contract Alert] Sending to ${managers.length} targeted recipients (NOT company-wide)`);
-    
-    // Filter out already notified managers
-    const contract = await storage.getEmployeeContractById(notification.contractId);
-    const notifiedManagers = contract?.notifiedManagers || [];
-    
-    const managersToNotify = managers.filter(m => !notifiedManagers.includes(m.id));
-    
-    if (managersToNotify.length === 0) {
-      console.log('All managers have already been notified');
-      return;
-    }
-    
-    // Prepare email content
+const uniqueEmails = (emails: Array<string | undefined | null>) => {
+  const cleaned = emails
+    .map((email) => normalizeEmail(email))
+    .filter((email) => email.length > 0);
+  return Array.from(new Set(cleaned));
+};
+
+async function getHrRecipients() {
+  const allUsers = await storage.getAllUsers();
+  const hrEmails = allUsers
+    .filter((user: any) => user.role && HR_ROLES.includes(user.role))
+    .map((user: any) => user.email);
+  return uniqueEmails([...hrEmails, 'careers@theroofdocs.com']);
+}
+
+function getLeadershipRecipients(isRetail: boolean, senderEmail?: string) {
+  const base = [...CONTRACT_CORE_ALERT_RECIPIENTS];
+  if (isRetail) {
+    base.push(...RETAIL_CONTRACT_ALERT_RECIPIENTS);
+  }
+  if (senderEmail) {
+    base.push(senderEmail);
+  }
+  return uniqueEmails(base);
+}
+
+async function sendEmailBatch(recipients: string[], subject: string, html: string, senderEmail?: string) {
+  if (recipients.length === 0) return;
+  await gmailService.initialize();
+
+  await Promise.all(
+    recipients.map(async (email) => {
+      try {
+        await gmailService.sendEmail({
+          to: email,
+          subject,
+          html,
+          userEmail: senderEmail,
+        });
+      } catch (error) {
+        console.error(`[Contract Email] Failed to send to ${email}:`, error);
+      }
+    })
+  );
+}
+
+export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification, senderEmail?: string, isRetail = false) {
+  try {
+    const recipients = getLeadershipRecipients(isRetail, senderEmail);
+    console.log(`[Contract Alert] Sending signed notice to ${recipients.length} recipients`);
+
     const subject = `Contract Signed: ${notification.contractTitle} - ${notification.employeeName}`;
-    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
-    const fileLink = notification.fileUrl ? `${appUrl}${notification.fileUrl}` : '';
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
+    const baseUrl = appUrl.replace(/\/+$/, '');
+    const fileLink = notification.fileUrl ? `${baseUrl}${notification.fileUrl.startsWith('/') ? '' : '/'}${notification.fileUrl}` : '';
+    const signLink = `${baseUrl}/contracts?contractId=${notification.contractId}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Contract Signature Notification</h2>
@@ -57,7 +88,7 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
         </div>
         
         <div style="margin-top: 30px;">
-          <a href="${process.env.FRONTEND_URL || ''}/contracts" 
+          <a href="${signLink}" 
              style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
             View Contract
           </a>
@@ -75,44 +106,10 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
         </p>
       </div>
     `;
-    
-    // Send emails to all managers and HR via Gmail
-    const emailPromises = managersToNotify.map(async (manager) => {
-      try {
-        const result = await gmailService.sendEmail({
-          to: manager.email,
-          subject,
-          html: htmlContent,
-          userEmail: senderEmail // Impersonate sender if provided
-        });
 
-        if (result.success) {
-          console.log(`Contract signed notification sent to ${manager.email} via Gmail`);
-          // Update the notified managers list
-          const updatedNotifiedList = [...notifiedManagers, manager.id];
-          await storage.updateEmployeeContract(notification.contractId, {
-            notifiedManagers: updatedNotifiedList
-          });
-        }
+    await sendEmailBatch(recipients, subject, htmlContent, senderEmail);
 
-        return result.success;
-      } catch (error) {
-        console.error(`Failed to send notification to ${manager.email}:`, error);
-        return false;
-      }
-    });
-    
-    const results = await Promise.all(emailPromises);
-    const successCount = results.filter(r => r).length;
-    
-    console.log(`Contract signed notifications sent to ${successCount}/${managersToNotify.length} managers/HR`);
-    
-    return {
-      success: successCount > 0,
-      notifiedCount: successCount,
-      totalManagers: managersToNotify.length
-    };
-    
+    return { success: true, notifiedCount: recipients.length, totalManagers: recipients.length };
   } catch (error) {
     console.error('Error sending contract signed notifications:', error);
     return {
@@ -120,6 +117,167 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
       notifiedCount: 0,
       totalManagers: 0
     };
+  }
+}
+
+export async function notifyContractRejected(
+  contract: { id: string; recipientName: string; recipientEmail: string; title: string; fileUrl?: string; rejectionReason?: string },
+  senderEmail?: string,
+  isRetail = false
+) {
+  try {
+    const recipients = getLeadershipRecipients(isRetail, senderEmail);
+    console.log(`[Contract Alert] Sending rejected notice to ${recipients.length} recipients`);
+
+    const subject = `Contract Rejected: ${contract.title} - ${contract.recipientName}`;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
+    const baseUrl = appUrl.replace(/\/+$/, '');
+    const fileLink = contract.fileUrl ? `${baseUrl}${contract.fileUrl.startsWith('/') ? '' : '/'}${contract.fileUrl}` : '';
+    const signLink = `${baseUrl}/contracts?contractId=${contract.id}`;
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #dc2626;">Contract Rejected</h2>
+        <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p><strong>Employee/Candidate:</strong> ${contract.recipientName}</p>
+          <p><strong>Contract Title:</strong> ${contract.title}</p>
+          ${contract.rejectionReason ? `<p><strong>Reason:</strong> ${contract.rejectionReason}</p>` : ''}
+        </div>
+        <div style="margin-top: 30px;">
+          <a href="${signLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
+            View Contract
+          </a>
+          ${contract.fileUrl ? `
+          <a href="${fileLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #16a34a; color: white; text-decoration: none; border-radius: 6px; margin-left: 10px;">
+            Download PDF
+          </a>` : ''}
+        </div>
+      </div>
+    `;
+
+    await sendEmailBatch(recipients, subject, htmlContent, senderEmail);
+    return true;
+  } catch (error) {
+    console.error('Error sending contract rejected notifications:', error);
+    return false;
+  }
+}
+
+export async function notifyRecipientOfRescindedContract(
+  contract: { id: string; recipientName: string; recipientEmail: string; title: string },
+  senderEmail?: string,
+  reason?: string
+) {
+  try {
+    await gmailService.initialize();
+    const subject = `Contract Rescinded: ${contract.title}`;
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #dc2626;">Contract Rescinded</h2>
+        <p>Dear ${contract.recipientName},</p>
+        <p>Your contract for <strong>${contract.title}</strong> has been rescinded.</p>
+        ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+        <p>If you have questions, please reply to this email.</p>
+      </div>
+    `;
+
+    await gmailService.sendEmail({
+      to: contract.recipientEmail,
+      subject,
+      html: htmlContent,
+      userEmail: senderEmail
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error sending rescind notification to recipient:', error);
+    return false;
+  }
+}
+
+export async function notifyContractSentInternal(
+  contract: { id: string; recipientName: string; recipientEmail: string; title: string; fileUrl?: string },
+  senderEmail?: string
+) {
+  try {
+    const hrRecipients = await getHrRecipients();
+    const recipients = uniqueEmails([...hrRecipients, senderEmail]);
+    if (recipients.length === 0) return true;
+
+    const subject = `Contract Sent: ${contract.title} - ${contract.recipientName}`;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
+    const baseUrl = appUrl.replace(/\/+$/, '');
+    const signLink = `${baseUrl}/contracts?contractId=${contract.id}`;
+    const fileLink = contract.fileUrl ? `${baseUrl}${contract.fileUrl.startsWith('/') ? '' : '/'}${contract.fileUrl}` : '';
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #2563eb;">Contract Sent</h2>
+        <p>The contract has been sent to ${contract.recipientName} (${contract.recipientEmail}).</p>
+        <div style="margin-top: 20px;">
+          <a href="${signLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
+            View Contract
+          </a>
+          ${contract.fileUrl ? `
+          <a href="${fileLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #16a34a; color: white; text-decoration: none; border-radius: 6px; margin-left: 10px;">
+            Download PDF
+          </a>` : ''}
+        </div>
+      </div>
+    `;
+
+    await sendEmailBatch(recipients, subject, htmlContent, senderEmail);
+    return true;
+  } catch (error) {
+    console.error('Error sending contract sent notifications:', error);
+    return false;
+  }
+}
+
+export async function notifyContractReminder(
+  contract: { id: string; recipientName: string; recipientEmail: string; title: string; fileUrl?: string },
+  senderEmail: string | undefined,
+  daysSinceSent: number,
+  includeRecipient: boolean,
+  includeLeadership: boolean
+) {
+  try {
+    const hrRecipients = await getHrRecipients();
+    const leadership = includeLeadership ? TOP_LEADERSHIP_EMAILS : [];
+    const recipients = uniqueEmails([
+      ...hrRecipients,
+      senderEmail,
+      ...(includeRecipient ? [contract.recipientEmail] : []),
+      ...leadership
+    ]);
+
+    if (recipients.length === 0) return true;
+
+    const subject = `Contract Follow-Up (${daysSinceSent} days): ${contract.title} - ${contract.recipientName}`;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
+    const baseUrl = appUrl.replace(/\/+$/, '');
+    const signLink = `${baseUrl}/contracts?contractId=${contract.id}`;
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #f59e0b;">Contract Follow-Up</h2>
+        <p>This contract has been awaiting signature for ${daysSinceSent} days.</p>
+        <p><strong>Recipient:</strong> ${contract.recipientName} (${contract.recipientEmail})</p>
+        <div style="margin-top: 20px;">
+          <a href="${signLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
+            Review Contract
+          </a>
+        </div>
+      </div>
+    `;
+
+    await sendEmailBatch(recipients, subject, htmlContent, senderEmail);
+    return true;
+  } catch (error) {
+    console.error('Error sending contract reminder notifications:', error);
+    return false;
   }
 }
 

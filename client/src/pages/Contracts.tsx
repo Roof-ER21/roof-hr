@@ -62,6 +62,14 @@ const signatureFormSchema = z.object({
   })
 });
 
+const editContractSchema = z.object({
+  title: z.string().min(1, 'Contract title is required'),
+  content: z.string().min(1, 'Contract content is required'),
+  contractorName: z.string().min(1, 'Name is required'),
+  startDate: z.string().optional(),
+  effectiveDate: z.string().optional()
+});
+
 export default function Contracts() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
@@ -73,8 +81,12 @@ export default function Contracts() {
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedContract, setSelectedContract] = useState<EmployeeContract | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null);
+  const [editContract, setEditContract] = useState<EmployeeContract | null>(null);
+  const [contractStatusFilter, setContractStatusFilter] = useState<'all' | 'pending' | 'signed' | 'rejected' | 'rescinded'>('all');
+  const [contractSearch, setContractSearch] = useState('');
   const [variableInput, setVariableInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -114,6 +126,17 @@ export default function Contracts() {
       signatureAddress: '',
       signatureDate: new Date().toISOString().split('T')[0],
       agreeToSign: false
+    }
+  });
+
+  const editForm = useForm<z.infer<typeof editContractSchema>>({
+    resolver: zodResolver(editContractSchema),
+    defaultValues: {
+      title: '',
+      content: '',
+      contractorName: '',
+      startDate: '',
+      effectiveDate: ''
     }
   });
 
@@ -342,6 +365,28 @@ export default function Contracts() {
     }
   });
 
+  const rescindContractMutation = useMutation({
+    mutationFn: (data: { id: string; reason: string }) =>
+      apiRequest(`/api/employee-contracts/${data.id}/rescind`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: data.reason }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/employee-contracts'] });
+      toast({
+        title: 'Success',
+        description: 'Contract rescinded',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to rescind contract',
+        variant: 'destructive',
+      });
+    }
+  });
+
   const onSubmitTemplate = (data: z.infer<typeof templateFormSchema>) => {
     createTemplateMutation.mutate(data);
   };
@@ -362,6 +407,61 @@ export default function Contracts() {
         signatureDate: data.signatureDate
       });
     }
+  };
+
+  const parseDateForInput = (value?: string) => {
+    if (!value) return '';
+    if (value.includes('-')) return value;
+    const parts = value.split('/');
+    if (parts.length !== 3) return value;
+    const [month, day, year] = parts;
+    const paddedMonth = month.padStart(2, '0');
+    const paddedDay = day.padStart(2, '0');
+    return `${year}-${paddedMonth}-${paddedDay}`;
+  };
+
+  const formatDateForContract = (value?: string) => {
+    if (!value) return undefined;
+    if (!value.includes('-')) return value;
+    const [year, month, day] = value.split('-');
+    return `${Number(month)}/${Number(day)}/${year}`;
+  };
+
+  const openEditContract = (contract: EmployeeContract) => {
+    const fieldValues = (contract.fieldValues || {}) as Record<string, string>;
+    editForm.reset({
+      title: contract.title || '',
+      content: contract.content || '',
+      contractorName: fieldValues.contractorName || contract.recipientName || '',
+      startDate: parseDateForInput(fieldValues.startDate),
+      effectiveDate: parseDateForInput(fieldValues.effectiveDate)
+    });
+    setEditContract(contract);
+    setIsEditDialogOpen(true);
+  };
+
+  const onSubmitEditContract = (data: z.infer<typeof editContractSchema>) => {
+    if (!editContract) return;
+    const fieldValues = {
+      contractorName: data.contractorName,
+      startDate: formatDateForContract(data.startDate),
+      effectiveDate: formatDateForContract(data.effectiveDate)
+    };
+    const cleanedFieldValues = Object.fromEntries(
+      Object.entries(fieldValues).filter(([, value]) => value !== undefined && value !== '')
+    );
+
+    updateContractMutation.mutate({
+      id: editContract.id,
+      updates: {
+        title: data.title,
+        content: data.content,
+        fieldValues: cleanedFieldValues,
+        regeneratePdf: true
+      }
+    });
+    setIsEditDialogOpen(false);
+    setEditContract(null);
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,12 +549,33 @@ export default function Contracts() {
       SENT: { variant: 'outline', label: 'Sent' },
       VIEWED: { variant: 'outline', label: 'Viewed' },
       SIGNED: { variant: 'default', label: 'Signed' },
-      REJECTED: { variant: 'destructive', label: 'Rejected' }
+      REJECTED: { variant: 'destructive', label: 'Rejected' },
+      RESCINDED: { variant: 'destructive', label: 'Rescinded' }
     };
     
     const config = statusMap[status] || { variant: 'secondary', label: status };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
+
+  const normalizedSearch = contractSearch.trim().toLowerCase();
+  const filteredContracts = contracts.filter((contract: EmployeeContract) => {
+    const matchesStatus = (() => {
+      if (contractStatusFilter === 'all') return true;
+      if (contractStatusFilter === 'pending') {
+        return contract.status === 'SENT' || contract.status === 'VIEWED';
+      }
+      if (contractStatusFilter === 'signed') return contract.status === 'SIGNED';
+      if (contractStatusFilter === 'rescinded') return contract.status === 'RESCINDED';
+      return contract.status === 'REJECTED';
+    })();
+
+    const matchesSearch = !normalizedSearch ||
+      (contract.recipientName || '').toLowerCase().includes(normalizedSearch) ||
+      (contract.recipientEmail || '').toLowerCase().includes(normalizedSearch) ||
+      (contract.title || '').toLowerCase().includes(normalizedSearch);
+
+    return matchesStatus && matchesSearch;
+  });
 
   // My contracts (for current user)
   const myContracts = contracts.filter((c: EmployeeContract) => c.employeeId === currentUser?.id);
@@ -1034,6 +1155,32 @@ export default function Contracts() {
               <CardDescription>All contracts in the system</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search by name, email, or contract title"
+                    value={contractSearch}
+                    onChange={(event) => setContractSearch(event.target.value)}
+                  />
+                </div>
+                <div className="w-full md:w-56">
+                  <Select
+                    value={contractStatusFilter}
+                    onValueChange={(value) => setContractStatusFilter(value as typeof contractStatusFilter)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="signed">Signed</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="rescinded">Rescinded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1046,13 +1193,11 @@ export default function Contracts() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {contracts.map((contract: EmployeeContract) => {
-                    const employee = users.find((u: User) => u.id === contract.employeeId);
-                    
+                  {filteredContracts.map((contract: EmployeeContract) => {
                     return (
                       <TableRow key={contract.id}>
                         <TableCell className="font-medium">
-                          {employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown'}
+                          {contract.recipientName || 'Unknown'}
                         </TableCell>
                         <TableCell>{contract.title}</TableCell>
                         <TableCell>{getStatusBadge(contract.status)}</TableCell>
@@ -1075,6 +1220,15 @@ export default function Contracts() {
                                 <Send className="h-4 w-4" />
                               </Button>
                             )}
+                            {['DRAFT', 'SENT', 'VIEWED'].includes(contract.status) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditContract(contract)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
@@ -1082,6 +1236,20 @@ export default function Contracts() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
+                            {['SENT', 'VIEWED'].includes(contract.status) && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  const reason = prompt('Reason for rescinding this offer?');
+                                  if (reason) {
+                                    rescindContractMutation.mutate({ id: contract.id, reason });
+                                  }
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1409,6 +1577,99 @@ export default function Contracts() {
                 <Button type="submit" disabled={signContractMutation.isPending || !signatureForm.watch('agreeToSign')}>
                   <Check className="h-4 w-4 mr-2" />
                   {signContractMutation.isPending ? 'Signing...' : 'Sign Contract'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Contract Dialog (Manager) */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open);
+        if (!open) {
+          setEditContract(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Contract</DialogTitle>
+            <DialogDescription>
+              Update dates or details and regenerate the PDF if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onSubmitEditContract)} className="space-y-4">
+              <FormField
+                control={editForm.control}
+                name="contractorName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Recipient Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="effectiveDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Effective Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={editForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contract Title</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="content"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contract Content</FormLabel>
+                    <FormControl>
+                      <Textarea className="min-h-[200px]" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={updateContractMutation.isPending}>
+                  {updateContractMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </Button>
               </DialogFooter>
             </form>

@@ -285,7 +285,7 @@ export const employeeContracts = pgTable('employee_contracts', {
   content: text('content').notNull(), // Final contract content
   fileUrl: text('file_url'), // URL to attached PDF file
   fileName: text('file_name'), // Original file name for reference
-  status: text('status').$type<'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED'>().notNull().default('DRAFT'),
+  status: text('status').$type<'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED' | 'RESCINDED'>().notNull().default('DRAFT'),
   sentDate: timestamp('sent_date'),
   viewedDate: timestamp('viewed_date'),
   signedDate: timestamp('signed_date'),
@@ -294,6 +294,9 @@ export const employeeContracts = pgTable('employee_contracts', {
   signatureIp: text('signature_ip'), // IP address when signed
   rejectionReason: text('rejection_reason'),
   notifiedManagers: text('notified_managers').array(), // Track which managers have been notified
+  fieldValues: jsonb('field_values'),
+  sentBy: text('sent_by'),
+  reminderStages: text('reminder_stages').array(),
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

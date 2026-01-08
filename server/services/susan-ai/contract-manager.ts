@@ -89,7 +89,7 @@ export class SusanContractManager {
     updates: Partial<{
       title: string;
       content: string;
-      status: 'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED';
+      status: 'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED' | 'RESCINDED';
     }>
   ): Promise<{ success: boolean; error?: string }> {
     try {
@@ -281,9 +281,9 @@ export class SusanContractManager {
           draft: allContracts.filter((c) => c.status === 'DRAFT').length,
           sent: allContracts.filter((c) => c.status === 'SENT').length,
           viewed: allContracts.filter((c) => c.status === 'VIEWED').length,
-          signed: allContracts.filter((c) => c.status === 'SIGNED').length,
-          rejected: allContracts.filter((c) => c.status === 'REJECTED').length
-        },
+        signed: allContracts.filter((c) => c.status === 'SIGNED').length,
+        rejected: allContracts.filter((c) => c.status === 'REJECTED' || c.status === 'RESCINDED').length
+      },
         byRecipientType: {
           employee: allContracts.filter((c) => c.recipientType === 'EMPLOYEE').length,
           candidate: allContracts.filter((c) => c.recipientType === 'CANDIDATE').length

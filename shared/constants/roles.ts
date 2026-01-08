@@ -462,12 +462,21 @@ export const SCREENING_ALERT_RECIPIENTS = [
   ...TOP_LEADERSHIP_EMAILS,        // Oliver, Reese, Ford
 ];
 
-// Contract Signed Notifications - Top Leadership + Lead Recruiter
-// Alerts when contracts are signed
-export const CONTRACT_ALERT_RECIPIENTS = [
+// Contract Notifications - Core recipients (Top Leadership + Lead Recruiter)
+export const CONTRACT_CORE_ALERT_RECIPIENTS = [
   ...TOP_LEADERSHIP_EMAILS,        // Oliver, Reese, Ford
   'careers@theroofdocs.com',       // Ryan (handles onboarding/contracts)
 ];
+
+// Contract Notifications - Retail leadership extras
+export const RETAIL_CONTRACT_ALERT_RECIPIENTS = [
+  'bruno.n@theroofdocs.com',
+  'keith.ziemba@theroofdocs.com',
+  'jeremy.hayden@theroofdocs.com',
+];
+
+// Backward-compatible alias
+export const CONTRACT_ALERT_RECIPIENTS = CONTRACT_CORE_ALERT_RECIPIENTS;
 
 // Interview Conflict Alerts - Recruiters + Top Leadership
 // Alerts about scheduling conflicts

@@ -85,6 +85,21 @@ async function runMigrations() {
     `);
     logger.info('[Migration] ✅ Contract signature address column ready');
 
+    // Add contract field values and sender tracking
+    await db.execute(sql`
+      ALTER TABLE employee_contracts
+      ADD COLUMN IF NOT EXISTS field_values JSONB
+    `);
+    await db.execute(sql`
+      ALTER TABLE employee_contracts
+      ADD COLUMN IF NOT EXISTS sent_by TEXT
+    `);
+    await db.execute(sql`
+      ALTER TABLE employee_contracts
+      ADD COLUMN IF NOT EXISTS reminder_stages TEXT[]
+    `);
+    logger.info('[Migration] ✅ Contract field values and reminder columns ready');
+
     logger.info('[Migration] All migrations completed successfully');
   } catch (error: any) {
     // If the column already exists, that's fine
@@ -387,6 +402,15 @@ app.use((req, res, next) => {
       } catch (error) {
         logger.error('Failed to start interview overdue job:', error);
         // Continue - job can be triggered manually via API
+      }
+
+      // Initialize contract reminder job (runs daily at 9 AM)
+      try {
+        const { startContractReminderJob } = await import('./jobs/contract-reminder-job');
+        startContractReminderJob();
+        logger.info('Contract reminder job scheduler started (9 AM daily)');
+      } catch (error) {
+        logger.error('Failed to start contract reminder job:', error);
       }
     } catch (error) {
       logger.error('Error during server initialization:', error);

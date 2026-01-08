@@ -6,7 +6,10 @@ import { insertContractTemplateSchema, insertEmployeeContractSchema } from '../.
 import { v4 as uuidv4 } from 'uuid';
 import {
   notifyManagersAndHROfSignedContract,
-  notifyRecipientOfNewContract
+  notifyRecipientOfNewContract,
+  notifyContractRejected,
+  notifyContractSentInternal,
+  notifyRecipientOfRescindedContract
 } from '../services/contract-notification';
 import { contractPdfService } from '../services/contractPdfService';
 import { requireAuth, requireManager } from '../middleware/auth';
@@ -57,9 +60,51 @@ function validateTemplateVariables(
 
 // Standard template variables that are auto-filled
 const AUTO_FILLED_VARIABLES = [
-  'name', 'employeeName', 'firstName', 'lastName',
-  'position', 'department', 'email', 'date', 'startDate'
+  'name', 'employeeName', 'contractorName', 'firstName', 'lastName',
+  'position', 'department', 'email', 'date', 'startDate', 'effectiveDate'
 ];
+
+function buildBaseFieldValues(input: {
+  recipientName: string;
+  recipientEmail: string;
+  recipientPosition?: string;
+  recipientDepartment?: string;
+}) {
+  const [recipientFirstName, ...recipientLastNameParts] = input.recipientName.split(' ');
+  const recipientLastName = recipientLastNameParts.join(' ');
+
+  return {
+    contractorName: input.recipientName,
+    name: input.recipientName,
+    employeeName: input.recipientName,
+    firstName: recipientFirstName || input.recipientName,
+    lastName: recipientLastName || input.recipientName,
+    position: input.recipientPosition || '',
+    department: input.recipientDepartment || '',
+    email: input.recipientEmail,
+  };
+}
+
+function applyTemplateReplacements(
+  templateContent: string,
+  values: Record<string, string>
+) {
+  let content = templateContent;
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null) {
+      content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+    }
+  }
+  return content;
+}
+
+async function isRetailContract(templateId?: string | null) {
+  if (!templateId) return false;
+  const template = await storage.getContractTemplateById(templateId);
+  if (!template) return false;
+  const name = `${template.name || ''}`.toLowerCase();
+  return template.type === 'RETAIL' || name.includes('retail');
+}
 
 // Contract Templates
 
@@ -610,18 +655,15 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       const template = await storage.getContractTemplateById(parsedData.templateId);
       if (template) {
         const today = new Date().toLocaleDateString();
-        const [recipientFirstName, ...recipientLastNameParts] = recipientName.split(' ');
-        const recipientLastName = recipientLastNameParts.join(' ');
+        const baseValues = buildBaseFieldValues({
+          recipientName,
+          recipientEmail,
+          recipientPosition,
+          recipientDepartment
+        });
 
         const autoValues: Record<string, string> = {
-          contractorName: recipientName,
-          name: recipientName,
-          employeeName: recipientName,
-          firstName: recipientFirstName || recipientName,
-          lastName: recipientLastName || recipientName,
-          position: recipientPosition || '',
-          department: recipientDepartment || '',
-          email: recipientEmail,
+          ...baseValues,
           date: today,
           startDate: today,
           effectiveDate: today,
@@ -633,29 +675,9 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
         let content = template.content;
 
         // Replace common variables
-        const replacements: { [key: string]: string } = {
-          '{{name}}': recipientName,
-          '{{employeeName}}': recipientName,
-          '{{firstName}}': recipientName.split(' ')[0],
-          '{{lastName}}': recipientName.split(' ').slice(1).join(' '),
-          '{{position}}': recipientPosition,
-          '{{department}}': recipientDepartment,
-          '{{email}}': recipientEmail,
-          '{{date}}': today,
-          '{{startDate}}': today
-        };
+        content = applyTemplateReplacements(content, mergedFieldValues);
 
-        for (const [key, value] of Object.entries(fieldValues || {})) {
-          if (value !== undefined && value !== null && value !== '') {
-            replacements[`{{${key}}}`] = String(value);
-          }
-        }
-
-        for (const [key, value] of Object.entries(replacements)) {
-          content = content.replace(new RegExp(key, 'g'), value);
-        }
-
-        parsedData = { ...parsedData, content };
+        parsedData = { ...parsedData, content, fieldValues: mergedFieldValues };
 
         if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
           const outputFileName = `contract_${recipientName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`;
@@ -672,8 +694,12 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
     const contractData: any = {
       ...parsedData,
       id: uuidv4(),
-      status: 'DRAFT' as 'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED'
+      status: 'DRAFT' as 'DRAFT' | 'SENT' | 'VIEWED' | 'SIGNED' | 'REJECTED' | 'RESCINDED'
     };
+
+    if (!contractData.fieldValues && fieldValues && Object.keys(fieldValues).length > 0) {
+      contractData.fieldValues = fieldValues;
+    }
 
     // Type assertion for recipientType if present
     if (contractData.recipientType) {
@@ -767,11 +793,64 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
       res.json(updatedContract);
     } else {
       // Managers can update everything
-      const updateData = { ...req.body };
+      const updateData: any = { ...req.body };
+      const incomingFieldValues = updateData.fieldValues;
+      const regeneratePdf = Boolean(updateData.regeneratePdf);
+      delete updateData.regeneratePdf;
+
+      if (incomingFieldValues) {
+        updateData.fieldValues = {
+          ...(contract.fieldValues || {}),
+          ...incomingFieldValues
+        };
+      }
+
+      const shouldRegenerate = regeneratePdf || Boolean(incomingFieldValues);
+      if (shouldRegenerate && contract.templateId) {
+        const template = await storage.getContractTemplateById(contract.templateId);
+        if (template) {
+          let recipientPosition = '';
+          let recipientDepartment = '';
+
+          if (contract.employeeId) {
+            const employee = await storage.getUserById(contract.employeeId);
+            recipientPosition = employee?.position || '';
+            recipientDepartment = employee?.department || '';
+          } else if (contract.candidateId) {
+            const candidate = await storage.getCandidateById(contract.candidateId);
+            recipientPosition = candidate?.position || '';
+            recipientDepartment = 'New Hire';
+          }
+
+          const baseValues = buildBaseFieldValues({
+            recipientName: contract.recipientName,
+            recipientEmail: contract.recipientEmail,
+            recipientPosition,
+            recipientDepartment
+          });
+
+          const mergedValues = {
+            ...baseValues,
+            ...(contract.fieldValues || {}),
+            ...(incomingFieldValues || {})
+          };
+
+          updateData.fieldValues = mergedValues;
+          updateData.content = applyTemplateReplacements(template.content, mergedValues);
+
+          if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
+            const outputFileName = `contract_${contract.recipientName.toLowerCase().replace(/\\s+/g, '_')}_${Date.now()}.pdf`;
+            await contractPdfService.generateContract(template.fileName, mergedValues, outputFileName);
+            updateData.fileUrl = `/contract-templates/${outputFileName}`;
+            updateData.fileName = outputFileName;
+          }
+        }
+      }
       
       // Update sent date if status changes to SENT and notify recipient
       if (updateData.status === 'SENT' && contract.status === 'DRAFT') {
         updateData.sentDate = new Date();
+        updateData.sentBy = user.id;
         
         const updatedContract = await storage.updateEmployeeContract(req.params.id, updateData);
         
@@ -783,6 +862,17 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
           req.params.id,
           user.email, // Pass sender's email for Gmail impersonation
           updatedContract.fileUrl || contract.fileUrl || undefined
+        );
+
+        await notifyContractSentInternal(
+          {
+            id: updatedContract.id,
+            recipientName: updatedContract.recipientName,
+            recipientEmail: updatedContract.recipientEmail,
+            title: updatedContract.title,
+            fileUrl: updatedContract.fileUrl || undefined
+          },
+          user.email
         );
         
         res.json(updatedContract);
@@ -903,6 +993,10 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
     });
 
     // Send notification to managers and HR about signed contract
+    const senderUserId = contract.sentBy || contract.createdBy;
+    const senderUser = senderUserId ? await storage.getUserById(senderUserId) : null;
+    const senderEmail = senderUser?.email || undefined;
+    const retailFlag = await isRetailContract(contract.templateId);
     await notifyManagersAndHROfSignedContract({
       contractId: req.params.id,
       employeeName: contract.recipientName,
@@ -910,7 +1004,7 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
       signedDate,
       signature,
       fileUrl: updatedContract.fileUrl || contract.fileUrl || undefined
-    }, user.email);
+    }, senderEmail, retailFlag);
 
     console.log(`Contract ${req.params.id} signed by ${user.email} from IP ${signatureIp}`);
 
@@ -950,13 +1044,70 @@ router.post('/api/employee-contracts/:id/reject', requireAuth, async (req, res) 
       status: 'REJECTED',
       rejectionReason: reason
     });
-    
-    // Here you would send notification to HR/manager about rejected contract
+
+    const senderUserId = contract.sentBy || contract.createdBy;
+    const senderUser = senderUserId ? await storage.getUserById(senderUserId) : null;
+    const senderEmail = senderUser?.email || undefined;
+    const retailFlag = await isRetailContract(contract.templateId);
+    await notifyContractRejected({
+      id: updatedContract.id,
+      recipientName: updatedContract.recipientName,
+      recipientEmail: updatedContract.recipientEmail,
+      title: updatedContract.title,
+      fileUrl: updatedContract.fileUrl || undefined,
+      rejectionReason: reason
+    }, senderEmail, retailFlag);
     
     res.json(updatedContract);
   } catch (error) {
     console.error('Error rejecting contract:', error);
     res.status(500).json({ error: 'Failed to reject contract' });
+  }
+});
+
+// Rescind contract (manager only)
+router.post('/api/employee-contracts/:id/rescind', requireAuth, requireManager, async (req, res) => {
+  try {
+    const user = req.user!;
+    const { reason } = req.body;
+
+    const contract = await storage.getEmployeeContractById(req.params.id);
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+
+    if (['SIGNED', 'REJECTED', 'RESCINDED'].includes(contract.status)) {
+      return res.status(400).json({ error: 'Contract cannot be rescinded in its current state' });
+    }
+
+    const updatedContract = await storage.updateEmployeeContract(req.params.id, {
+      status: 'RESCINDED',
+      rejectionReason: reason || 'Offer rescinded by management',
+      updatedAt: new Date()
+    });
+
+    const senderEmail = user.email;
+    const retailFlag = await isRetailContract(contract.templateId);
+    await notifyContractRejected({
+      id: updatedContract.id,
+      recipientName: updatedContract.recipientName,
+      recipientEmail: updatedContract.recipientEmail,
+      title: updatedContract.title,
+      fileUrl: updatedContract.fileUrl || undefined,
+      rejectionReason: updatedContract.rejectionReason || undefined
+    }, senderEmail, retailFlag);
+
+    await notifyRecipientOfRescindedContract({
+      id: updatedContract.id,
+      recipientName: updatedContract.recipientName,
+      recipientEmail: updatedContract.recipientEmail,
+      title: updatedContract.title,
+    }, senderEmail, updatedContract.rejectionReason || undefined);
+
+    res.json(updatedContract);
+  } catch (error) {
+    console.error('Error rescinding contract:', error);
+    res.status(500).json({ error: 'Failed to rescind contract' });
   }
 });
 
