@@ -689,8 +689,6 @@ class EmailService {
             Please plan to arrive <strong>10-15 minutes early</strong> to ensure a smooth start to your first day.
           </p>
 
-          ${hrPortalHtml}
-
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
             On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel shortly after joining the team.
           </p>
@@ -702,8 +700,6 @@ class EmailService {
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
             Feel free to reach out with any questions.
           </p>
-
-          ${equipmentChecklistHtml}
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">Best regards,</p>
 
