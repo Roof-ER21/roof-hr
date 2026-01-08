@@ -65,6 +65,10 @@ const AUTO_FILLED_VARIABLES = [
   'position', 'department', 'email', 'date', 'startDate', 'effectiveDate'
 ];
 
+const MANAGER_LIKE_ROLES = ['MANAGER', 'TERRITORY_MANAGER', 'TERRITORY_SALES_MANAGER'] as const;
+const isManagerRole = (role?: string | null) =>
+  !!role && (MANAGER_LIKE_ROLES as readonly string[]).includes(role);
+
 function buildBaseFieldValues(input: {
   recipientName: string;
   recipientEmail: string;
@@ -466,7 +470,7 @@ router.get('/api/contracts', requireAuth, async (req, res) => {
     }
 
     // Manager role - see own contracts + contracts they created + direct reports' contracts
-    if (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+    if (isManagerRole(user.role)) {
       // Get direct reports (users where this manager is their primaryManagerId)
       const allUsers = await storage.getAllUsers();
       const directReportIds = allUsers
@@ -512,7 +516,7 @@ router.get('/api/employee-contracts', requireAuth, requireManager, async (req, r
     }
 
     // Manager role - see own contracts + contracts they created + direct reports' contracts
-    if (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+    if (isManagerRole(user.role)) {
       const allUsers = await storage.getAllUsers();
       const directReportIds = allUsers
         .filter(u => u.primaryManagerId === user.id)
@@ -556,7 +560,7 @@ router.get('/api/employee-contracts/employee/:employeeId', requireAuth, async (r
 
     // Manager viewing direct report's contracts
     let isDirectReport = false;
-    if (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER') {
+    if (isManagerRole(user.role)) {
       const targetEmployee = await storage.getUserById(requestedEmployeeId);
       if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
         isDirectReport = true;
@@ -596,7 +600,7 @@ router.get('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 
     // Manager viewing direct report's contract
     let isDirectReportContract = false;
-    if (contract.employeeId && (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER')) {
+    if (contract.employeeId && isManagerRole(user.role)) {
       const targetEmployee = await storage.getUserById(contract.employeeId);
       if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
         isDirectReportContract = true;
@@ -741,7 +745,7 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 
     // Manager can only update if they're the creator or it's their direct report's contract
     let canManagerUpdate = false;
-    if (!isAdmin && (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER')) {
+    if (!isAdmin && isManagerRole(user.role)) {
       if (isCreator) {
         canManagerUpdate = true;
       } else if (contract.employeeId) {
@@ -919,7 +923,7 @@ router.delete('/api/employee-contracts/:id', requireAuth, requireManager, async 
       const isCreator = contract.createdBy === user.id;
       let isDirectReportContract = false;
 
-      if (contract.employeeId && (user.role === 'MANAGER' || user.role === 'TERRITORY_MANAGER' || user.role === 'TERRITORY_SALES_MANAGER')) {
+      if (contract.employeeId && isManagerRole(user.role)) {
         const targetEmployee = await storage.getUserById(contract.employeeId);
         if (targetEmployee && targetEmployee.primaryManagerId === user.id) {
           isDirectReportContract = true;
@@ -988,7 +992,8 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
           signature,
           signedDate,
           signedFileName,
-          layoutFileName
+          layoutFileName,
+          signatureAddress
         );
         signedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;
       } catch (error) {
@@ -1239,7 +1244,8 @@ router.post('/api/public/contract/:token', async (req, res) => {
           signature,
           signedDate,
           signedFileName,
-          templateFileName
+          templateFileName,
+          signatureAddress || undefined
         );
 
         updatedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;

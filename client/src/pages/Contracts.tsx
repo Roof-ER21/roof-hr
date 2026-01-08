@@ -14,7 +14,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Send, Eye, Check, X, PenTool, Plus, Edit, Upload, File, Trash2, Calendar } from 'lucide-react';
+import { FileText, Send, Eye, Check, X, PenTool, Plus, Edit, Upload, File, Trash2, Calendar, Search } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
@@ -38,7 +38,8 @@ const contractFormSchema = z.object({
   candidateId: z.string().optional(),
   templateId: z.string().optional(),
   title: z.string().min(1, 'Contract title is required'),
-  content: z.string().min(1, 'Contract content is required')
+  content: z.string().min(1, 'Contract content is required'),
+  fieldValues: z.record(z.string()).optional()
 }).refine((data) => {
   // Ensure either employeeId or candidateId is provided based on recipientType
   if (data.recipientType === 'EMPLOYEE' && !data.employeeId) {
@@ -94,6 +95,60 @@ export default function Contracts() {
   const [templateFields, setTemplateFields] = useState<string[]>([]);
   const [autoTemplateFields, setAutoTemplateFields] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [recipientSearch, setRecipientSearch] = useState('');
+
+  const todayInput = () => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  };
+
+  const applyRecipientAutoFill = (fullName: string) => {
+    const defaultDate = todayInput();
+    setFieldValues((prev) => ({
+      contractorName: fullName,
+      name: fullName,
+      employeeName: fullName,
+      startDate: prev.startDate || defaultDate,
+      effectiveDate: prev.effectiveDate || defaultDate,
+      ...prev,
+    }));
+    if (!contractForm.getValues('title')) {
+      contractForm.setValue('title', selectedTemplate?.name || 'Contract');
+    }
+    if (!contractForm.getValues('content') && selectedTemplate?.content) {
+      contractForm.setValue('content', selectedTemplate.content);
+    }
+  };
+
+  useEffect(() => {
+    if (!recipientSearch.trim()) return;
+    const search = recipientSearch.toLowerCase();
+    const recipientType = contractForm.watch('recipientType');
+    if (recipientType === 'EMPLOYEE') {
+      const match = users.find((u) =>
+        `${u.firstName} ${u.lastName}`.toLowerCase().includes(search) ||
+        (u.email || '').toLowerCase().includes(search)
+      );
+      if (match) {
+        contractForm.setValue('employeeId', match.id);
+        contractForm.setValue('candidateId', '');
+        applyRecipientAutoFill(`${match.firstName} ${match.lastName}`);
+      }
+    } else {
+      const match = candidates.find((c: any) =>
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(search) ||
+        (c.email || '').toLowerCase().includes(search)
+      );
+      if (match) {
+        contractForm.setValue('candidateId', match.id);
+        contractForm.setValue('employeeId', '');
+        applyRecipientAutoFill(`${match.firstName} ${match.lastName}`);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipientSearch]);
 
   const templateForm = useForm<z.infer<typeof templateFormSchema>>({
     resolver: zodResolver(templateFormSchema),
@@ -297,8 +352,10 @@ export default function Contracts() {
     }
   });
 
+  type ContractUpdate = Partial<EmployeeContract> & { regeneratePdf?: boolean; fieldValues?: Record<string, string> };
+
   const updateContractMutation = useMutation({
-    mutationFn: (data: { id: string; updates: Partial<EmployeeContract> }) => 
+    mutationFn: (data: { id: string; updates: ContractUpdate }) => 
       apiRequest(`/api/employee-contracts/${data.id}`, {
         method: 'PATCH',
         body: JSON.stringify(data.updates),
@@ -449,7 +506,7 @@ export default function Contracts() {
     };
     const cleanedFieldValues = Object.fromEntries(
       Object.entries(fieldValues).filter(([, value]) => value !== undefined && value !== '')
-    );
+    ) as Record<string, string>;
 
     updateContractMutation.mutate({
       id: editContract.id,
@@ -506,7 +563,7 @@ export default function Contracts() {
           ? data.userProvided
           : (template.variables || []);
         const normalizedUserFields = userFields.map(normalizeVariableName).filter(Boolean);
-        const filteredUserFields = normalizedUserFields.filter((field) => !autoFields.includes(field));
+        const filteredUserFields = normalizedUserFields.filter((field: string) => !autoFields.includes(field));
 
         setAutoTemplateFields(Array.from(new Set(autoFields)));
         setTemplateFields(Array.from(new Set(filteredUserFields)));
@@ -841,6 +898,8 @@ export default function Contracts() {
               setIsContractDialogOpen(open);
               if (!open) {
                 contractForm.reset();
+                setRecipientSearch('');
+                setFieldValues({});
                 setSelectedTemplate(null);
                 resetTemplateFields();
               }
@@ -856,15 +915,23 @@ export default function Contracts() {
                   <DialogTitle>Generate Contract from Template</DialogTitle>
                   <DialogDescription>
                     Select a master template and fill in the required fields
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...contractForm}>
-                  <form onSubmit={contractForm.handleSubmit(onSubmitContract)} className="space-y-4">
-                    <FormField
-                      control={contractForm.control}
-                      name="recipientType"
-                      render={({ field }) => (
-                        <FormItem>
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...contractForm}>
+              <form onSubmit={contractForm.handleSubmit(onSubmitContract)} className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Type a name or email to auto-fill recipient"
+                    value={recipientSearch}
+                    onChange={(e) => setRecipientSearch(e.target.value)}
+                  />
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <FormField
+                  control={contractForm.control}
+                  name="recipientType"
+                  render={({ field }) => (
+                    <FormItem>
                           <FormLabel>Recipient Type</FormLabel>
                           <Select 
                             onValueChange={(value) => {
@@ -1437,6 +1504,27 @@ export default function Contracts() {
               <h4 className="font-medium mb-2">Content:</h4>
               <pre className="whitespace-pre-wrap bg-muted p-4 rounded">{selectedTemplate?.content}</pre>
             </div>
+            {selectedTemplate?.fileName || selectedTemplate?.fileUrl ? (
+              <div className="space-y-2">
+                <h4 className="font-medium">PDF Preview:</h4>
+                <iframe
+                  title="Template PDF"
+                  src={selectedTemplate?.fileUrl || `/attached_assets/contract_templates/${selectedTemplate?.fileName}`}
+                  className="w-full h-[480px] border rounded"
+                />
+                <div>
+                  <a
+                    href={selectedTemplate?.fileUrl || `/attached_assets/contract_templates/${selectedTemplate?.fileName}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-sm text-blue-600 hover:underline"
+                  >
+                    <File className="h-4 w-4 mr-2" />
+                    Download Template PDF
+                  </a>
+                </div>
+              </div>
+            ) : null}
             {selectedTemplate?.variables && selectedTemplate.variables.length > 0 && (
               <div>
                 <h4 className="font-medium mb-2">Variables:</h4>

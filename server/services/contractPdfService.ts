@@ -294,6 +294,7 @@ export class ContractPdfService {
           font,
           color: rgb(0, 0, 0),
         });
+        fieldsFilled += 1;
       }
 
       // Add effective date
@@ -305,6 +306,7 @@ export class ContractPdfService {
           font,
           color: rgb(0, 0, 0),
         });
+        fieldsFilled += 1;
       }
 
       // Note: For production, we'd want to use form fields or more sophisticated text replacement
@@ -319,7 +321,8 @@ export class ContractPdfService {
     signature: string,
     signedDate: Date,
     outputFileName: string,
-    layoutFileName?: string
+    layoutFileName?: string,
+    signatureAddress?: string
   ): Promise<string> {
     const pdfDoc = await this.loadTemplate(sourceFileName);
     const pages = pdfDoc.getPages();
@@ -365,6 +368,19 @@ export class ContractPdfService {
       lastPage.drawText(`Date: ${formattedDate}`, {
         x: 50,
         y: 65,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    }
+
+    // Add mailing address near the signature area if available
+    if (signatureAddress) {
+      const addrPage = pages[signatureField?.page ?? pages.length - 1];
+      const addrY = signatureField ? addrPage.getHeight() - (signatureField.bottom - 30) : 120;
+      addrPage.drawText(signatureAddress, {
+        x: signatureField ? signatureField.x : 50,
+        y: addrY,
         size: 10,
         font,
         color: rgb(0, 0, 0),
