@@ -253,7 +253,7 @@ export const insertEmployeeAssignmentSchema = createInsertSchema(employeeAssignm
 export const contractTemplates = pgTable('contract_templates', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  type: text('type').$type<'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER'>().notNull(),
+  type: text('type').$type<'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER' | 'RETAIL'>().notNull(),
   territory: text('territory'), // Optional territory-specific template
   content: text('content').notNull(), // HTML or markdown content
   fileUrl: text('file_url'), // URL to PDF file attachment

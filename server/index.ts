@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
+import path from 'path';
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import session from "express-session";
@@ -92,6 +93,10 @@ const app = express();
 
 // Trust proxy headers (needed for Replit and other proxied environments)
 app.set('trust proxy', true);
+
+// Serve contract template PDFs
+const contractTemplatesDir = path.resolve(process.cwd(), 'attached_assets', 'contract_templates');
+app.use('/contract-templates', express.static(contractTemplatesDir));
 
 // Session configuration with security improvements
 app.use(session({

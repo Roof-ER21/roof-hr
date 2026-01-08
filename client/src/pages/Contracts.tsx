@@ -76,6 +76,8 @@ export default function Contracts() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [templateFields, setTemplateFields] = useState<string[]>([]);
+  const [autoTemplateFields, setAutoTemplateFields] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const templateForm = useForm<z.infer<typeof templateFormSchema>>({
@@ -329,7 +331,10 @@ export default function Contracts() {
   };
 
   const onSubmitContract = (data: z.infer<typeof contractFormSchema>) => {
-    createContractMutation.mutate(data);
+    const cleanedFieldValues = Object.fromEntries(
+      Object.entries(fieldValues).filter(([, value]) => value !== '')
+    );
+    createContractMutation.mutate({ ...data, fieldValues: cleanedFieldValues });
   };
 
   const onSubmitSignature = (data: z.infer<typeof signatureFormSchema>) => {
@@ -362,6 +367,43 @@ export default function Contracts() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const normalizeVariableName = (value: string) => value.replace(/[{}]/g, '').trim();
+
+  const resetTemplateFields = () => {
+    setTemplateFields([]);
+    setAutoTemplateFields([]);
+    setFieldValues({});
+  };
+
+  const loadTemplateFields = async (template: ContractTemplate) => {
+    try {
+      const response = await fetch(`/api/contract-templates/${template.id}/variables`, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const autoFields = (data.autoFilled || []).map(normalizeVariableName).filter(Boolean);
+        const userFields = (data.userProvided || []).length > 0
+          ? data.userProvided
+          : (template.variables || []);
+        const normalizedUserFields = userFields.map(normalizeVariableName).filter(Boolean);
+        const filteredUserFields = normalizedUserFields.filter((field) => !autoFields.includes(field));
+
+        setAutoTemplateFields(Array.from(new Set(autoFields)));
+        setTemplateFields(Array.from(new Set(filteredUserFields)));
+        setFieldValues({});
+        return;
+      }
+    } catch (error) {
+      // Fall through to template-defined variables
+    }
+
+    const fallbackFields = (template.variables || []).map(normalizeVariableName).filter(Boolean);
+    setAutoTemplateFields([]);
+    setTemplateFields(Array.from(new Set(fallbackFields)));
+    setFieldValues({});
   };
 
   const addVariable = () => {
@@ -617,7 +659,14 @@ export default function Contracts() {
               </DialogContent>
             </Dialog>
 
-            <Dialog open={isContractDialogOpen} onOpenChange={setIsContractDialogOpen}>
+            <Dialog open={isContractDialogOpen} onOpenChange={(open) => {
+              setIsContractDialogOpen(open);
+              if (!open) {
+                contractForm.reset();
+                setSelectedTemplate(null);
+                resetTemplateFields();
+              }
+            }}>
               <DialogTrigger asChild>
                 <Button>
                   <FileText className="h-4 w-4 mr-2" />
@@ -734,12 +783,19 @@ export default function Contracts() {
                                 field.onChange('');
                                 contractForm.setValue('title', '');
                                 contractForm.setValue('content', '');
+                                setSelectedTemplate(null);
+                                resetTemplateFields();
                               } else {
                                 field.onChange(value);
                                 const template = templates.find((t: ContractTemplate) => t.id === value);
                                 if (template) {
                                   contractForm.setValue('title', template.name);
                                   contractForm.setValue('content', template.content);
+                                  setSelectedTemplate(template);
+                                  loadTemplateFields(template);
+                                } else {
+                                  setSelectedTemplate(null);
+                                  resetTemplateFields();
                                 }
                               }
                             }} 
@@ -763,6 +819,41 @@ export default function Contracts() {
                         </FormItem>
                       )}
                     />
+                    {(templateFields.length > 0 || autoTemplateFields.length > 0) && (
+                      <div className="rounded-lg border p-4 space-y-3">
+                        <div>
+                          <Label className="text-sm font-medium">Template Fields</Label>
+                          {autoTemplateFields.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {autoTemplateFields.map((field) => (
+                                <Badge key={field} variant="secondary" className="text-xs">
+                                  {field} (auto)
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {templateFields.length > 0 && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {templateFields.map((field) => (
+                              <div key={field} className="space-y-1">
+                                <Label htmlFor={`field-${field}`}>{field}</Label>
+                                <Input
+                                  id={`field-${field}`}
+                                  value={fieldValues[field] || ''}
+                                  onChange={(event) =>
+                                    setFieldValues((prev) => ({
+                                      ...prev,
+                                      [field]: event.target.value
+                                    }))
+                                  }
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <FormField
                       control={contractForm.control}
                       name="title"
@@ -1148,6 +1239,19 @@ export default function Contracts() {
             <div>
               <h4 className="font-medium mb-2">Content:</h4>
               <pre className="whitespace-pre-wrap bg-muted p-4 rounded">{selectedContract?.content}</pre>
+              {selectedContract?.fileUrl && (
+                <div className="mt-4">
+                  <a
+                    href={selectedContract.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-sm text-blue-600 hover:underline"
+                  >
+                    <File className="h-4 w-4 mr-2" />
+                    Download Contract PDF
+                  </a>
+                </div>
+              )}
             </div>
             {selectedContract?.status === 'SENT' && selectedContract?.employeeId === currentUser?.id && (
               <DialogFooter>

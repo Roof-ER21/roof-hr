@@ -8,6 +8,7 @@ interface ContractSignedNotification {
   contractTitle: string;
   signedDate: Date;
   signature: string;
+  fileUrl?: string;
 }
 
 export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification, senderEmail?: string) {
@@ -35,6 +36,8 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
     
     // Prepare email content
     const subject = `Contract Signed: ${notification.contractTitle} - ${notification.employeeName}`;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
+    const fileLink = notification.fileUrl ? `${appUrl}${notification.fileUrl}` : '';
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Contract Signature Notification</h2>
@@ -58,6 +61,11 @@ export async function notifyManagersAndHROfSignedContract(notification: Contract
              style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
             View Contract
           </a>
+          ${notification.fileUrl ? `
+          <a href="${fileLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #16a34a; color: white; text-decoration: none; border-radius: 6px; margin-left: 10px;">
+            Download Signed PDF
+          </a>` : ''}
         </div>
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
@@ -120,13 +128,16 @@ export async function notifyRecipientOfNewContract(
   recipientName: string,
   contractTitle: string,
   contractId: string,
-  senderEmail?: string // Email of the user sending this (for Gmail impersonation)
+  senderEmail?: string, // Email of the user sending this (for Gmail impersonation)
+  fileUrl?: string
 ) {
   try {
     // Initialize Gmail service
     await gmailService.initialize();
 
     const subject = `New Contract for Review: ${contractTitle}`;
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
+    const fileLink = fileUrl ? `${appUrl}${fileUrl}` : '';
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">Contract Ready for Review</h2>
@@ -153,6 +164,11 @@ export async function notifyRecipientOfNewContract(
              style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
             Review Contract
           </a>
+          ${fileUrl ? `
+          <a href="${fileLink}" 
+             style="display: inline-block; padding: 12px 24px; background: #16a34a; color: white; text-decoration: none; border-radius: 6px; margin-left: 10px;">
+            Download PDF
+          </a>` : ''}
         </div>
         
         <p style="margin-top: 20px; color: #6b7280;">

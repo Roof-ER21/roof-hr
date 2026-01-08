@@ -116,7 +116,7 @@ router.post('/api/contract-templates', requireAuth, requireManager, async (req: 
     const data = {
       ...parsedData,
       id: uuidv4(),
-      type: parsedData.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER'
+      type: parsedData.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER' | 'RETAIL'
     };
 
     const template = await storage.createContractTemplate(data);
@@ -280,7 +280,7 @@ router.post('/api/contract-templates/upload',
       const template = await storage.createContractTemplate({
         id: uuidv4(),
         name,
-        type: type as 'CONTRACTOR' | 'OTHER' | 'EMPLOYMENT' | 'NDA',
+        type: type as 'CONTRACTOR' | 'OTHER' | 'EMPLOYMENT' | 'NDA' | 'RETAIL',
         territory: territory || null,
         content: `PDF Template: ${name}`,
         fileUrl: `/contract-templates/${fileName}`,
@@ -335,8 +335,30 @@ router.post('/api/contracts/generate-from-template',
         return res.status(400).json({ error: 'Invalid recipient' });
       }
 
+      const today = new Date().toLocaleDateString();
+      const [recipientFirstName, ...recipientLastNameParts] = recipientName.split(' ');
+      const recipientLastName = recipientLastNameParts.join(' ');
+
+      const autoValues: Record<string, string> = {
+        contractorName: recipientName,
+        name: recipientName,
+        employeeName: recipientName,
+        firstName: recipientFirstName || recipientName,
+        lastName: recipientLastName || recipientName,
+        position: '',
+        department: '',
+        email: recipientEmail,
+        date: today,
+        startDate: today,
+        effectiveDate: today,
+        signatureDate: today,
+      };
+
+      const mergedFieldValues = { ...autoValues, ...(fieldValues || {}) };
+
       // If template has a PDF file, generate from it
       let generatedFileUrl = null;
+      let generatedFileName = null;
       if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
         // Generate unique output filename
         const outputFileName = `contract_${recipientName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`;
@@ -345,13 +367,14 @@ router.post('/api/contracts/generate-from-template',
         const filledPdfPath = await contractPdfService.generateContract(
           template.fileName,
           {
-            ...fieldValues,
-            contractorName: fieldValues.contractorName || recipientName,
+            ...mergedFieldValues,
+            contractorName: mergedFieldValues.contractorName || recipientName,
           },
           outputFileName
         );
 
         generatedFileUrl = `/contract-templates/${outputFileName}`;
+        generatedFileName = outputFileName;
       }
 
       // Create the employee contract record
@@ -365,6 +388,7 @@ router.post('/api/contracts/generate-from-template',
         title: `${template.name} - ${recipientName}`,
         content: template.content,
         fileUrl: generatedFileUrl,
+        fileName: generatedFileName,
         status: 'DRAFT',
         createdBy: currentUser.id,
       });
@@ -544,6 +568,7 @@ router.get('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 router.post('/api/employee-contracts', requireAuth, requireManager, async (req, res) => {
   try {
     const user = req.user!;
+    const { fieldValues = {}, ...contractPayload } = req.body;
     // Parse the request based on recipient type
     let recipientName = '';
     let recipientEmail = '';
@@ -573,7 +598,7 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
     }
 
     let parsedData = insertEmployeeContractSchema.parse({
-      ...req.body,
+      ...contractPayload,
       recipientName,
       recipientEmail,
       createdBy: user.id,
@@ -584,6 +609,26 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
     if (parsedData.templateId) {
       const template = await storage.getContractTemplateById(parsedData.templateId);
       if (template) {
+        const today = new Date().toLocaleDateString();
+        const [recipientFirstName, ...recipientLastNameParts] = recipientName.split(' ');
+        const recipientLastName = recipientLastNameParts.join(' ');
+
+        const autoValues: Record<string, string> = {
+          contractorName: recipientName,
+          name: recipientName,
+          employeeName: recipientName,
+          firstName: recipientFirstName || recipientName,
+          lastName: recipientLastName || recipientName,
+          position: recipientPosition || '',
+          department: recipientDepartment || '',
+          email: recipientEmail,
+          date: today,
+          startDate: today,
+          effectiveDate: today,
+          signatureDate: today,
+        };
+
+        const mergedFieldValues = { ...autoValues, ...(fieldValues || {}) };
         // Replace variables in template content
         let content = template.content;
 
@@ -596,15 +641,31 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
           '{{position}}': recipientPosition,
           '{{department}}': recipientDepartment,
           '{{email}}': recipientEmail,
-          '{{date}}': new Date().toLocaleDateString(),
-          '{{startDate}}': new Date().toLocaleDateString()
+          '{{date}}': today,
+          '{{startDate}}': today
         };
+
+        for (const [key, value] of Object.entries(fieldValues || {})) {
+          if (value !== undefined && value !== null && value !== '') {
+            replacements[`{{${key}}}`] = String(value);
+          }
+        }
 
         for (const [key, value] of Object.entries(replacements)) {
           content = content.replace(new RegExp(key, 'g'), value);
         }
 
         parsedData = { ...parsedData, content };
+
+        if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
+          const outputFileName = `contract_${recipientName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+          await contractPdfService.generateContract(template.fileName, mergedFieldValues, outputFileName);
+          parsedData = {
+            ...parsedData,
+            fileUrl: `/contract-templates/${outputFileName}`,
+            fileName: outputFileName
+          };
+        }
       }
     }
 
@@ -690,7 +751,8 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
           employeeName: contract.recipientName,
           contractTitle: contract.title,
           signedDate: updateData.signedDate,
-          signature: updateData.signature
+          signature: updateData.signature,
+          fileUrl: updatedContract.fileUrl || contract.fileUrl || undefined
         }, user.email); // Pass user email for Gmail impersonation
         
         res.json(updatedContract);
@@ -719,7 +781,8 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
           contract.recipientName,
           contract.title,
           req.params.id,
-          user.email // Pass sender's email for Gmail impersonation
+          user.email, // Pass sender's email for Gmail impersonation
+          updatedContract.fileUrl || contract.fileUrl || undefined
         );
         
         res.json(updatedContract);
@@ -802,11 +865,37 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
     const signatureIp = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
     const signedDate = new Date();
 
+    let signedFileUrl: string | null = null;
+    let signedFileName: string | null = null;
+    const sourceFileName = contract.fileName || (contract.fileUrl ? path.basename(contract.fileUrl) : null);
+
+    if (sourceFileName && await contractPdfService.templateExists(sourceFileName)) {
+      try {
+        let layoutFileName: string | undefined;
+        if (contract.templateId) {
+          const template = await storage.getContractTemplateById(contract.templateId);
+          layoutFileName = template?.fileName || undefined;
+        }
+        signedFileName = `signed_contract_${contract.id}_${Date.now()}.pdf`;
+        await contractPdfService.applySignatureToPdf(
+          sourceFileName,
+          signature,
+          signedDate,
+          signedFileName,
+          layoutFileName
+        );
+        signedFileUrl = `/contract-templates/${signedFileName}`;
+      } catch (error) {
+        console.error('[Contracts] Failed to apply signature to PDF:', error);
+      }
+    }
+
     const updatedContract = await storage.updateEmployeeContract(req.params.id, {
       status: 'SIGNED',
       signature,
       signatureIp,
-      signedDate
+      signedDate,
+      ...(signedFileUrl ? { fileUrl: signedFileUrl, fileName: signedFileName } : {})
     });
 
     // Send notification to managers and HR about signed contract
@@ -815,7 +904,8 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
       employeeName: contract.recipientName,
       contractTitle: contract.title,
       signedDate,
-      signature
+      signature,
+      fileUrl: updatedContract.fileUrl || contract.fileUrl || undefined
     }, user.email);
 
     console.log(`Contract ${req.params.id} signed by ${user.email} from IP ${signatureIp}`);

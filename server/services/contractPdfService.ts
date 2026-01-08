@@ -1,4 +1,4 @@
-import { PDFDocument, PDFPage, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFTextField } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -17,6 +17,8 @@ export interface ContractFieldValues {
   companyRepTitle?: string;
   companySignDate?: string;
   contractorSignDate?: string;
+  signatureName?: string;
+  signatureDate?: string;
   [key: string]: string | undefined;
 }
 
@@ -25,6 +27,81 @@ export class ContractPdfService {
 
   constructor() {
     this.templatesDir = path.join(__dirname, '../../attached_assets/contract_templates');
+  }
+
+  private getTemplateLayoutKey(fileName: string): string | null {
+    const name = fileName.toLowerCase();
+    if (name.includes('richmond') || name.includes('commission_addendum') || name.includes('combined') || name.includes('dmv') || name.includes('pa')) {
+      return 'roof_docs_contractor';
+    }
+    return null;
+  }
+
+  private getLayoutFields(layoutKey: string) {
+    if (layoutKey === 'roof_docs_contractor') {
+      return [
+        { page: 0, name: 'effectiveDate', valueKey: 'effectiveDate', readOnly: true, x: 312.27, bottom: 180.32, width: 66.0, height: 14 },
+        { page: 0, name: 'contractorName', valueKey: 'contractorName', readOnly: true, x: 440.99, bottom: 193.24, width: 99.0, height: 14 },
+        { page: 9, name: 'signatureName', valueKey: 'signatureName', readOnly: false, x: 72.0, bottom: 397.57, width: 181.5, height: 16 },
+        { page: 9, name: 'signatureDate', valueKey: 'signatureDate', readOnly: true, x: 360.0, bottom: 397.57, width: 132.0, height: 16 },
+      ];
+    }
+    return [];
+  }
+
+  private applyTemplateFieldLayout(
+    pdfDoc: PDFDocument,
+    templateFileName: string,
+    values: ContractFieldValues
+  ): { hasEditableFields: boolean; fieldsAdded: number } {
+    const layoutKey = this.getTemplateLayoutKey(templateFileName);
+    if (!layoutKey) return { hasEditableFields: false, fieldsAdded: 0 };
+
+    const fields = this.getLayoutFields(layoutKey);
+    if (fields.length === 0) return { hasEditableFields: false, fieldsAdded: 0 };
+
+    const form = pdfDoc.getForm();
+    let fieldsAdded = 0;
+    let hasEditableFields = false;
+
+    const normalizedValues: Record<string, string> = {};
+    const normalizeKey = (key: string) => key.replace(/[{}\s]/g, '').toLowerCase();
+    for (const [key, value] of Object.entries(values)) {
+      if (!value) continue;
+      normalizedValues[normalizeKey(key)] = value;
+    }
+
+    for (const field of fields) {
+      const page = pdfDoc.getPages()[field.page];
+      if (!page) continue;
+      const fieldName = field.name;
+      const value = field.valueKey ? normalizedValues[normalizeKey(field.valueKey)] : undefined;
+
+      let textField: PDFTextField;
+      try {
+        textField = form.getTextField(fieldName);
+      } catch {
+        textField = form.createTextField(fieldName);
+      }
+
+      const pageHeight = page.getHeight();
+      const y = pageHeight - field.bottom;
+      textField.addToPage(page, { x: field.x, y, width: field.width, height: field.height });
+
+      if (value) {
+        textField.setText(value);
+      }
+
+      if (field.readOnly) {
+        textField.enableReadOnly();
+      } else {
+        hasEditableFields = true;
+      }
+
+      fieldsAdded += 1;
+    }
+
+    return { hasEditableFields, fieldsAdded };
   }
 
   // Load a PDF template from file
@@ -58,6 +135,53 @@ export class ContractPdfService {
     const pdfDoc = await this.loadTemplate(templateFileName);
     const pages = pdfDoc.getPages();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    const normalizedValues: Record<string, string> = {};
+    const normalizeKey = (key: string) => key.replace(/[{}\s]/g, '').toLowerCase();
+    const setValue = (key: string, value?: string) => {
+      if (!value) return;
+      normalizedValues[normalizeKey(key)] = value;
+    };
+
+    for (const [key, value] of Object.entries(values)) {
+      setValue(key, value);
+    }
+
+    const nameValue = values.contractorName || values.employeeName || values.name;
+    const dateValue = values.effectiveDate || values.date || values.startDate;
+    const signatureDateValue = values.signatureDate || dateValue;
+    setValue('name', nameValue);
+    setValue('employeeName', nameValue);
+    setValue('contractorName', nameValue);
+    setValue('date', dateValue);
+    setValue('effectiveDate', dateValue);
+    setValue('startDate', dateValue);
+    setValue('signatureDate', signatureDateValue);
+
+    const layoutResult = this.applyTemplateFieldLayout(pdfDoc, templateFileName, values);
+    let fieldsFilled = 0;
+    let hasEditableFields = layoutResult.hasEditableFields;
+    try {
+      const form = pdfDoc.getForm();
+      for (const field of form.getFields()) {
+        const fieldName = normalizeKey(field.getName());
+        const value = normalizedValues[fieldName];
+        if (!value) continue;
+        if (field instanceof PDFTextField) {
+          field.setText(value);
+          fieldsFilled += 1;
+        }
+      }
+
+      if (fieldsFilled > 0) {
+        form.updateFieldAppearances(font);
+        if (!hasEditableFields) {
+          form.flatten();
+        }
+      }
+    } catch (error) {
+      console.warn('[Contracts] No fillable PDF form fields detected.');
+    }
     
     // Common field patterns to look for in contracts
     const fieldMappings = {
@@ -71,10 +195,10 @@ export class ContractPdfService {
     // For each page, try to find and replace placeholder text
     for (const page of pages) {
       // Get page dimensions
-      const { width, height } = page.getSize();
+      const { height } = page.getSize();
       
       // Add contractor name where there's a blank line after "between The Roof Docs LLC" 
-      if (values.contractorName) {
+      if (values.contractorName && fieldsFilled === 0) {
         // Position for contractor name (approximate - adjust based on actual PDF)
         page.drawText(values.contractorName, {
           x: 350,
@@ -86,7 +210,7 @@ export class ContractPdfService {
       }
 
       // Add effective date
-      if (values.effectiveDate) {
+      if (values.effectiveDate && fieldsFilled === 0) {
         page.drawText(values.effectiveDate, {
           x: 250,
           y: height - 150, // Adjust based on actual position
@@ -101,6 +225,67 @@ export class ContractPdfService {
     }
 
     return pdfDoc;
+  }
+
+  async applySignatureToPdf(
+    sourceFileName: string,
+    signature: string,
+    signedDate: Date,
+    outputFileName: string,
+    layoutFileName?: string
+  ): Promise<string> {
+    const pdfDoc = await this.loadTemplate(sourceFileName);
+    const pages = pdfDoc.getPages();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const lastPage = pages[pages.length - 1];
+    const formattedDate = signedDate.toLocaleDateString();
+
+    const layoutKey = this.getTemplateLayoutKey(layoutFileName || sourceFileName);
+    const fields = layoutKey ? this.getLayoutFields(layoutKey) : [];
+    const signatureField = fields.find((field) => field.name === 'signatureName');
+    const dateField = fields.find((field) => field.name === 'signatureDate');
+
+    if (signatureField && dateField) {
+      const signaturePage = pages[signatureField.page] || lastPage;
+      const datePage = pages[dateField.page] || lastPage;
+      const signatureY = signaturePage.getHeight() - signatureField.bottom + 2;
+      const dateY = datePage.getHeight() - dateField.bottom + 2;
+
+      signaturePage.drawText(signature, {
+        x: signatureField.x + 4,
+        y: signatureY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0),
+      });
+
+      datePage.drawText(formattedDate, {
+        x: dateField.x + 4,
+        y: dateY,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    } else {
+      lastPage.drawText(`Signed by: ${signature}`, {
+        x: 50,
+        y: 80,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0),
+      });
+
+      lastPage.drawText(`Date: ${formattedDate}`, {
+        x: 50,
+        y: 65,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    }
+
+    const outputPath = await this.savePdf(pdfDoc, outputFileName);
+    return outputPath;
   }
 
   // Generate a contract from template with field values
