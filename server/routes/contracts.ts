@@ -329,7 +329,7 @@ router.post('/api/contract-templates/upload',
         type: type as 'CONTRACTOR' | 'OTHER' | 'EMPLOYMENT' | 'NDA' | 'RETAIL',
         territory: territory || null,
         content: `PDF Template: ${name}`,
-        fileUrl: `/contract-templates/${fileName}`,
+        fileUrl: `/attached_assets/contract_templates/${fileName}`,
         fileName,
         variables: variablesList,
         isActive: true,
@@ -419,7 +419,7 @@ router.post('/api/contracts/generate-from-template',
           outputFileName
         );
 
-        generatedFileUrl = `/contract-templates/${outputFileName}`;
+        generatedFileUrl = `/attached_assets/contract_templates/${outputFileName}`;
         generatedFileName = outputFileName;
       }
 
@@ -685,7 +685,7 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
           await contractPdfService.generateContract(template.fileName, mergedFieldValues, outputFileName);
           parsedData = {
             ...parsedData,
-            fileUrl: `/contract-templates/${outputFileName}`,
+            fileUrl: `/attached_assets/contract_templates/${outputFileName}`,
             fileName: outputFileName
           };
         }
@@ -842,7 +842,7 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
           if (template.fileName && await contractPdfService.templateExists(template.fileName)) {
             const outputFileName = `contract_${contract.recipientName.toLowerCase().replace(/\\s+/g, '_')}_${Date.now()}.pdf`;
             await contractPdfService.generateContract(template.fileName, mergedValues, outputFileName);
-            updateData.fileUrl = `/contract-templates/${outputFileName}`;
+            updateData.fileUrl = `/attached_assets/contract_templates/${outputFileName}`;
             updateData.fileName = outputFileName;
           }
         }
@@ -986,7 +986,7 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
           signedFileName,
           layoutFileName
         );
-        signedFileUrl = `/contract-templates/${signedFileName}`;
+        signedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;
       } catch (error) {
         console.error('[Contracts] Failed to apply signature to PDF:', error);
       }
