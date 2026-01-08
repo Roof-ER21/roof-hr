@@ -1,8 +1,8 @@
 import { db } from '../db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { ptoRequests, users } from '../../shared/schema';
 import { EmailService } from '../email-service';
-import { PTO_REMINDER_RECIPIENTS } from '../../shared/constants/roles';
+import { MANAGER_ROLES, PTO_REMINDER_RECIPIENTS } from '../../shared/constants/roles';
 
 let isRunning = false;
 let jobInterval: NodeJS.Timeout | null = null;
@@ -106,10 +106,44 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
     const emailService = new EmailService();
     await emailService.initialize();
 
+    const departmentManagerRoles = Array.from(new Set([...MANAGER_ROLES, 'TEAM_LEAD']));
+    const departmentManagers = await db.select({
+      email: users.email,
+      department: users.department,
+    })
+      .from(users)
+      .where(and(eq(users.isActive, true), inArray(users.role, departmentManagerRoles)));
+
+    const managersByDepartment = new Map<string, Set<string>>();
+    for (const manager of departmentManagers) {
+      if (!manager.department) continue;
+      const key = manager.department.trim().toLowerCase();
+      if (!key) continue;
+      if (!managersByDepartment.has(key)) {
+        managersByDepartment.set(key, new Set<string>());
+      }
+      managersByDepartment.get(key)?.add(manager.email.toLowerCase());
+    }
+
+    const getRecipientsForDepartment = (department?: string, employeeEmail?: string): string[] => {
+      const recipients = new Set(PTO_REMINDER_RECIPIENTS.map((email) => email.toLowerCase()));
+      const key = department?.trim().toLowerCase();
+      if (key && managersByDepartment.has(key)) {
+        for (const email of managersByDepartment.get(key) || []) {
+          recipients.add(email);
+        }
+      }
+      if (employeeEmail) {
+        recipients.delete(employeeEmail.toLowerCase());
+      }
+      return Array.from(recipients);
+    };
+
     // Send 1 week reminders
     for (const pto of weekAwayPTO) {
       try {
-        for (const recipientEmail of PTO_REMINDER_RECIPIENTS) {
+        const recipients = getRecipientsForDepartment(pto.department, pto.email);
+        for (const recipientEmail of recipients) {
           await emailService.sendEmail({
             to: recipientEmail,
             subject: `PTO Reminder: ${pto.firstName} ${pto.lastName} - 1 Week Away`,
@@ -144,7 +178,8 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
     // Send 1 month reminders
     for (const pto of monthAwayPTO) {
       try {
-        for (const recipientEmail of PTO_REMINDER_RECIPIENTS) {
+        const recipients = getRecipientsForDepartment(pto.department, pto.email);
+        for (const recipientEmail of recipients) {
           await emailService.sendEmail({
             to: recipientEmail,
             subject: `PTO Notice: ${pto.firstName} ${pto.lastName} - 1 Month Away`,
