@@ -196,7 +196,7 @@ router.post('/send-contract-test', async (req, res) => {
     const emailService = new EmailService();
     await emailService.initialize();
 
-    const templateDir = path.resolve(process.cwd(), 'attached_assets', 'contract_templates');
+    const templateDir = contractPdfService.getTemplatesDir();
     const today = new Date().toLocaleDateString();
     const contractValues = {
       contractorName: data.contractorName || 'Test Candidate',

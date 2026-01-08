@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, PDFTextField } from 'pdf-lib';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -26,7 +27,19 @@ export class ContractPdfService {
   private templatesDir: string;
 
   constructor() {
-    this.templatesDir = path.join(__dirname, '../../attached_assets/contract_templates');
+    const cwdDir = path.resolve(process.cwd(), 'attached_assets', 'contract_templates');
+    const fallbackDir = path.join(__dirname, '../../attached_assets/contract_templates');
+    if (fsSync.existsSync(cwdDir)) {
+      this.templatesDir = cwdDir;
+    } else if (fsSync.existsSync(fallbackDir)) {
+      this.templatesDir = fallbackDir;
+    } else {
+      this.templatesDir = cwdDir;
+    }
+  }
+
+  getTemplatesDir(): string {
+    return this.templatesDir;
   }
 
   private getTemplateLayoutKey(fileName: string): string | null {
