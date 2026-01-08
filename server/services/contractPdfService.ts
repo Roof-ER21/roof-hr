@@ -56,7 +56,6 @@ export class ContractPdfService {
       return [
         { page: 0, name: 'effectiveDate', valueKey: 'effectiveDate', readOnly: true, x: 312.27, bottom: 180.32, width: 66.0, height: 14 },
         { page: 0, name: 'contractorName', valueKey: 'contractorName', readOnly: true, x: 440.99, bottom: 193.24, width: 99.0, height: 14 },
-        { page: 9, name: 'companySignatureDate', valueKey: 'companySignatureDate', readOnly: true, x: 360.0, bottom: 293.0, width: 132.0, height: 12 },
         { page: 9, name: 'signatureName', valueKey: 'signatureName', readOnly: false, x: 72.0, bottom: 397.57, width: 181.5, height: 16 },
         { page: 9, name: 'signatureDate', valueKey: 'signatureDate', readOnly: true, x: 360.0, bottom: 397.57, width: 132.0, height: 16 },
       ];
@@ -166,7 +165,7 @@ export class ContractPdfService {
     const useGenericMappings = layoutKey !== 'roof_docs_contractor';
     const nameValue = values.contractorName || values.employeeName || values.name;
     const dateValue = values.effectiveDate || values.date || values.startDate;
-    const signatureDateValue = values.signatureDate || dateValue;
+    const signatureDateValue = values.signatureDate ?? (useGenericMappings ? dateValue : undefined);
     const companySignatureDateValue = values.companySignatureDate || signatureDateValue;
     if (useGenericMappings) {
       setValue('name', nameValue);
@@ -180,8 +179,12 @@ export class ContractPdfService {
     if (useGenericMappings) {
       setValue('startDate', dateValue);
     }
-    setValue('signatureDate', signatureDateValue);
-    setValue('companySignatureDate', companySignatureDateValue);
+    if (signatureDateValue) {
+      setValue('signatureDate', signatureDateValue);
+    }
+    if (companySignatureDateValue) {
+      setValue('companySignatureDate', companySignatureDateValue);
+    }
 
     const layoutResult = this.applyTemplateFieldLayout(pdfDoc, templateFileName, values);
     let fieldsFilled = layoutResult.fieldsAdded;
@@ -206,6 +209,20 @@ export class ContractPdfService {
       }
     } catch (error) {
       console.warn('[Contracts] No fillable PDF form fields detected.');
+    }
+
+    if (layoutKey === 'roof_docs_contractor' && companySignatureDateValue) {
+      const page = pages[9];
+      if (page) {
+        const y = page.getHeight() - 293 + 2;
+        page.drawText(companySignatureDateValue, {
+          x: 360 + 4,
+          y,
+          size: 10,
+          font,
+          color: rgb(0, 0, 0),
+        });
+      }
     }
     
     // Common field patterns to look for in contracts

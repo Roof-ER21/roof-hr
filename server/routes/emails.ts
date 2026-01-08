@@ -201,9 +201,11 @@ router.post('/send-contract-test', async (req, res) => {
     const contractValues: Record<string, string> = {
       contractorName: data.contractorName || 'Test Candidate',
       effectiveDate: data.effectiveDate || today,
-      signatureDate: data.signatureDate || today,
       companySignatureDate: today,
     };
+    if (data.signatureDate) {
+      contractValues.signatureDate = data.signatureDate;
+    }
     if (data.signatureName) {
       contractValues.signatureName = data.signatureName;
     }
