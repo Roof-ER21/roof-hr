@@ -1048,11 +1048,11 @@ export default function Contracts() {
                     />
                     <FormField
                       control={contractForm.control}
-                      name="templateId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Template</FormLabel>
-                          <Select 
+                name="templateId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Template</FormLabel>
+                    <Select 
                             onValueChange={(value) => {
                               if (value === 'custom') {
                                 field.onChange('');

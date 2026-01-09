@@ -479,6 +479,9 @@ export class ContractPdfService {
     }
 
     const outputPath = await this.savePdf(pdfDoc, outputFileName);
+    // Read back to ensure the saved PDF is valid
+    const savedBytes = await fs.readFile(outputPath);
+    await PDFDocument.load(savedBytes, { ignoreEncryption: true });
     return outputPath;
   }
 

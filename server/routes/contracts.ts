@@ -1228,6 +1228,9 @@ router.post('/api/public/contract/:token', async (req, res) => {
     if (!signature) {
       return res.status(400).json({ error: 'Signature is required' });
     }
+    if (!signatureAddress || !signatureAddress.trim()) {
+      return res.status(400).json({ error: 'Mailing address required' });
+    }
 
     const contract = await storage.getEmployeeContractByToken(token);
 
