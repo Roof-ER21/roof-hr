@@ -345,18 +345,18 @@ export class ContractPdfService {
 
       // Clear any pre-existing text under the signature/date lines
       signaturePage.drawRectangle({
-        x: signatureField.x,
-        y: signatureY - 6,
-        width: signatureField.width + 40,
-        height: 50,
+        x: signatureField.x - 4,
+        y: signatureY - 22,
+        width: signatureField.width + 80,
+        height: 70,
         color: rgb(1, 1, 1),
         borderColor: rgb(1, 1, 1),
       });
       datePage.drawRectangle({
-        x: dateField.x,
-        y: dateY - 6,
-        width: dateField.width + 60,
-        height: 30,
+        x: dateField.x - 4,
+        y: dateY - 10,
+        width: dateField.width + 120,
+        height: 40,
         color: rgb(1, 1, 1),
         borderColor: rgb(1, 1, 1),
       });
@@ -404,6 +404,17 @@ export class ContractPdfService {
         });
       }
 
+      // Print signer name under signature line
+      if (signerName) {
+        signaturePage.drawText(signerName, {
+          x: signatureField.x + 4,
+          y: signatureY - 18,
+          size: 11,
+          font,
+          color: rgb(0, 0, 0),
+        });
+      }
+
       datePage.drawText(formattedDate, {
         x: dateField.x + 4,
         y: dateY,
@@ -446,8 +457,18 @@ export class ContractPdfService {
     if (layoutKey === 'roof_docs_contractor' && signatureAddress) {
       const targetIndex = Math.min(7, pages.length - 1); // page 8 (0-based)
       const addrPage = pages[targetIndex];
-      const startY = addrPage.getHeight() - 340; // tuned to land in address block closer to company block
-      const x = 250;
+      const startY = addrPage.getHeight() - 420; // tuned to land directly on the right-hand address block
+      const x = 430;
+
+      // Clear the block area before drawing
+      addrPage.drawRectangle({
+        x: x - 10,
+        y: startY - 60,
+        width: 260,
+        height: 120,
+        color: rgb(1, 1, 1),
+        borderColor: rgb(1, 1, 1),
+      });
 
       const lines: string[] = [];
       if (signerName) lines.push(signerName);
@@ -462,7 +483,7 @@ export class ContractPdfService {
           font,
           color: rgb(0, 0, 0),
         });
-        y -= 14;
+        y -= 16;
       }
     }
 
