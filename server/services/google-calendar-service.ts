@@ -188,7 +188,12 @@ class GoogleCalendarService {
         resource: updates
       });
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      const status = error?.code || error?.response?.status;
+      if (status === 404) {
+        console.warn(`[Google Calendar] Event ${eventId} not found on calendar ${calendarId}, skipping update.`);
+        return null;
+      }
       console.error('[Google Calendar] Error updating event:', error);
       throw error;
     }

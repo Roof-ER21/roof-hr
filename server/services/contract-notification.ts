@@ -1,5 +1,6 @@
 import { storage } from '../storage';
 import { gmailService } from './gmail-service';
+import { EmailService } from '../email-service';
 import { CONTRACT_CORE_ALERT_RECIPIENTS, RETAIL_CONTRACT_ALERT_RECIPIENTS, HR_ROLES, TOP_LEADERSHIP_EMAILS } from '@shared/constants/roles';
 
 interface ContractSignedNotification {
@@ -19,6 +20,67 @@ const uniqueEmails = (emails: Array<string | undefined | null>) => {
     .filter((email) => email.length > 0);
   return Array.from(new Set(cleaned));
 };
+
+async function sendEmailWithFallback(
+  recipients: string[],
+  subject: string,
+  html: string,
+  senderEmail?: string
+) {
+  const targets = uniqueEmails(recipients);
+  if (targets.length === 0) return;
+
+  const remaining = new Set(targets);
+
+  // Try Gmail (service account) first
+  try {
+    await gmailService.initialize();
+
+    for (const email of targets) {
+      try {
+        await gmailService.sendEmail({
+          to: email,
+          subject,
+          html,
+          userEmail: senderEmail,
+        });
+        remaining.delete(email);
+      } catch (error) {
+        console.error(`[Contract Email] Gmail send failed for ${email}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('[Contract Email] Gmail initialization failed, falling back to EmailService:', error);
+  }
+
+  // Fallback to EmailService (SendGrid/SMTP/impersonation)
+  if (remaining.size > 0) {
+    const emailService = new EmailService();
+    try {
+      await emailService.initialize();
+      for (const email of Array.from(remaining)) {
+        try {
+          await emailService.sendEmail({
+            to: email,
+            subject,
+            html,
+            fromUserEmail: senderEmail,
+          });
+          remaining.delete(email);
+          console.log(`[Contract Email] Sent via EmailService fallback to ${email}`);
+        } catch (fallbackError) {
+          console.error(`[Contract Email] Fallback send failed for ${email}:`, fallbackError);
+        }
+      }
+    } catch (initError) {
+      console.error('[Contract Email] Failed to initialize EmailService fallback:', initError);
+    }
+  }
+
+  if (remaining.size > 0) {
+    console.error(`[Contract Email] Failed to send to ${remaining.size} recipient(s): ${Array.from(remaining).join(', ')}`);
+  }
+}
 
 async function getHrRecipients() {
   const allUsers = await storage.getAllUsers();
@@ -41,22 +103,7 @@ function getLeadershipRecipients(isRetail: boolean, senderEmail?: string) {
 
 async function sendEmailBatch(recipients: string[], subject: string, html: string, senderEmail?: string) {
   if (recipients.length === 0) return;
-  await gmailService.initialize();
-
-  await Promise.all(
-    recipients.map(async (email) => {
-      try {
-        await gmailService.sendEmail({
-          to: email,
-          subject,
-          html,
-          userEmail: senderEmail,
-        });
-      } catch (error) {
-        console.error(`[Contract Email] Failed to send to ${email}:`, error);
-      }
-    })
-  );
+  await sendEmailWithFallback(recipients, subject, html, senderEmail);
 }
 
 export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification, senderEmail?: string, isRetail = false) {
@@ -170,7 +217,6 @@ export async function notifyRecipientOfRescindedContract(
   reason?: string
 ) {
   try {
-    await gmailService.initialize();
     const subject = `Contract Rescinded: ${contract.title}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -182,12 +228,7 @@ export async function notifyRecipientOfRescindedContract(
       </div>
     `;
 
-    await gmailService.sendEmail({
-      to: contract.recipientEmail,
-      subject,
-      html: htmlContent,
-      userEmail: senderEmail
-    });
+    await sendEmailWithFallback([contract.recipientEmail], subject, htmlContent, senderEmail);
 
     return true;
   } catch (error) {
@@ -294,9 +335,6 @@ export async function notifyRecipientOfNewContract(
   accessToken?: string // Optional token for public access link (no login required)
 ) {
   try {
-    // Initialize Gmail service
-    await gmailService.initialize();
-
     const subject = `New Contract for Review: ${contractTitle}`;
     const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
     const baseUrl = appUrl.replace(/\/+$/, '');
@@ -357,20 +395,9 @@ export async function notifyRecipientOfNewContract(
         </p>
       </div>
     `;
-    
-    const result = await gmailService.sendEmail({
-      to: recipientEmail,
-      subject,
-      html: htmlContent,
-      userEmail: senderEmail // Send from manager's email via impersonation
-    });
 
-    if (result.success) {
-      console.log(`Contract notification sent to ${recipientEmail} via Gmail`);
-    }
-
-    return result.success;
-    
+    await sendEmailWithFallback([recipientEmail], subject, htmlContent, senderEmail);
+    return true;
   } catch (error) {
     console.error('Error sending contract notification:', error);
     return false;

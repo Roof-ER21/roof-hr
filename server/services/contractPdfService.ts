@@ -167,7 +167,8 @@ export class ContractPdfService {
   async loadTemplate(fileName: string): Promise<PDFDocument> {
     const filePath = path.join(this.templatesDir, fileName);
     const existingPdfBytes = await fs.readFile(filePath);
-    return await PDFDocument.load(existingPdfBytes);
+    // Some vendor PDFs are flagged as encrypted even without passwords; allow parsing them
+    return await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
   }
 
   // Save a PDF to file
