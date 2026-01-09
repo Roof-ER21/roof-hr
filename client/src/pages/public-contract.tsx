@@ -327,11 +327,15 @@ export default function PublicContractPage() {
             </CardHeader>
             <CardContent>
               <div className="border rounded-lg overflow-hidden bg-gray-100" style={{ height: '600px' }}>
-                <iframe
-                  src={`/api/public/contract/${token}/download#toolbar=1&navpanes=0`}
+                <object
+                  data={`/api/public/contract/${token}/download#toolbar=1&navpanes=0`}
+                  type="application/pdf"
                   className="w-full h-full"
-                  title="Contract PDF"
-                />
+                >
+                  <p className="p-4 text-sm text-gray-600">
+                    If the PDF does not display, <button type="button" className="underline text-blue-600" onClick={handleDownload}>click here to download</button>.
+                  </p>
+                </object>
               </div>
             </CardContent>
           </Card>

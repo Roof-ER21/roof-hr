@@ -1332,14 +1332,29 @@ router.get('/api/public/contract/:token/download', async (req, res) => {
     // Construct file path
     const filePath = path.join(process.cwd(), contract.fileUrl.replace(/^\//, ''));
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${contract.fileName}"`);
-    res.sendFile(filePath, (err) => {
-      if (err) {
-        console.error('Error sending contract PDF:', err);
-        res.status(500).json({ error: 'Failed to load contract PDF' });
+    const sendFile = (pathToSend: string) => {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${contract.fileName}"`);
+      res.sendFile(pathToSend, (err) => {
+        if (err) {
+          console.error('Error sending contract PDF:', err);
+          res.status(500).json({ error: 'Failed to load contract PDF' });
+        }
+      });
+    };
+
+    // If file is missing, try to regenerate from template dir
+    if (!fs.existsSync(filePath)) {
+      const templatePath = path.join(contractPdfService.getTemplatesDir(), contract.fileName);
+      if (fs.existsSync(templatePath)) {
+        console.warn(`[Contracts] Missing generated PDF ${filePath}, falling back to template ${templatePath}`);
+        return sendFile(templatePath);
       }
-    });
+      console.error(`[Contracts] PDF not found: ${filePath}`);
+      return res.status(404).json({ error: 'PDF file not found for this contract' });
+    }
+
+    sendFile(filePath);
   } catch (error: any) {
     console.error('Error downloading contract:', error);
     res.status(500).json({ error: 'Failed to download contract' });
