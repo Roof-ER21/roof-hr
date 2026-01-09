@@ -1332,10 +1332,12 @@ router.get('/api/public/contract/:token/download', async (req, res) => {
     // Construct file path
     const filePath = path.join(process.cwd(), contract.fileUrl.replace(/^\//, ''));
 
-    res.download(filePath, contract.fileName, (err) => {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${contract.fileName}"`);
+    res.sendFile(filePath, (err) => {
       if (err) {
-        console.error('Error downloading contract PDF:', err);
-        res.status(500).json({ error: 'Failed to download contract' });
+        console.error('Error sending contract PDF:', err);
+        res.status(500).json({ error: 'Failed to load contract PDF' });
       }
     });
   } catch (error: any) {

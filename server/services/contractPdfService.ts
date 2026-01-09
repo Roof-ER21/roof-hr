@@ -441,31 +441,22 @@ export class ContractPdfService {
     }
 
     // Add mailing address near the signature area if available
-    if (signatureAddress) {
-      const addrPage = pages[signatureField?.page ?? pages.length - 1];
-      const addrY = signatureField ? addrPage.getHeight() - (signatureField.bottom - 12) : 120;
-      addrPage.drawText(signatureAddress, {
-        x: signatureField ? signatureField.x : 50,
-        y: addrY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0),
-      });
-    }
+    // Removed inline address near signature to avoid clutter
 
     // Layout-specific: fill contractor mailing address block (page ~8) similar to company block
     if (layoutKey === 'roof_docs_contractor' && signatureAddress) {
       const targetIndex = Math.min(7, pages.length - 1); // page 8 (0-based)
       const addrPage = pages[targetIndex];
-      const startY = addrPage.getHeight() - 420; // tuned to land directly on the right-hand address block
-      const x = 430;
+      // Position aligned with the "Rep Name / Address" block on the right side
+      const startY = addrPage.getHeight() - 390;
+      const x = 500;
 
       // Clear the block area before drawing
       addrPage.drawRectangle({
         x: x - 10,
         y: startY - 60,
-        width: 260,
-        height: 120,
+        width: 300,
+        height: 140,
         color: rgb(1, 1, 1),
         borderColor: rgb(1, 1, 1),
       });

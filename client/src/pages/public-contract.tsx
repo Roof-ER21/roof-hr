@@ -204,6 +204,14 @@ export default function PublicContractPage() {
       });
       return;
     }
+    if (!signatureAddress.trim()) {
+      toast({
+        title: 'Address Required',
+        description: 'Please enter your mailing address as it should appear on the contract.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     submitMutation.mutate({
       signature,
@@ -379,7 +387,7 @@ export default function PublicContractPage() {
 
               {/* Address Input (Multi-line) */}
               <div className="space-y-2">
-                <Label htmlFor="address">Your Address (optional)</Label>
+                <Label htmlFor="address">Your Address (required)</Label>
                 <Textarea
                   id="address"
                   placeholder="123 Main Street&#10;City, State ZIP"
