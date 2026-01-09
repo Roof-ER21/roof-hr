@@ -52,11 +52,20 @@ export function AvailabilityManager({ userId }: AvailabilityManagerProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [pendingSlots, setPendingSlots] = useState<Partial<AvailabilitySlot>[]>([]);
+  const managerRoles = [
+    'SYSTEM_ADMIN',
+    'HR_ADMIN',
+    'GENERAL_MANAGER',
+    'TERRITORY_MANAGER',
+    'MANAGER',
+    'TRUE_ADMIN',
+    'ADMIN',
+  ];
 
   // Determine which user's availability we're managing
   const targetUserId = userId || user?.id;
   const isOwnAvailability = !userId || userId === user?.id;
-  const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isManager = user?.role ? managerRoles.includes(user.role) : false;
 
   // Fetch users for manager mode
   const { data: users } = useQuery<Array<{ id: string; firstName: string; lastName: string; role: string }>>({
@@ -219,7 +228,7 @@ export function AvailabilityManager({ userId }: AvailabilityManagerProps) {
                 <SelectValue placeholder="Select a team member" />
               </SelectTrigger>
               <SelectContent>
-                {users?.filter(u => ['ADMIN', 'MANAGER'].includes(u.role)).map(u => (
+                {users?.filter(u => managerRoles.includes(u.role)).map(u => (
                   <SelectItem key={u.id} value={u.id}>
                     {u.firstName} {u.lastName}
                     {u.id === user?.id && ' (You)'}
