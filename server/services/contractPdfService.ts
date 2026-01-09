@@ -340,21 +340,74 @@ export class ContractPdfService {
     if (signatureField && dateField) {
       const signaturePage = pages[signatureField.page] || lastPage;
       const datePage = pages[dateField.page] || lastPage;
-      const signatureY = signaturePage.getHeight() - signatureField.bottom + 2;
-      const dateY = datePage.getHeight() - dateField.bottom + 2;
+      const signatureY = signaturePage.getHeight() - signatureField.bottom + 6;
+      const dateY = datePage.getHeight() - dateField.bottom + 6;
 
-      signaturePage.drawText(signature, {
-        x: signatureField.x + 4,
-        y: signatureY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0),
+      // Clear any pre-existing text under the signature/date lines
+      signaturePage.drawRectangle({
+        x: signatureField.x,
+        y: signatureY - 6,
+        width: signatureField.width + 40,
+        height: 50,
+        color: rgb(1, 1, 1),
+        borderColor: rgb(1, 1, 1),
       });
+      datePage.drawRectangle({
+        x: dateField.x,
+        y: dateY - 6,
+        width: dateField.width + 60,
+        height: 30,
+        color: rgb(1, 1, 1),
+        borderColor: rgb(1, 1, 1),
+      });
+
+      const isDataUrl = signature.startsWith('data:image/');
+      if (isDataUrl) {
+        try {
+          const [, base64Part] = signature.split(',');
+          const buffer = Buffer.from(base64Part, 'base64');
+          const bytes = new Uint8Array(buffer);
+          const img = signature.includes('jpeg') || signature.includes('jpg')
+            ? await pdfDoc.embedJpg(bytes)
+            : await pdfDoc.embedPng(bytes);
+
+          const imgDims = img.scale(1);
+          const maxWidth = signatureField.width + 20;
+          const maxHeight = 60;
+          const scale = Math.min(maxWidth / imgDims.width, maxHeight / imgDims.height);
+          const sigWidth = imgDims.width * scale;
+          const sigHeight = imgDims.height * scale;
+
+          signaturePage.drawImage(img, {
+            x: signatureField.x + 4,
+            y: signatureY - sigHeight + 6,
+            width: sigWidth,
+            height: sigHeight,
+          });
+        } catch (error) {
+          console.error('[Contracts] Failed to embed signature image, falling back to text:', error);
+          signaturePage.drawText(signerName || 'Signature', {
+            x: signatureField.x + 4,
+            y: signatureY,
+            size: 12,
+            font,
+            color: rgb(0, 0, 0),
+          });
+        }
+      } else {
+        signaturePage.drawText(signature, {
+          x: signatureField.x + 4,
+          y: signatureY,
+          size: 12,
+          font,
+          color: rgb(0, 0, 0),
+        });
+      }
 
       datePage.drawText(formattedDate, {
         x: dateField.x + 4,
         y: dateY,
-        size: 10,
+        size: 11,
         font,
         color: rgb(0, 0, 0),
       });
@@ -379,7 +432,7 @@ export class ContractPdfService {
     // Add mailing address near the signature area if available
     if (signatureAddress) {
       const addrPage = pages[signatureField?.page ?? pages.length - 1];
-      const addrY = signatureField ? addrPage.getHeight() - (signatureField.bottom - 30) : 120;
+      const addrY = signatureField ? addrPage.getHeight() - (signatureField.bottom - 12) : 120;
       addrPage.drawText(signatureAddress, {
         x: signatureField ? signatureField.x : 50,
         y: addrY,
@@ -393,8 +446,8 @@ export class ContractPdfService {
     if (layoutKey === 'roof_docs_contractor' && signatureAddress) {
       const targetIndex = Math.min(7, pages.length - 1); // page 8 (0-based)
       const addrPage = pages[targetIndex];
-      const startY = addrPage.getHeight() - 370; // tuned to land in address block
-      const x = 240;
+      const startY = addrPage.getHeight() - 340; // tuned to land in address block closer to company block
+      const x = 250;
 
       const lines: string[] = [];
       if (signerName) lines.push(signerName);
@@ -409,7 +462,7 @@ export class ContractPdfService {
           font,
           color: rgb(0, 0, 0),
         });
-        y -= 16;
+        y -= 14;
       }
     }
 

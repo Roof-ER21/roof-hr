@@ -113,6 +113,9 @@ export default function Contracts() {
       employeeName: fullName,
       startDate: prev.startDate || defaultDate,
       effectiveDate: prev.effectiveDate || defaultDate,
+      signatureDate: prev.signatureDate || defaultDate,
+      contractorSignDate: prev.contractorSignDate || defaultDate,
+      companySignatureDate: prev.companySignatureDate || defaultDate,
       ...prev,
     }));
 
@@ -915,7 +918,7 @@ export default function Contracts() {
                   New Contract
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[700px]">
+              <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Generate Contract from Template</DialogTitle>
                   <DialogDescription>
