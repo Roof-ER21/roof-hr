@@ -493,6 +493,16 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       return;
     }
 
+    // Require location for in-person interviews
+    if (interviewType === 'IN_PERSON' && !location.trim()) {
+      toast({
+        title: 'Location Required',
+        description: 'Please select or enter a location before scheduling an in-person interview.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
 
