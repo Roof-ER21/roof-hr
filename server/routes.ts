@@ -3121,7 +3121,8 @@ router.patch('/api/pto/:id/final-review', requireAuth, async (req: any, res) => 
       return res.status(400).json({ error: 'Only approved requests can be finalized' });
     }
 
-    const cleanedNotes = (currentRequest.reviewNotes || '').replace(/\(Pending final admin review.*?\)/i, '').trim() || null;
+    let cleanedNotes = currentRequest.reviewNotes || '';
+    cleanedNotes = cleanedNotes.replace(/Pending final admin review \(within 48 hours\)\.?/gi, '').trim() || null;
     const updated = await storage.updatePtoRequest(req.params.id, {
       reviewNotes: cleanedNotes,
       reviewedBy: user.id,
