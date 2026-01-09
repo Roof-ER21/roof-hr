@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { insertInterviewAvailabilitySchema, insertInterviewPanelMemberSchema } from '@shared/schema';
-import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
+import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer, ADMIN_ROLES, MANAGER_ROLES } from '@shared/constants/roles';
 import { storage } from '../storage';
 import { requireAuth, checkRole } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,7 +21,7 @@ router.get('/interview-availability/:interviewerId', requireAuth, async (req, re
 });
 
 // Create interview availability slot
-router.post('/interview-availability', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.post('/interview-availability', requireAuth, checkRole([...ADMIN_ROLES, ...MANAGER_ROLES]), async (req, res) => {
   try {
     const data = insertInterviewAvailabilitySchema.parse(req.body);
     const availability = await storage.createInterviewAvailability(data);
@@ -36,7 +36,7 @@ router.post('/interview-availability', requireAuth, checkRole(['ADMIN', 'MANAGER
 });
 
 // Update interview availability
-router.patch('/interview-availability/:id', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.patch('/interview-availability/:id', requireAuth, checkRole([...ADMIN_ROLES, ...MANAGER_ROLES]), async (req, res) => {
   try {
     const { id } = req.params;
     const availability = await storage.updateInterviewAvailability(id, req.body);
@@ -48,7 +48,7 @@ router.patch('/interview-availability/:id', requireAuth, checkRole(['ADMIN', 'MA
 });
 
 // Delete interview availability
-router.delete('/interview-availability/:id', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.delete('/interview-availability/:id', requireAuth, checkRole([...ADMIN_ROLES, ...MANAGER_ROLES]), async (req, res) => {
   try {
     const { id } = req.params;
     await storage.deleteInterviewAvailability(id);
@@ -118,7 +118,7 @@ router.post('/interview-panel-members', requireAuth, async (req: any, res) => {
 });
 
 // Update panel member
-router.patch('/interview-panel-members/:id', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.patch('/interview-panel-members/:id', requireAuth, checkRole([...ADMIN_ROLES, ...MANAGER_ROLES]), async (req, res) => {
   try {
     const { id } = req.params;
     const member = await storage.updateInterviewPanelMember(id, req.body);
@@ -130,7 +130,7 @@ router.patch('/interview-panel-members/:id', requireAuth, checkRole(['ADMIN', 'M
 });
 
 // Remove panel member
-router.delete('/interview-panel-members/:id', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.delete('/interview-panel-members/:id', requireAuth, checkRole([...ADMIN_ROLES, ...MANAGER_ROLES]), async (req, res) => {
   try {
     const { id } = req.params;
     await storage.deleteInterviewPanelMember(id);
@@ -142,7 +142,7 @@ router.delete('/interview-panel-members/:id', requireAuth, checkRole(['ADMIN', '
 });
 
 // Generate meeting link for interview
-router.post('/interviews/generate-meeting-link', requireAuth, checkRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.post('/interviews/generate-meeting-link', requireAuth, checkRole([...ADMIN_ROLES, ...MANAGER_ROLES]), async (req, res) => {
   try {
     const { type, candidateName, interviewDate, durationMinutes } = req.body;
 

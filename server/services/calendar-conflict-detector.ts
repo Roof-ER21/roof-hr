@@ -226,6 +226,32 @@ export class CalendarConflictDetector {
       return conflicts;
     }
 
+    // Fetch scheduled interviews for this user to avoid ghost conflicts after deletes
+    let scheduledInterviewWindows: Array<{ start: Date; end: Date }> = [];
+    try {
+      const user = await this.storage.getUserByEmail(email);
+      const userId = Array.isArray(user) ? user?.[0]?.id : (user as any)?.id;
+      if (userId) {
+        const [primaryInterviews, panelInterviews] = await Promise.all([
+          this.storage.getInterviewsByInterviewer(userId),
+          this.storage.getInterviewsByPanelMember(userId)
+        ]);
+        const uniqueInterviews = new Map<string, any>();
+        for (const interview of [...primaryInterviews, ...panelInterviews]) {
+          if (interview.status === 'SCHEDULED') {
+            uniqueInterviews.set(interview.id, interview);
+          }
+        }
+        scheduledInterviewWindows = Array.from(uniqueInterviews.values()).map((int) => {
+          const s = new Date(int.scheduledDate);
+          const e = addMinutes(s, int.duration || 60);
+          return { start: s, end: e };
+        });
+      }
+    } catch (lookupErr) {
+      console.warn('[CalendarConflictDetector] Skipping interview cross-check for', email, lookupErr);
+    }
+
     // Only check @theroofdocs.com emails (domain-wide delegation scope)
     if (!email.endsWith('@theroofdocs.com')) {
       console.log(`[CalendarConflictDetector] ⏭️ Skipping Google Calendar check for ${email} - not @theroofdocs.com domain`);
@@ -294,6 +320,18 @@ export class CalendarConflictDetector {
           parseISO(event.end?.date || '');
 
         if (this.datesOverlap(startTime, endTime, eventStart, eventEnd)) {
+          // Skip ghost interview events that no longer exist in our DB
+          const looksLikeInterview = (event.summary || '').toLowerCase().includes('interview');
+          if (looksLikeInterview && scheduledInterviewWindows.length > 0) {
+            const hasMatchingDbInterview = scheduledInterviewWindows.some((win) =>
+              this.datesOverlap(win.start, win.end, eventStart, eventEnd)
+            );
+            if (!hasMatchingDbInterview) {
+              console.log(`[CalendarConflictDetector] ⏭️ Skipping ghost interview event "${event.summary}"`);
+              continue;
+            }
+          }
+
           const severity = userAttendee?.responseStatus === 'tentative' ? 'soft' : 'hard';
           console.log(`[CalendarConflictDetector] ❌ CONFLICT DETECTED: "${event.summary}" (${severity})`);
 
