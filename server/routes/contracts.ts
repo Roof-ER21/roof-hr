@@ -684,6 +684,11 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       fieldValues: mergedFieldValues
     });
 
+    // Allow explicit recipient email override
+    if (req.body.recipientEmailOverride) {
+      parsedData = { ...parsedData, recipientEmail: req.body.recipientEmailOverride };
+    }
+
     // If using a template, fetch it and populate the content
     if (parsedData.templateId) {
       const template = await storage.getContractTemplateById(parsedData.templateId);

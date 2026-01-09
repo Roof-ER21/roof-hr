@@ -36,6 +36,7 @@ const contractFormSchema = z.object({
   recipientType: z.enum(['EMPLOYEE', 'CANDIDATE']).default('EMPLOYEE'),
   employeeId: z.string().optional(),
   candidateId: z.string().optional(),
+  recipientEmailOverride: z.string().email().optional(),
   templateId: z.string().min(1, 'Template is required'),
   title: z.string().min(1, 'Contract title is required'),
   content: z.string().min(1, 'Contract content is required'),
@@ -120,6 +121,7 @@ export default function Contracts() {
     }));
 
     if (email) {
+      contractForm.setValue('recipientEmailOverride', email);
       contractForm.setValue('content', contractForm.getValues('content').replace(/\{\{email\}\}/g, email));
     }
     if (!contractForm.getValues('title')) {
@@ -176,6 +178,7 @@ export default function Contracts() {
       recipientType: 'EMPLOYEE',
       employeeId: '',
       candidateId: '',
+      recipientEmailOverride: '',
       templateId: '',
       title: '',
       content: ''
@@ -1024,6 +1027,25 @@ export default function Contracts() {
                         )}
                       />
                     )}
+                    <FormField
+                      control={contractForm.control}
+                      name="recipientEmailOverride"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Send To (override email, optional)</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Enter alternate recipient email (optional)"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Defaults to the employee/candidate email. Use this to send to a different address.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                     <FormField
                       control={contractForm.control}
                       name="templateId"
