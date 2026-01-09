@@ -647,8 +647,11 @@ function PTO() {
         method: 'PATCH'
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['/api/pto'], (old: any) => {
+        if (!old) return old;
+        return old.map((req: any) => req.id === updated.id ? updated : req);
+      });
       toast({
         title: 'Final review completed',
         description: 'PTO request has been fully approved.'
