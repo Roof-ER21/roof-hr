@@ -14,6 +14,7 @@ import {
 } from '../services/contract-notification';
 import { contractPdfService } from '../services/contractPdfService';
 import { requireAuth, requireManager } from '../middleware/auth';
+import { lightpdfService } from '../services/lightpdf-service';
 
 const router = express.Router();
 
@@ -1366,6 +1367,31 @@ router.get('/api/public/contract/:token/download', async (req, res) => {
   } catch (error: any) {
     console.error('Error downloading contract:', error);
     res.status(500).json({ error: 'Failed to download contract' });
+  }
+});
+
+// Get LightPDF view link for public contract (if configured)
+router.get('/api/public/contract/:token/lightpdf', async (req, res) => {
+  try {
+    if (!lightpdfService.isEnabled()) {
+      return res.status(503).json({ error: 'LightPDF not configured' });
+    }
+    const { token } = req.params;
+    const contract = await storage.getEmployeeContractByToken(token);
+    if (!contract || !contract.fileUrl || !contract.fileName) {
+      return res.status(404).json({ error: 'Contract not found or missing file' });
+    }
+    const appUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'https://roofhr.up.railway.app';
+    const baseUrl = appUrl.replace(/\/+$/, '');
+    const fileUrl = `${baseUrl}${contract.fileUrl.startsWith('/') ? '' : '/'}${contract.fileUrl}`;
+    const viewUrl = await lightpdfService.getViewLink(fileUrl);
+    if (!viewUrl) {
+      return res.status(500).json({ error: 'Failed to generate LightPDF link' });
+    }
+    res.json({ url: viewUrl });
+  } catch (error: any) {
+    console.error('Error generating LightPDF link:', error);
+    res.status(500).json({ error: 'Failed to generate LightPDF link' });
   }
 });
 

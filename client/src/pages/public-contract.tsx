@@ -138,6 +138,7 @@ export default function PublicContractPage() {
   const [signatureAddress, setSignatureAddress] = useState('');
   const [hasReviewed, setHasReviewed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [lightPdfUrl, setLightPdfUrl] = useState<string | null>(null);
 
   // Fetch contract data
   const { data: contract, isLoading, error } = useQuery<ContractData>({
@@ -224,6 +225,21 @@ export default function PublicContractPage() {
       window.open(`/api/public/contract/${token}/download`, '_blank');
     }
   };
+
+  useEffect(() => {
+    const fetchLightPdf = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`/api/public/contract/${token}/lightpdf`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.url) setLightPdfUrl(data.url);
+      } catch (err) {
+        // ignore fallback to local PDF
+      }
+    };
+    fetchLightPdf();
+  }, [token]);
 
   // Loading state
   if (isLoading) {
@@ -327,15 +343,23 @@ export default function PublicContractPage() {
             </CardHeader>
             <CardContent>
               <div className="border rounded-lg overflow-hidden bg-gray-100" style={{ height: '70vh' }}>
-                <object
-                  data={`/api/public/contract/${token}/download#toolbar=1&navpanes=0`}
-                  type="application/pdf"
-                  className="w-full h-full"
-                >
-                  <p className="p-4 text-sm text-gray-600">
-                    If the PDF does not display, <button type="button" className="underline text-blue-600" onClick={handleDownload}>click here to download</button>.
-                  </p>
-                </object>
+                {lightPdfUrl ? (
+                  <iframe
+                    src={lightPdfUrl}
+                    className="w-full h-full"
+                    title="Contract PDF (LightPDF)"
+                  />
+                ) : (
+                  <object
+                    data={`/api/public/contract/${token}/download#toolbar=1&navpanes=0`}
+                    type="application/pdf"
+                    className="w-full h-full"
+                  >
+                    <p className="p-4 text-sm text-gray-600">
+                      If the PDF does not display, <button type="button" className="underline text-blue-600" onClick={handleDownload}>click here to download</button>.
+                    </p>
+                  </object>
+                )}
               </div>
             </CardContent>
           </Card>
