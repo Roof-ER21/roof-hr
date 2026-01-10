@@ -285,7 +285,7 @@ export default function PublicContractPage() {
   // Contract ready for signing
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto space-y-4">
         {/* Header */}
         <Card className="mb-6">
           <CardHeader>
@@ -300,7 +300,7 @@ export default function PublicContractPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-500">Recipient:</span>
                 <span className="ml-2 font-medium">{contract?.recipientName}</span>
@@ -326,7 +326,7 @@ export default function PublicContractPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-lg overflow-hidden bg-gray-100" style={{ height: '600px' }}>
+              <div className="border rounded-lg overflow-hidden bg-gray-100" style={{ height: '70vh' }}>
                 <object
                   data={`/api/public/contract/${token}/download#toolbar=1&navpanes=0`}
                   type="application/pdf"

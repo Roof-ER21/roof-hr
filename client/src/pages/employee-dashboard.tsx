@@ -631,14 +631,14 @@ function EmployeeDashboard() {
         {/* Center Column - Activity & PTO */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs defaultValue="calendar" className="w-full">
-            <TabsList className={`grid w-full ${tabsGridClass}`}>
-              <TabsTrigger value="calendar">My Calendar</TabsTrigger>
-              {userGetsPto && <TabsTrigger value="pto">My PTO</TabsTrigger>}
-              <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
-              <TabsTrigger value="pending">Pending Actions</TabsTrigger>
-              <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-              {canConductInterviews && <TabsTrigger value="availability">My Availability</TabsTrigger>}
-              {showOrgChart && <TabsTrigger value="orgchart">Org Chart</TabsTrigger>}
+            <TabsList className={`grid w-full ${tabsGridClass} overflow-x-auto`}>
+              <TabsTrigger className="min-w-[110px]" value="calendar">My Calendar</TabsTrigger>
+              {userGetsPto && <TabsTrigger className="min-w-[90px]" value="pto">My PTO</TabsTrigger>}
+              <TabsTrigger className="min-w-[110px]" value="onboarding">Onboarding</TabsTrigger>
+              <TabsTrigger className="min-w-[140px]" value="pending">Pending Actions</TabsTrigger>
+              <TabsTrigger className="min-w-[140px]" value="activity">Recent Activity</TabsTrigger>
+              {canConductInterviews && <TabsTrigger className="min-w-[140px]" value="availability">My Availability</TabsTrigger>}
+              {showOrgChart && <TabsTrigger className="min-w-[100px]" value="orgchart">Org Chart</TabsTrigger>}
             </TabsList>
 
             {/* Calendar Tab */}
@@ -714,7 +714,7 @@ function EmployeeDashboard() {
                   {/* Calendar Grid */}
                   <div className="border rounded-lg overflow-hidden dark:border-gray-700">
                     {/* Day Headers */}
-                    <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+            <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700 text-[10px] sm:text-xs">
                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
                         <div key={day} className="p-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                           {day}
