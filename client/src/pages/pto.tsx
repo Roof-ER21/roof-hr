@@ -24,7 +24,6 @@ import { DEPARTMENTS } from '@/../../shared/constants/departments';
 import { employeeGetsPto, ADMIN_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
 import { PTO_POLICY } from '@shared/constants/pto-policy';
 import { apiRequest } from '@/lib/queryClient';
-import { apiRequest } from '@/lib/queryClient';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -115,7 +114,7 @@ function PTO() {
   // Check if user is a manager/admin (to show full list vs personal list)
   const isManager = user?.role && ['ADMIN', 'SYSTEM_ADMIN', 'SUPER_ADMIN', 'REGIONAL_MANAGER', 'MANAGER'].includes(user.role);
   const tabsGridClass = isAdmin
-    ? (showAnalytics ? 'grid-cols-5' : 'grid-cols-4')
+    ? (showAnalytics ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4')
     : (showAnalytics ? 'grid-cols-2' : 'grid-cols-1');
 
   const { data: ptoRequests, isLoading } = useQuery({
@@ -1351,20 +1350,20 @@ function PTO() {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList className={`grid w-full ${tabsGridClass}`}>
-          <TabsTrigger value="requests">PTO Requests</TabsTrigger>
-          {showAnalytics && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
+        <TabsList className={`grid w-full ${tabsGridClass} overflow-x-auto`}>
+          <TabsTrigger className="min-w-[110px]" value="requests">PTO Requests</TabsTrigger>
+          {showAnalytics && <TabsTrigger className="min-w-[100px]" value="analytics">Analytics</TabsTrigger>}
           {isAdmin && (
             <>
-              <TabsTrigger value="company" disabled={!canEditPolicies}>
+              <TabsTrigger className="min-w-[130px]" value="company" disabled={!canEditPolicies}>
                 <Building className="w-4 h-4 mr-2" />
                 Company Policy
               </TabsTrigger>
-              <TabsTrigger value="department" disabled={!canEditPolicies}>
+              <TabsTrigger className="min-w-[150px]" value="department" disabled={!canEditPolicies}>
                 <Users className="w-4 h-4 mr-2" />
                 Department Policies
               </TabsTrigger>
-              <TabsTrigger value="individual" disabled={!canEditPolicies}>
+              <TabsTrigger className="min-w-[140px]" value="individual" disabled={!canEditPolicies}>
                 <User className="w-4 h-4 mr-2" />
                 Individual Policies
               </TabsTrigger>
