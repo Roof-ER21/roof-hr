@@ -161,6 +161,8 @@ export const ptoRequests = pgTable('pto_requests', {
   overlappingEmployees: text('overlapping_employees').array(), // NEW - track who else has PTO
   googleEventId: text('google_event_id'), // Google Calendar event ID for employee's calendar
   hrCalendarEventId: text('hr_calendar_event_id'), // Google Calendar event ID for HR shared calendar
+  isExempt: boolean('is_exempt').notNull().default(false), // Admin-only: exempt PTO doesn't count against balance
+  createdByAdmin: text('created_by_admin'), // Track which admin created exempt PTO
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -83,6 +83,7 @@ function PTO() {
   const [adminPtoDialogOpen, setAdminPtoDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [adminPtoAutoApprove, setAdminPtoAutoApprove] = useState(true);
+  const [adminPtoExempt, setAdminPtoExempt] = useState(false); // Exempt PTO doesn't count against balance
   const [adminEmployeeSearch, setAdminEmployeeSearch] = useState('');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<any | null>(null);
@@ -293,6 +294,7 @@ function PTO() {
       setAdminPtoDialogOpen(false);
       adminForm.reset();
       setAdminPtoAutoApprove(true);
+      setAdminPtoExempt(false);
       toast({
         title: 'Success',
         description: data.message || 'PTO created successfully'
@@ -308,7 +310,7 @@ function PTO() {
   });
 
   const onAdminSubmit = (data: AdminPTOFormData) => {
-    adminCreatePTOMutation.mutate({ ...data, autoApprove: adminPtoAutoApprove });
+    adminCreatePTOMutation.mutate({ ...data, autoApprove: adminPtoAutoApprove, isExempt: adminPtoExempt });
   };
 
   // Helper to parse YYYY-MM-DD as local date (not UTC)
@@ -1726,6 +1728,18 @@ function PTO() {
                     />
                     <Label htmlFor="auto-approve" className="cursor-pointer">
                       Auto-approve (creates calendar events immediately)
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="exempt-pto"
+                      checked={adminPtoExempt}
+                      onCheckedChange={setAdminPtoExempt}
+                    />
+                    <Label htmlFor="exempt-pto" className="cursor-pointer">
+                      <span className="font-medium">Exempt PTO</span>
+                      <span className="text-xs text-muted-foreground ml-1">(doesn't count against balance)</span>
                     </Label>
                   </div>
 

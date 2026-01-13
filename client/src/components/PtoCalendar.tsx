@@ -3,9 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Star } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Star, Shield } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isWithinInterval } from 'date-fns';
 import { ALL_HOLIDAYS } from '@shared/constants/holidays';
+import { useAuth } from '@/lib/auth';
+import { PTO_APPROVER_EMAILS } from '@shared/constants/roles';
 
 // Parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one errors
 const parseLocalDate = (dateStr: string): Date => {
@@ -13,18 +17,31 @@ const parseLocalDate = (dateStr: string): Date => {
   return new Date(year, month - 1, day);
 };
 
-// Calendar PTO data - minimal info for privacy
+// Calendar PTO data - includes isExempt for everyone, details for approvers only
 interface CalendarPtoEntry {
   id: string;
   employeeId: string;
   employeeName: string;
   startDate: string;
   endDate: string;
-  // NOTE: type, reason, and department are NOT included for privacy
+  isExempt: boolean;
+  // Approver-only fields (only populated for PTO_APPROVER_EMAILS)
+  type?: 'VACATION' | 'SICK' | 'PERSONAL';
+  reason?: string;
+  days?: number;
+  department?: string;
+  createdByAdmin?: string;
 }
 
 export function PtoCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedPto, setSelectedPto] = useState<CalendarPtoEntry | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const { user } = useAuth();
+
+  // Check if current user is one of the 4 PTO approvers
+  const isApprover = user?.email ? PTO_APPROVER_EMAILS.includes(user.email.toLowerCase()) : false;
+
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -80,6 +97,24 @@ export function PtoCalendar() {
     setCurrentDate(new Date());
   };
 
+  // Handle PTO click - only opens details for approvers
+  const handlePtoClick = (pto: CalendarPtoEntry) => {
+    if (isApprover) {
+      setSelectedPto(pto);
+      setDetailsDialogOpen(true);
+    }
+  };
+
+  // Get type badge color
+  const getTypeBadgeColor = (type?: string) => {
+    switch (type) {
+      case 'VACATION': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+      case 'SICK': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      case 'PERSONAL': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+    }
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -93,179 +128,312 @@ export function PtoCalendar() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <CalendarIcon className="h-5 w-5" />
-            PTO Calendar
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={previousMonth}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goToToday}
-            >
-              Today
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={nextMonth}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <p className="text-lg font-medium mt-2">
-          {format(currentDate, 'MMMM yyyy')}
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-7 gap-2">
-          {/* Day headers */}
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="text-center text-sm font-medium text-gray-600 dark:text-gray-300 py-2">
-              {day}
-            </div>
-          ))}
-          
-          {/* Empty cells for days before the first of the month */}
-          {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-            <div
-              key={`empty-${index}`}
-              className="min-h-[100px] p-2 border rounded-lg bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700"
-            />
-          ))}
-
-          {/* Calendar days */}
-          {days.map((day, index) => {
-            const dayPtos = getPtosForDay(day);
-            const isCurrentMonth = isSameMonth(day, currentDate);
-            const isTodayDate = isToday(day);
-            const dateStr = format(day, 'yyyy-MM-dd');
-            const holidayName = holidayNameMap.get(dateStr) || null;
-            const isHolidayDay = !!holidayName;
-
-            return (
-              <div
-                key={`day-${index}`}
-                className={`
-                  min-h-[100px] p-2 border rounded-lg transition-colors
-                  ${!isCurrentMonth ? 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500' : 'bg-white dark:bg-gray-800'}
-                  ${isTodayDate ? 'border-blue-500 border-2' : 'border-gray-200 dark:border-gray-600'}
-                  ${isHolidayDay ? 'bg-green-50 dark:bg-green-900/30' : ''}
-                  ${dayPtos.length > 0 ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ''}
-                `}
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              PTO Calendar
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={previousMonth}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    {format(day, 'd')}
-                  </span>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToToday}
+              >
+                Today
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={nextMonth}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <p className="text-lg font-medium mt-2">
+            {format(currentDate, 'MMMM yyyy')}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-7 gap-2">
+            {/* Day headers */}
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <div key={day} className="text-center text-sm font-medium text-gray-600 dark:text-gray-300 py-2">
+                {day}
+              </div>
+            ))}
+
+            {/* Empty cells for days before the first of the month */}
+            {Array.from({ length: monthStart.getDay() }).map((_, index) => (
+              <div
+                key={`empty-${index}`}
+                className="min-h-[100px] p-2 border rounded-lg bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700"
+              />
+            ))}
+
+            {/* Calendar days */}
+            {days.map((day, index) => {
+              const dayPtos = getPtosForDay(day);
+              const isCurrentMonth = isSameMonth(day, currentDate);
+              const isTodayDate = isToday(day);
+              const dateStr = format(day, 'yyyy-MM-dd');
+              const holidayName = holidayNameMap.get(dateStr) || null;
+              const isHolidayDay = !!holidayName;
+
+              return (
+                <div
+                  key={`day-${index}`}
+                  className={`
+                    min-h-[100px] p-2 border rounded-lg transition-colors
+                    ${!isCurrentMonth ? 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500' : 'bg-white dark:bg-gray-800'}
+                    ${isTodayDate ? 'border-blue-500 border-2' : 'border-gray-200 dark:border-gray-600'}
+                    ${isHolidayDay ? 'bg-green-50 dark:bg-green-900/30' : ''}
+                    ${dayPtos.length > 0 ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ''}
+                  `}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      {format(day, 'd')}
+                    </span>
+                    {isHolidayDay && (
+                      <Star className="h-3 w-3 text-green-600 dark:text-green-400" />
+                    )}
+                  </div>
+
+                  {/* Holiday indicator */}
                   {isHolidayDay && (
-                    <Star className="h-3 w-3 text-green-600 dark:text-green-400" />
+                    <div className="text-[10px] text-green-700 dark:text-green-300 font-medium mb-1 truncate" title={holidayName}>
+                      {holidayName}
+                    </div>
+                  )}
+
+                  {dayPtos.length > 0 && (
+                    <ScrollArea className={isHolidayDay ? "h-[50px]" : "h-[70px]"}>
+                      <div className="space-y-1">
+                        {dayPtos.slice(0, 3).map((pto, ptoIndex) => {
+                          // Extract first name and last initial from employeeName
+                          const nameParts = pto.employeeName.split(' ');
+                          const displayName = nameParts.length > 1
+                            ? `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}.`
+                            : pto.employeeName;
+
+                          // Different colors: purple for exempt, blue for regular
+                          const bgClass = pto.isExempt
+                            ? 'bg-purple-50 dark:bg-purple-900/50 border-purple-200 dark:border-purple-700 text-purple-800 dark:text-purple-200'
+                            : 'bg-blue-50 dark:bg-blue-900/50 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200';
+
+                          return (
+                            <div
+                              key={`${pto.id}-${ptoIndex}`}
+                              className={`text-xs p-1 rounded border ${bgClass} ${isApprover ? 'cursor-pointer hover:opacity-80' : ''}`}
+                              title={isApprover ? `Click for details - ${pto.employeeName}` : pto.employeeName}
+                              onClick={() => handlePtoClick(pto)}
+                            >
+                              <div className="flex items-center gap-1">
+                                {pto.isExempt ? (
+                                  <Shield className="h-3 w-3" />
+                                ) : (
+                                  <User className="h-3 w-3" />
+                                )}
+                                <span className="truncate">
+                                  {displayName}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {dayPtos.length > 3 && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                            +{dayPtos.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
                   )}
                 </div>
+              );
+            })}
+          </div>
 
-                {/* Holiday indicator */}
-                {isHolidayDay && (
-                  <div className="text-[10px] text-green-700 dark:text-green-300 font-medium mb-1 truncate" title={holidayName}>
-                    {holidayName}
+          {/* Legend */}
+          <div className="mt-4 flex flex-wrap gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700"></div>
+              <span className="text-gray-600 dark:text-gray-400">Regular PTO</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-purple-50 dark:bg-purple-900/50 border border-purple-200 dark:border-purple-700"></div>
+              <span className="text-gray-600 dark:text-gray-400">Exempt PTO (doesn't count against balance)</span>
+            </div>
+          </div>
+
+          {/* Company Holidays Legend */}
+          <div className="mt-6 pt-4 border-t dark:border-gray-700">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2 text-gray-900 dark:text-white">
+              <Star className="h-4 w-4 text-green-600" />
+              Company Holidays ({currentDate.getFullYear()})
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-6">
+              {holidaysForYear.map((holiday) => (
+                <div
+                  key={holiday.date}
+                  className="text-xs p-2 rounded bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700"
+                >
+                  <div className="font-medium text-green-800 dark:text-green-200">{holiday.name}</div>
+                  <div className="text-green-600 dark:text-green-400">
+                    {format(parseLocalDate(holiday.date), 'MMM d, yyyy')}
                   </div>
-                )}
+                </div>
+              ))}
+            </div>
+          </div>
 
-                {dayPtos.length > 0 && (
-                  <ScrollArea className={isHolidayDay ? "h-[50px]" : "h-[70px]"}>
-                    <div className="space-y-1">
-                      {dayPtos.slice(0, 3).map((pto, ptoIndex) => {
-                        // Extract first name and last initial from employeeName
-                        const nameParts = pto.employeeName.split(' ');
-                        const displayName = nameParts.length > 1
-                          ? `${nameParts[0]} ${nameParts[nameParts.length - 1].charAt(0)}.`
-                          : pto.employeeName;
-                        return (
-                          <div
-                            key={`${pto.id}-${ptoIndex}`}
-                            className="text-xs p-1 rounded bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200"
-                            title={pto.employeeName}
-                          >
-                            <div className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              <span className="truncate">
-                                {displayName}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {dayPtos.length > 3 && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                          +{dayPtos.length - 3} more
-                        </div>
+          {/* Time Off Summary - Privacy: only shows name and dates, no PTO type */}
+          <div className="pt-4 border-t dark:border-gray-700">
+            <h3 className="text-sm font-medium mb-3 text-gray-900 dark:text-white">
+              Upcoming Time Off
+              {isApprover && <span className="text-xs text-gray-500 ml-2">(click for details)</span>}
+            </h3>
+            <div className="space-y-2">
+              {calendarPtos.map(pto => (
+                <div
+                  key={pto.id}
+                  className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 ${isApprover ? 'cursor-pointer' : ''}`}
+                  onClick={() => handlePtoClick(pto)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      pto.isExempt
+                        ? 'bg-purple-100 dark:bg-purple-900/50'
+                        : 'bg-blue-100 dark:bg-blue-900/50'
+                    }`}>
+                      {pto.isExempt ? (
+                        <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      ) : (
+                        <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       )}
                     </div>
-                  </ScrollArea>
+                    <div>
+                      <p className="font-medium text-sm text-gray-900 dark:text-white">
+                        {pto.employeeName}
+                      </p>
+                      {pto.isExempt && (
+                        <span className="text-xs text-purple-600 dark:text-purple-400">Exempt</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {format(parseLocalDate(pto.startDate), 'MMM d')} - {format(parseLocalDate(pto.endDate), 'MMM d')}
+                  </span>
+                </div>
+              ))}
+              {calendarPtos.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                  No approved time off scheduled
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* PTO Details Dialog - Only for Approvers */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedPto?.isExempt ? (
+                <Shield className="h-5 w-5 text-purple-600" />
+              ) : (
+                <User className="h-5 w-5 text-blue-600" />
+              )}
+              PTO Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedPto && (
+            <div className="space-y-4">
+              {/* Employee Info */}
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Employee</p>
+                <p className="font-medium text-lg">{selectedPto.employeeName}</p>
+                {selectedPto.department && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{selectedPto.department}</p>
                 )}
               </div>
-            );
-          })}
-        </div>
 
-        {/* Company Holidays Legend */}
-        <div className="mt-6 pt-4 border-t dark:border-gray-700">
-          <h3 className="text-sm font-medium mb-3 flex items-center gap-2 text-gray-900 dark:text-white">
-            <Star className="h-4 w-4 text-green-600" />
-            Company Holidays ({currentDate.getFullYear()})
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-6">
-            {holidaysForYear.map((holiday) => (
-              <div
-                key={holiday.date}
-                className="text-xs p-2 rounded bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700"
-              >
-                <div className="font-medium text-green-800 dark:text-green-200">{holiday.name}</div>
-                <div className="text-green-600 dark:text-green-400">
-                  {format(parseLocalDate(holiday.date), 'MMM d, yyyy')}
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Start Date</p>
+                  <p className="font-medium">{format(parseLocalDate(selectedPto.startDate), 'MMM d, yyyy')}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">End Date</p>
+                  <p className="font-medium">{format(parseLocalDate(selectedPto.endDate), 'MMM d, yyyy')}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Time Off Summary - Privacy: only shows name and dates, no PTO type */}
-        <div className="pt-4 border-t dark:border-gray-700">
-          <h3 className="text-sm font-medium mb-3 text-gray-900 dark:text-white">Upcoming Time Off</h3>
-          <div className="space-y-2">
-            {calendarPtos.map(pto => (
-              <div key={pto.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              {/* Type and Days */}
+              <div className="grid grid-cols-2 gap-4">
+                {selectedPto.type && (
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Type</p>
+                    <Badge className={getTypeBadgeColor(selectedPto.type)}>
+                      {selectedPto.type}
+                    </Badge>
                   </div>
-                  <p className="font-medium text-sm text-gray-900 dark:text-white">
-                    {pto.employeeName}
+                )}
+                {selectedPto.days !== undefined && (
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Days</p>
+                    <p className="font-medium">{selectedPto.days} day(s)</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Exempt Status */}
+              {selectedPto.isExempt && (
+                <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="font-medium text-purple-800 dark:text-purple-200">Exempt PTO</span>
+                  </div>
+                  <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">
+                    This PTO does not count against the employee's balance.
                   </p>
                 </div>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {format(parseLocalDate(pto.startDate), 'MMM d')} - {format(parseLocalDate(pto.endDate), 'MMM d')}
-                </span>
+              )}
+
+              {/* Reason */}
+              {selectedPto.reason && (
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Reason</p>
+                  <p className="text-sm bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                    {selectedPto.reason}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-4">
+                <Button variant="outline" onClick={() => setDetailsDialogOpen(false)}>
+                  Close
+                </Button>
               </div>
-            ))}
-            {calendarPtos.length === 0 && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No approved time off scheduled
-              </p>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

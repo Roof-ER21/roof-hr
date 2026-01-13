@@ -1054,7 +1054,7 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
   router.post('/api/admin/create-pto-for-employee', requireAuth, requireAdmin, async (req: any, res) => {
   try {
     const adminUser = req.user!;
-    const { employeeId, startDate, endDate, type, reason, autoApprove } = req.body;
+    const { employeeId, startDate, endDate, type, reason, autoApprove, isExempt } = req.body;
 
     // Validate required fields
     if (!employeeId || !startDate || !endDate) {
@@ -1080,7 +1080,7 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
       return res.status(400).json({ error: 'Selected date range has no business days' });
     }
 
-    // Create the PTO request
+    // Create the PTO request with exempt flag if specified
     const ptoRequest = await storage.createPtoRequest({
       employeeId,
       startDate,
@@ -1089,23 +1089,27 @@ router.post('/api/admin/update-pto-allocations', requireAuth, requireAdmin, asyn
       reason: reason || `Created by admin: ${adminUser.firstName} ${adminUser.lastName}`,
       days,
       status: autoApprove ? 'APPROVED' : 'PENDING',
+      isExempt: isExempt || false,
+      createdByAdmin: isExempt ? adminUser.id : undefined,
     });
 
-    console.log(`[ADMIN-PTO] ${adminUser.email} created PTO for ${employee.firstName} ${employee.lastName}: ${startDate} to ${endDate} (${days} days, autoApprove=${autoApprove})`);
+    console.log(`[ADMIN-PTO] ${adminUser.email} created ${isExempt ? 'EXEMPT ' : ''}PTO for ${employee.firstName} ${employee.lastName}: ${startDate} to ${endDate} (${days} days, autoApprove=${autoApprove})`);
 
     // If auto-approved, update the employee's PTO policy and create calendar events
     if (autoApprove) {
-      // Update employee's PTO policy
-      const policy = await storage.getPtoPolicyByEmployeeId(employeeId);
-      if (policy) {
-        const usedDays = (policy.usedDays || 0) + days;
-        const remainingDays = Math.max(0, (policy.totalDays || 0) - usedDays);
+      // Update employee's PTO policy (skip if exempt - doesn't count against balance)
+      if (!isExempt) {
+        const policy = await storage.getPtoPolicyByEmployeeId(employeeId);
+        if (policy) {
+          const usedDays = (policy.usedDays || 0) + days;
+          const remainingDays = Math.max(0, (policy.totalDays || 0) - usedDays);
 
-        await db.update(ptoPolicies).set({
-          usedDays,
-          remainingDays,
-          updatedAt: new Date()
-        }).where(eq(ptoPolicies.id, policy.id));
+          await db.update(ptoPolicies).set({
+            usedDays,
+            remainingDays,
+            updatedAt: new Date()
+          }).where(eq(ptoPolicies.id, policy.id));
+        }
       }
 
       // Create Google Calendar events asynchronously
@@ -1897,8 +1901,12 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
 });
 
 // PTO Calendar - company-wide approved PTO (name + dates only for privacy)
+// PTO Approvers get additional details (type, reason, isExempt) for click-to-view functionality
 router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
   try {
+    const currentUser = req.user!;
+    const isApprover = PTO_APPROVER_EMAILS.includes(currentUser.email?.toLowerCase() || '');
+
     const allPto = await storage.getAllPtoRequests().catch((err) => {
       console.error('[PTO Calendar] Failed to fetch PTO requests:', err.message);
       return [];
@@ -1910,18 +1918,33 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
     });
 
     // Filter to approved PTO only and return minimal info for privacy
+    // PTO Approvers get additional details for click-to-view functionality
     const calendarData = allPto
       .filter((p: any) => p.status === 'APPROVED')
       .map((p: any) => {
         const user = allUsers.find((u: any) => u.id === p.employeeId);
-        return {
+        const baseData = {
           id: p.id,
           startDate: p.startDate,
           endDate: p.endDate,
           employeeId: p.employeeId,
           employeeName: user ? `${user.firstName} ${user.lastName}` : 'Employee',
-          // PRIVACY: Do NOT include type, reason, or notes
+          isExempt: p.isExempt || false, // Always include for calendar coloring
         };
+
+        // PTO Approvers get additional details for click-to-view
+        if (isApprover) {
+          return {
+            ...baseData,
+            type: p.type,
+            reason: p.reason,
+            days: p.days,
+            department: user?.department,
+            createdByAdmin: p.createdByAdmin,
+          };
+        }
+
+        return baseData;
       });
 
     res.json(calendarData);
