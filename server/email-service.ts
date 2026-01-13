@@ -145,6 +145,45 @@ class EmailService {
     }
   }
 
+  /**
+   * Check if a user has enabled a specific email notification type
+   * Returns true if the email should be sent, false if the user has disabled it
+   */
+  private async shouldSendEmail(userId: string, emailType: string): Promise<boolean> {
+    try {
+      const prefs = await storage.getUserEmailPreferences(userId);
+      if (!prefs) {
+        // No preferences set, default to sending
+        return true;
+      }
+
+      const typeToPreference: Record<string, keyof typeof prefs> = {
+        'interview': 'interviewNotifications',
+        'mention': 'mentionNotifications',
+        'calendar': 'calendarNotifications',
+        'onboarding': 'onboardingNotifications',
+        'equipment': 'equipmentNotifications',
+        'pto': 'ptoNotifications',
+        'contract': 'contractNotifications',
+        'task': 'taskNotifications',
+        'system': 'systemAnnouncements',
+        'review': 'reviewNotifications',
+      };
+
+      const prefKey = typeToPreference[emailType];
+      if (!prefKey) {
+        // Unknown email type, default to sending
+        return true;
+      }
+
+      return prefs[prefKey] !== false;
+    } catch (error) {
+      console.error('[Email] Error checking email preferences:', error);
+      // On error, default to sending
+      return true;
+    }
+  }
+
   async sendEmail(config: EmailConfig): Promise<boolean> {
     // Log email attempt
     let emailLogId: string | undefined;
@@ -891,6 +930,16 @@ class EmailService {
     fromUserEmail?: string
   ): Promise<boolean> {
     try {
+      // Check user preference before sending
+      const user = await storage.getUserByEmail(employeeEmail);
+      if (user) {
+        const shouldSend = await this.shouldSendEmail(user.id, 'equipment');
+        if (!shouldSend) {
+          console.log(`[Email] User ${employeeEmail} has disabled equipment notifications - skipping`);
+          return true;
+        }
+      }
+
       const subject = 'Equipment Agreement - Please Sign | Roof-ER';
 
       // Build equipment list HTML
@@ -983,6 +1032,16 @@ class EmailService {
     fromUserEmail?: string
   ): Promise<boolean> {
     try {
+      // Check user preference before sending
+      const user = await storage.getUserByEmail(employeeEmail);
+      if (user) {
+        const shouldSend = await this.shouldSendEmail(user.id, 'equipment');
+        if (!shouldSend) {
+          console.log(`[Email] User ${employeeEmail} has disabled equipment notifications - skipping`);
+          return true;
+        }
+      }
+
       const subject = 'Schedule Equipment Return - Action Required | Roof-ER';
 
       // Build items list if provided
@@ -1356,6 +1415,16 @@ class EmailService {
     try {
       const { title, description, startDate, endDate, location, meetLink, organizerName, organizerEmail, eventId, rsvpToken, baseUrl } = eventDetails;
 
+      // Check user preference before sending
+      const user = await storage.getUserByEmail(attendeeEmail);
+      if (user) {
+        const shouldSend = await this.shouldSendEmail(user.id, 'calendar');
+        if (!shouldSend) {
+          console.log(`[Email] User ${attendeeEmail} has disabled calendar notifications - skipping`);
+          return true;
+        }
+      }
+
       // Get attendee's timezone (fallback to Eastern)
       const attendeeTimezone = await timezoneService.getUserTimezoneByEmail(attendeeEmail);
 
@@ -1505,6 +1574,90 @@ class EmailService {
       });
     } catch (error) {
       console.error('Failed to send calendar invite email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send notification email when someone is @mentioned in a candidate note
+   */
+  async sendMentionNotificationEmail(params: {
+    toEmail: string;
+    toName: string;
+    fromName: string;
+    candidateName: string;
+    candidateId: string;
+    noteContent: string;
+  }): Promise<boolean> {
+    try {
+      const { toEmail, toName, fromName, candidateName, candidateId, noteContent } = params;
+
+      if (!toEmail) {
+        console.error('[Email] No email address for mention notification');
+        return false;
+      }
+
+      // Check user preference before sending
+      const user = await storage.getUserByEmail(toEmail);
+      if (user) {
+        const shouldSend = await this.shouldSendEmail(user.id, 'mention');
+        if (!shouldSend) {
+          console.log(`[Email] User ${toEmail} has disabled mention notifications - skipping`);
+          return true; // Return true to indicate "success" (user opted out)
+        }
+      }
+
+      const firstName = toName.split(' ')[0] || toName;
+      const appUrl = process.env.APP_URL || 'https://roofhr.up.railway.app';
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #2563eb; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 20px;">You were mentioned in a note</h1>
+          </div>
+
+          <div style="padding: 30px; background-color: #ffffff; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">Hi ${firstName},</p>
+
+            <p style="font-size: 15px; line-height: 1.7; color: #333;">
+              <strong>${fromName}</strong> mentioned you in a note about candidate <strong>${candidateName}</strong>:
+            </p>
+
+            <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
+              <p style="margin: 0; white-space: pre-wrap; font-size: 14px; color: #374151;">${noteContent}</p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${appUrl}/recruiting?candidate=${candidateId}"
+                 style="display: inline-block; background-color: #2563eb; color: white;
+                        padding: 12px 24px; border-radius: 6px; text-decoration: none;
+                        font-weight: bold; font-size: 14px;">
+                View Candidate
+              </a>
+            </div>
+
+            <p style="font-size: 14px; color: #6b7280;">Best regards,<br>Roof HR System</p>
+          </div>
+
+          <p style="color: #9ca3af; font-size: 11px; text-align: center; margin-top: 20px;">
+            This is an automated notification from the Roof HR system.
+          </p>
+        </div>
+      `;
+
+      const result = await this.sendEmail({
+        to: toEmail,
+        subject: `${fromName} mentioned you in a note about ${candidateName}`,
+        html,
+      });
+
+      if (result) {
+        console.log(`[Email] Mention notification sent to ${toEmail}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[Email] Failed to send mention notification email:', error);
       return false;
     }
   }

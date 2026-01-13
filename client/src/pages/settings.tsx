@@ -20,7 +20,8 @@ import {
   Save,
   User,
   Cloud,
-  FileBarChart
+  FileBarChart,
+  Bell
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
@@ -31,6 +32,7 @@ import { useAuth } from '@/lib/auth';
 import GoogleIntegration from './GoogleIntegration';
 import ScheduledReports from './ScheduledReports';
 import { AvailabilityManager } from '@/components/settings/availability-manager';
+import { EmailPreferences } from '@/components/settings/email-preferences';
 
 const companySettingsSchema = z.object({
   companyName: z.string().min(1),
@@ -232,6 +234,10 @@ function Settings() {
             <User className="w-4 h-4 mr-2" />
             Personal
           </TabsTrigger>
+          <TabsTrigger value="notifications">
+            <Bell className="w-4 h-4 mr-2" />
+            Notifications
+          </TabsTrigger>
           {userIsAdmin && (
             <>
               <TabsTrigger value="company">
@@ -315,6 +321,10 @@ function Settings() {
 
           {/* Interview Availability Settings */}
           <AvailabilityManager />
+        </TabsContent>
+
+        <TabsContent value="notifications" className="space-y-6">
+          <EmailPreferences userId={user?.id} />
         </TabsContent>
 
         {userIsAdmin && (

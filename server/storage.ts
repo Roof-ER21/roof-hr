@@ -86,7 +86,9 @@ import {
   OnboardingTemplate, InsertOnboardingTemplate, onboardingTemplates,
   OnboardingInstance, InsertOnboardingInstance, onboardingInstances,
   // Notifications
-  Notification, InsertNotification, notifications
+  Notification, InsertNotification, notifications,
+  // Email Preferences
+  userEmailPreferences
 } from '@shared/schema';
 import { db } from './db';
 import { eq, and, lt, inArray, or, sql, gte, lte, desc } from 'drizzle-orm';
@@ -103,6 +105,9 @@ type InsertHrAssignment = typeof hrAssignments.$inferInsert;
 // Type definitions for HR Performance Metrics
 type HrPerformanceMetric = typeof hrPerformanceMetrics.$inferSelect;
 type InsertHrPerformanceMetric = typeof hrPerformanceMetrics.$inferInsert;
+
+// Type definitions for Email Preferences
+type UserEmailPreferences = typeof userEmailPreferences.$inferSelect;
 
 export interface IStorage {
   // User management
@@ -477,6 +482,9 @@ export interface IStorage {
   // Susan AI - Message Management
   getUnreadMessages(userId: string): Promise<SmsMessage[]>;
   createMessage(data: InsertSmsMessage): Promise<SmsMessage>;
+
+  // Email Preferences
+  getUserEmailPreferences(userId: string): Promise<UserEmailPreferences | null>;
 }
 
 class DrizzleStorage implements IStorage {
@@ -3528,6 +3536,15 @@ class DrizzleStorage implements IStorage {
   async createMessage(data: InsertSmsMessage): Promise<SmsMessage> {
     // Alias for createSmsMessage
     return this.createSmsMessage(data);
+  }
+
+  // Email Preferences
+  async getUserEmailPreferences(userId: string): Promise<UserEmailPreferences | null> {
+    const result = await db.select()
+      .from(userEmailPreferences)
+      .where(eq(userEmailPreferences.userId, userId))
+      .limit(1);
+    return result[0] || null;
   }
 }
 

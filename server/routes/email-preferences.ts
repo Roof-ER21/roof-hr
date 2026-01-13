@@ -27,12 +27,17 @@ router.get('/api/email-preferences/:userId', requireAuth, async (req: any, res) 
       // Return default preferences if none exist
       return res.json({
         userId,
-        ptoRequestsAndApprovals: true,
-        candidateUpdates: true,
-        interviewReminders: true,
+        ptoNotifications: true,
+        contractNotifications: true,
+        reviewNotifications: true,
         taskNotifications: true,
         systemAnnouncements: true,
         weeklyDigest: false,
+        mentionNotifications: true,
+        interviewNotifications: true,
+        calendarNotifications: true,
+        onboardingNotifications: true,
+        equipmentNotifications: true,
       });
     }
 
@@ -79,12 +84,17 @@ router.put('/api/email-preferences/:userId', requireAuth, async (req: any, res) 
         .values({
           id: uuidv4(),
           userId,
-          ptoNotifications: req.body.ptoNotifications ?? req.body.ptoRequestsAndApprovals ?? true,
+          ptoNotifications: req.body.ptoNotifications ?? true,
           contractNotifications: req.body.contractNotifications ?? true,
-          reviewNotifications: req.body.reviewNotifications ?? req.body.candidateUpdates ?? true,
-          taskNotifications: req.body.taskNotifications ?? req.body.interviewReminders ?? true,
+          reviewNotifications: req.body.reviewNotifications ?? true,
+          taskNotifications: req.body.taskNotifications ?? true,
           systemAnnouncements: req.body.systemAnnouncements ?? true,
           weeklyDigest: req.body.weeklyDigest ?? false,
+          mentionNotifications: req.body.mentionNotifications ?? true,
+          interviewNotifications: req.body.interviewNotifications ?? true,
+          calendarNotifications: req.body.calendarNotifications ?? true,
+          onboardingNotifications: req.body.onboardingNotifications ?? true,
+          equipmentNotifications: req.body.equipmentNotifications ?? true,
         })
         .returning();
 
@@ -139,6 +149,11 @@ router.post('/api/email-preferences', requireAuth, async (req: any, res) => {
         taskNotifications: true,
         systemAnnouncements: true,
         weeklyDigest: false,
+        mentionNotifications: true,
+        interviewNotifications: true,
+        calendarNotifications: true,
+        onboardingNotifications: true,
+        equipmentNotifications: true,
       })
       .returning();
 

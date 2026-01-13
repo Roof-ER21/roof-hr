@@ -2557,12 +2557,19 @@ export const insertSqlQueryHistorySchema = createInsertSchema(sqlQueryHistory).o
 export const userEmailPreferences = pgTable('user_email_preferences', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
+  // Core notification categories
   ptoNotifications: boolean('pto_notifications').notNull().default(true),
   contractNotifications: boolean('contract_notifications').notNull().default(true),
   reviewNotifications: boolean('review_notifications').notNull().default(true),
   taskNotifications: boolean('task_notifications').notNull().default(true),
   systemAnnouncements: boolean('system_announcements').notNull().default(true),
   weeklyDigest: boolean('weekly_digest').notNull().default(false),
+  // Granular notification categories
+  mentionNotifications: boolean('mention_notifications').notNull().default(true),
+  interviewNotifications: boolean('interview_notifications').notNull().default(true),
+  calendarNotifications: boolean('calendar_notifications').notNull().default(true),
+  onboardingNotifications: boolean('onboarding_notifications').notNull().default(true),
+  equipmentNotifications: boolean('equipment_notifications').notNull().default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -2851,7 +2858,7 @@ export const insertReportExecutionsSchema = createInsertSchema(reportExecutions)
 export const notifications = pgTable('notifications', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(), // Recipient user
-  type: text('type').$type<'info' | 'success' | 'warning' | 'error' | 'onboarding_assigned' | 'task_overdue' | 'document_required' | 'NEW_CANDIDATE'>().notNull(),
+  type: text('type').$type<'info' | 'success' | 'warning' | 'error' | 'onboarding_assigned' | 'task_overdue' | 'document_required' | 'NEW_CANDIDATE' | 'MENTION'>().notNull(),
   title: text('title').notNull(),
   message: text('message').notNull(),
   read: boolean('read').notNull().default(false),

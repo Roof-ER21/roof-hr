@@ -13,6 +13,7 @@ import { DeleteEventDialog } from '@/components/calendar/DeleteEventDialog';
 import OrgChart from '@/components/OrgChart';
 import { OnboardingTaskList } from '@/components/onboarding/OnboardingTaskList';
 import { AvailabilityManager } from '@/components/settings/availability-manager';
+import { EmailPreferences } from '@/components/settings/email-preferences';
 import {
   Calendar,
   Clock,
@@ -42,7 +43,8 @@ import {
   Trash2,
   ClipboardList,
   ScrollText,
-  GitBranch
+  GitBranch,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useState, useMemo } from 'react';
@@ -624,6 +626,27 @@ function EmployeeDashboard() {
                   <ChevronRight className="w-4 h-4 ml-auto" />
                 </Button>
               </Link>
+              <Link to="/settings?tab=notifications" className="block">
+                <Button variant="ghost" className="w-full justify-start">
+                  <Bell className="w-4 h-4 mr-3 text-indigo-500" />
+                  Email Preferences
+                  <ChevronRight className="w-4 h-4 ml-auto" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* Notification Settings - Compact */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Mail className="w-5 h-5" />
+                Notification Settings
+              </CardTitle>
+              <CardDescription>Manage your email notifications</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EmailPreferences userId={user?.id} compact />
             </CardContent>
           </Card>
         </div>

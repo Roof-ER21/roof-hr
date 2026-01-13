@@ -4040,9 +4040,10 @@ router.post('/api/candidates/:candidateId/notes', requireAuth, async (req: any, 
     const isAdminOrManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
     const { isLeadSourcer } = await import('../shared/constants/roles');
 
+    let candidate = await storage.getCandidateById(candidateId);
+
     if (!isAdminOrManager && !isLeadSourcer(user)) {
       // For SOURCER/other roles: verify they're assigned to this candidate
-      const candidate = await storage.getCandidateById(candidateId);
       if (!candidate || candidate.assignedTo !== user.id) {
         return res.status(403).json({ error: 'Access denied - not assigned to this candidate' });
       }
@@ -4054,6 +4055,66 @@ router.post('/api/candidates/:candidateId/notes', requireAuth, async (req: any, 
       content,
       type
     });
+
+    // Parse @mentions and send notifications
+    const mentionRegex = /@([A-Za-z]+)\s+([A-Za-z]+)/g;
+    const mentions: string[] = [];
+    let match;
+    while ((match = mentionRegex.exec(content)) !== null) {
+      mentions.push(`${match[1]} ${match[2]}`);
+    }
+
+    if (mentions.length > 0) {
+      const allUsers = await storage.getAllUsers();
+      const notifiedUserIds = new Set<string>();
+
+      for (const fullName of mentions) {
+        const [firstName, lastName] = fullName.split(' ');
+        const mentionedUser = allUsers.find(u =>
+          u.firstName.toLowerCase() === firstName.toLowerCase() &&
+          u.lastName.toLowerCase() === lastName.toLowerCase()
+        );
+
+        // Don't notify the author or duplicate notifications
+        if (mentionedUser && mentionedUser.id !== user.id && !notifiedUserIds.has(mentionedUser.id)) {
+          notifiedUserIds.add(mentionedUser.id);
+
+          // Create in-app notification
+          try {
+            await storage.createNotification({
+              userId: mentionedUser.id,
+              type: 'MENTION',
+              title: 'You were mentioned in a note',
+              message: `${user.firstName} ${user.lastName} mentioned you in a note about ${candidate?.firstName} ${candidate?.lastName}`,
+              link: `/recruiting?candidate=${candidateId}`,
+            });
+            console.log(`[MENTION] Created notification for ${mentionedUser.email}`);
+          } catch (notifError) {
+            console.error('[MENTION] Failed to create notification:', notifError);
+          }
+
+          // Send email notification
+          if (mentionedUser.email) {
+            try {
+              const { EmailService } = await import('./email-service');
+              const emailService = new EmailService();
+              await emailService.sendMentionNotificationEmail({
+                toEmail: mentionedUser.email,
+                toName: `${mentionedUser.firstName} ${mentionedUser.lastName}`,
+                fromName: `${user.firstName} ${user.lastName}`,
+                candidateName: `${candidate?.firstName} ${candidate?.lastName}`,
+                candidateId,
+                noteContent: content,
+              });
+              console.log(`[MENTION] Email sent to ${mentionedUser.email}`);
+            } catch (emailError) {
+              console.error('[MENTION] Failed to send email:', emailError);
+            }
+          }
+        }
+      }
+    }
+
     res.json(note);
   } catch (error) {
     res.status(400).json({ error: 'Failed to create note' });
