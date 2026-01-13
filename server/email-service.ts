@@ -491,6 +491,80 @@ class EmailService {
     }
   }
 
+  /**
+   * Send email to candidates who missed their interview, offering to reschedule
+   */
+  async sendNoShowRescheduleEmail(params: {
+    candidateEmail: string;
+    candidateName: string;
+    originalInterviewDate: Date | string;
+    position: string;
+    candidateId?: string;
+  }): Promise<boolean> {
+    try {
+      const { candidateEmail, candidateName, originalInterviewDate, position, candidateId } = params;
+
+      if (!candidateEmail) {
+        console.error('[Email] No email address for no-show candidate');
+        return false;
+      }
+
+      const formattedDate = new Date(originalInterviewDate).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'America/New_York'
+      });
+
+      const firstName = candidateName.split(' ')[0] || candidateName;
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2563eb;">We Missed You!</h2>
+
+          <p>Hi ${firstName},</p>
+
+          <p>We noticed you weren't able to make your scheduled interview on <strong>${formattedDate}</strong> for the <strong>${position}</strong> position at The Roof Docs.</p>
+
+          <p>We understand that things come up, and we'd still love the opportunity to speak with you!</p>
+
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #374151;">Would you like to reschedule?</h3>
+            <p>Simply reply to this email with a few times that work for you, and we'll get you on the calendar.</p>
+          </div>
+
+          <p>We're flexible and want to make this work for you. Just let us know your availability and we'll find a time that fits your schedule.</p>
+
+          <p>Best regards,<br>
+          The Roof Docs HR Team</p>
+
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+          <p style="color: #6b7280; font-size: 12px;">
+            This is an automated message from the Roof HR system.<br>
+            If you are no longer interested in this position, you can ignore this email.
+          </p>
+        </div>
+      `;
+
+      const result = await this.sendEmail({
+        to: candidateEmail,
+        subject: `Let's Reschedule Your Interview - ${position}`,
+        html,
+        candidateId,
+      });
+
+      if (result) {
+        console.log(`[Email] No-show reschedule email sent to ${candidateEmail}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[Email] Failed to send no-show reschedule email:', error);
+      return false;
+    }
+  }
+
   async sendWelcomeEmail(
     user: any,
     temporaryPassword: string,

@@ -1707,7 +1707,7 @@ export default function EnhancedRecruiting() {
     setActiveDragId(event.active.id);
   };
 
-  const handleDragEnd = (event: any) => {
+  const handleDragEnd = async (event: any) => {
     const { active, over } = event;
     setActiveDragId(null);
 
@@ -1770,8 +1770,35 @@ export default function EnhancedRecruiting() {
       return;
     }
 
-    // Check if moving to OFFER - require notes about why not hired yet
+    // Check if moving to OFFER - require completed interview questions first
     if (newStatus === 'OFFER' && currentCandidate.status !== 'OFFER') {
+      // Verify interview questions have been completed
+      try {
+        const notesResponse = await fetch(`/api/candidates/${candidateId}/notes`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        if (notesResponse.ok) {
+          const notes = await notesResponse.json();
+          const hasCompletedInterview = notes.some((note: any) =>
+            note.type === 'INTERVIEW' &&
+            note.content?.includes('=== STRUCTURED INTERVIEW ===')
+          );
+
+          if (!hasCompletedInterview) {
+            toast({
+              title: 'Interview Required',
+              description: 'Cannot move to Offer Extended: You must complete the interview questions first. Click on the candidate and use "Start Interview" to record responses.',
+              variant: 'destructive'
+            });
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check interview completion:', error);
+        // Continue anyway if check fails - server will validate
+      }
+
+      // Interview completed - proceed with offer notes
       setCandidateForOfferNotes({
         candidate: currentCandidate,
         newStatus: newStatus

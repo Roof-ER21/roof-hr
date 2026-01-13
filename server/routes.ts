@@ -3314,6 +3314,21 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
       updateData.interviewScreeningDate = new Date(updateData.interviewScreeningDate);
     }
 
+    // Validate OFFER status transition - require completed interview questions
+    if (updateData.status === 'OFFER' && currentCandidate?.status !== 'OFFER') {
+      const candidateNotes = await storage.getCandidateNotes(req.params.id);
+      const hasCompletedInterview = candidateNotes.some((note: any) =>
+        note.type === 'INTERVIEW' &&
+        note.content?.includes('=== STRUCTURED INTERVIEW ===')
+      );
+
+      if (!hasCompletedInterview) {
+        return res.status(400).json({
+          error: 'Interview questions must be completed before moving to Offer Extended. Please complete the interview process first.'
+        });
+      }
+    }
+
     const candidate = await storage.updateCandidate(req.params.id, updateData);
 
     // Trigger workflows if the status has changed
@@ -3441,6 +3456,21 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
         ? 'You can only move candidates up to Offer or mark as Dead/No-Show. Contact a manager to hire candidates.'
         : 'SOURCERs can only move candidates to early stages or mark as Dead/No-Show. Contact a manager to move to Offer or Hired.';
       return res.status(403).json({ error: errorMsg });
+    }
+
+    // Validate OFFER status transition - require completed interview questions
+    if (newStatus === 'OFFER' && candidate.status !== 'OFFER') {
+      const candidateNotes = await storage.getCandidateNotes(candidateId);
+      const hasCompletedInterview = candidateNotes.some((note: any) =>
+        note.type === 'INTERVIEW' &&
+        note.content?.includes('=== STRUCTURED INTERVIEW ===')
+      );
+
+      if (!hasCompletedInterview) {
+        return res.status(400).json({
+          error: 'Interview questions must be completed before moving to Offer Extended. Please complete the interview process first.'
+        });
+      }
     }
 
     // Update the candidate

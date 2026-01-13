@@ -819,6 +819,27 @@ router.patch('/:id', requireAuth, async (req, res) => {
             createdBy: (req as any).user?.id || 'system'
           });
           console.log('[INTERVIEW] Candidate marked as no-show:', existingInterview.candidateId);
+
+          // Send reschedule email to the no-show candidate
+          if (candidate.email) {
+            try {
+              const { EmailService } = await import('../email-service');
+              const emailService = new EmailService();
+              await emailService.initialize();
+
+              await emailService.sendNoShowRescheduleEmail({
+                candidateEmail: candidate.email,
+                candidateName: `${candidate.firstName} ${candidate.lastName}`,
+                originalInterviewDate: existingInterview.scheduledDate,
+                position: candidate.position || 'Open Position',
+                candidateId: existingInterview.candidateId
+              });
+              console.log('[INTERVIEW] Reschedule email sent to no-show candidate:', candidate.email);
+            } catch (emailError) {
+              console.error('[INTERVIEW] Failed to send reschedule email:', emailError);
+              // Don't fail the interview update if email fails
+            }
+          }
         }
       } catch (candidateError) {
         console.error('[INTERVIEW] Failed to update candidate for no-show:', candidateError);
