@@ -1291,10 +1291,7 @@ class DrizzleStorage implements IStorage {
   async getInterviewAvailabilityByInterviewer(interviewerId: string): Promise<InterviewAvailability[]> {
     return await db.select()
       .from(interviewAvailability)
-      .where(and(
-        eq(interviewAvailability.interviewerId, interviewerId),
-        eq(interviewAvailability.isActive, true)
-      ));
+      .where(eq(interviewAvailability.interviewerId, interviewerId));
   }
 
   async updateInterviewAvailability(id: string, data: Partial<InsertInterviewAvailability>): Promise<InterviewAvailability> {
