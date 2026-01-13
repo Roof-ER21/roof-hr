@@ -2522,15 +2522,17 @@ class DrizzleStorage implements IStorage {
     }
 
     // Calculate used PTO days from approved requests this year
+    // EXCLUDE exempt PTO - it doesn't count against balance
     const currentYear = new Date().getFullYear();
     const startOfYear = new Date(currentYear, 0, 1);
     const endOfYear = new Date(currentYear, 11, 31);
-    
+
     const approvedRequests = await db.select().from(ptoRequests)
       .where(
         and(
           eq(ptoRequests.employeeId, employeeId),
           eq(ptoRequests.status, 'APPROVED'),
+          eq(ptoRequests.isExempt, false), // Exclude exempt PTO
           gte(ptoRequests.startDate, startOfYear.toISOString()),
           lte(ptoRequests.endDate, endOfYear.toISOString())
         )

@@ -202,20 +202,22 @@ router.get('/api/employee-portal/pto-balance', requireAuth, async (req: any, res
       r.startDate <= yearEnd
     );
 
-    const usedDays = approvedRequests.reduce((sum, r) => sum + (r.days || 0), 0);
+    // Exclude exempt PTO from used days calculation - it doesn't count against balance
+    const nonExemptApproved = approvedRequests.filter(r => !r.isExempt);
+    const usedDays = nonExemptApproved.reduce((sum, r) => sum + (r.days || 0), 0);
 
     // Calculate pending days
     const pendingRequests = myRequests.filter(r => r.status === 'PENDING');
     const pendingDays = pendingRequests.reduce((sum, r) => sum + (r.days || 0), 0);
 
-    // Calculate ACTUAL used days by type from request type field
-    const usedVacation = approvedRequests
+    // Calculate ACTUAL used days by type from request type field (excluding exempt)
+    const usedVacation = nonExemptApproved
       .filter(r => r.type === 'VACATION' || !r.type) // Default to vacation if no type
       .reduce((sum, r) => sum + (r.days || 0), 0);
-    const usedSick = approvedRequests
+    const usedSick = nonExemptApproved
       .filter(r => r.type === 'SICK')
       .reduce((sum, r) => sum + (r.days || 0), 0);
-    const usedPersonal = approvedRequests
+    const usedPersonal = nonExemptApproved
       .filter(r => r.type === 'PERSONAL')
       .reduce((sum, r) => sum + (r.days || 0), 0);
 

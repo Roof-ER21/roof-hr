@@ -187,13 +187,14 @@ export class SusanPTOManager {
     reason: string
   ): Promise<{ success: boolean; newBalance?: number; error?: string }> {
     try {
-      // Calculate current balance from approved PTO requests
+      // Calculate current balance from approved PTO requests (exclude exempt)
       const currentYear = new Date().getFullYear();
       const approvedRequests = await db.select()
         .from(ptoRequests)
         .where(and(
           eq(ptoRequests.employeeId, employeeId),
-          eq(ptoRequests.status, 'APPROVED')
+          eq(ptoRequests.status, 'APPROVED'),
+          eq(ptoRequests.isExempt, false)
         ));
 
       const usedDays = approvedRequests

@@ -950,11 +950,11 @@ Should I proceed with scheduling this interview?`,
     try {
       const ptoPolicy = await storage.getPtoPolicyByEmployee(user.id);
 
-      // Calculate used PTO days from approved requests this year
+      // Calculate used PTO days from approved requests this year (exclude exempt)
       const requests = await storage.getPtoRequestsByEmployee(user.id);
       const currentYear = new Date().getFullYear();
       const usedDays = requests
-        .filter(r => r.status === 'APPROVED' && new Date(r.startDate).getFullYear() === currentYear)
+        .filter(r => r.status === 'APPROVED' && !r.isExempt && new Date(r.startDate).getFullYear() === currentYear)
         .reduce((total, r) => {
           const start = new Date(r.startDate);
           const end = new Date(r.endDate);
