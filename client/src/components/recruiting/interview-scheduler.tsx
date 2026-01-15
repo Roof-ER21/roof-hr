@@ -562,8 +562,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       const startMinutes = startHour * 60 + startMin;
       const endMinutes = endHour * 60 + endMin;
 
-      // Generate 30-minute slots from start up to (but not including) end time
-      for (let mins = startMinutes; mins < endMinutes; mins += 30) {
+      // Generate 15-minute slots from start up to (but not including) end time
+      for (let mins = startMinutes; mins < endMinutes; mins += 15) {
         const hour = Math.floor(mins / 60);
         const min = mins % 60;
         const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
@@ -874,11 +874,20 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           ? getAvailableTimeSlots()
                           : [];
 
-                        // If we have availability-based slots, use them; otherwise use defaults (7 AM - 6 PM ET)
+                        // If we have availability-based slots, use them; otherwise use defaults (7 AM - 6 PM ET, 15-min increments)
                         const timeSlots = availableSlots.length > 0 ? availableSlots : [
-                          '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-                          '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-                          '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'
+                          '07:00', '07:15', '07:30', '07:45',
+                          '08:00', '08:15', '08:30', '08:45',
+                          '09:00', '09:15', '09:30', '09:45',
+                          '10:00', '10:15', '10:30', '10:45',
+                          '11:00', '11:15', '11:30', '11:45',
+                          '12:00', '12:15', '12:30', '12:45',
+                          '13:00', '13:15', '13:30', '13:45',
+                          '14:00', '14:15', '14:30', '14:45',
+                          '15:00', '15:15', '15:30', '15:45',
+                          '16:00', '16:15', '16:30', '16:45',
+                          '17:00', '17:15', '17:30', '17:45',
+                          '18:00'
                         ];
 
                         return timeSlots.map(time => (
