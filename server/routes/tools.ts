@@ -767,6 +767,20 @@ router.post('/assignments', async (req, res) => {
       .values(assignments)
       .returning();
 
+    // Log audit trail for each assignment
+    for (const assignment of createdAssignments) {
+      const tool = tools.find(t => t.id === assignment.toolId);
+      await logToolAudit({
+        toolId: assignment.toolId,
+        action: 'ASSIGN',
+        changedBy: (req as any).user?.id || 'system',
+        previousValues: { availableQuantity: tool ? tool.availableQuantity : 0 },
+        newValues: { availableQuantity: tool ? tool.availableQuantity - 1 : 0, assignedTo: employeeId },
+        quantityChange: -1,
+        notes: `Assigned to employee ${employee.firstName} ${employee.lastName}`
+      });
+    }
+
     // Send email notification if SendGrid is configured
     if (process.env.SENDGRID_API_KEY && employee.email) {
       const toolsList = tools.map(t => 
@@ -904,6 +918,17 @@ router.post('/assignments/:id/return', requireAuth, async (req, res) => {
           updatedAt: new Date()
         })
         .where(eq(toolInventory.id, tool.id));
+
+      // Log audit trail for return
+      await logToolAudit({
+        toolId: tool.id,
+        action: 'RETURN',
+        changedBy: (req as any).user?.id || 'system',
+        previousValues: { availableQuantity: tool.availableQuantity, status: 'ASSIGNED' },
+        newValues: { availableQuantity: tool.availableQuantity + 1, status: 'RETURNED' },
+        quantityChange: 1,
+        notes: notes || 'Tool returned'
+      });
     }
 
     res.json({ message: 'Tool returned successfully' });

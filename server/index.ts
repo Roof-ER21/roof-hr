@@ -460,6 +460,15 @@ app.use((req, res, next) => {
       } catch (error) {
         logger.error('Failed to start contract reminder job:', error);
       }
+
+      // Initialize inventory alert job (runs daily at 8 AM EST)
+      try {
+        const { startInventoryAlertJob } = await import('./jobs/inventory-alert-job');
+        startInventoryAlertJob();
+        logger.info('Inventory alert job scheduler started (8 AM EST daily)');
+      } catch (error) {
+        logger.error('Failed to start inventory alert job:', error);
+      }
     } catch (error) {
       logger.error('Error during server initialization:', error);
     }
