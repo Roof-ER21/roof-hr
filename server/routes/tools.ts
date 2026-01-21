@@ -23,7 +23,7 @@ import {
   insertBundleAssignmentSchema,
   insertBundleAssignmentItemSchema
 } from '@shared/schema';
-import { eq, and, desc, or, sql, inArray, ne } from 'drizzle-orm';
+import { eq, and, desc, or, sql, inArray, ne, alias } from 'drizzle-orm';
 import sgMail from '@sendgrid/mail';
 import { googleSheetsService } from '../services/google-sheets-service';
 import { googleDriveService } from '../services/google-drive-service';
@@ -640,6 +640,9 @@ router.post('/import-sheets', checkRole(['ADMIN', 'MANAGER']), async (req, res) 
 // Get all assignments
 router.get('/assignments', async (req, res) => {
   try {
+    // Create alias for the assigner user table
+    const assignerUsers = alias(users, 'assigner');
+
     const assignments = await db
       .select({
         id: toolAssignments.id,
@@ -660,12 +663,12 @@ router.get('/assignments', async (req, res) => {
         toolSerialNumber: toolInventory.serialNumber,
         employeeName: sql`${users.firstName} || ' ' || ${users.lastName}`.as('employeeName'),
         employeeEmail: users.email,
-        assignerName: sql`a.first_name || ' ' || a.last_name`.as('assignerName')
+        assignerName: sql`${assignerUsers.firstName} || ' ' || ${assignerUsers.lastName}`.as('assignerName')
       })
       .from(toolAssignments)
       .leftJoin(toolInventory, eq(toolAssignments.toolId, toolInventory.id))
       .leftJoin(users, eq(toolAssignments.employeeId, users.id))
-      .leftJoin(sql`users a`, sql`${toolAssignments.assignedBy} = a.id`)
+      .leftJoin(assignerUsers, eq(toolAssignments.assignedBy, assignerUsers.id))
       .orderBy(desc(toolAssignments.assignedDate));
 
     res.json(assignments);
@@ -676,7 +679,7 @@ router.get('/assignments', async (req, res) => {
 });
 
 // Create new assignment(s) with email notification
-router.post('/assignments', async (req, res) => {
+router.post('/assignments', requireAuth, checkRole(['ADMIN', 'MANAGER', 'HR_ADMIN', 'SYSTEM_ADMIN', 'TRUE_ADMIN']), async (req, res) => {
   try {
     const user = req.user!;
     const { employeeId, toolIds, notes } = req.body;
