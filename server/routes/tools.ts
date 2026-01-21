@@ -23,7 +23,7 @@ import {
   insertBundleAssignmentSchema,
   insertBundleAssignmentItemSchema
 } from '@shared/schema';
-import { eq, and, desc, or, sql, inArray, ne, alias } from 'drizzle-orm';
+import { eq, and, desc, or, sql, inArray, ne } from 'drizzle-orm';
 import sgMail from '@sendgrid/mail';
 import { googleSheetsService } from '../services/google-sheets-service';
 import { googleDriveService } from '../services/google-drive-service';
@@ -640,10 +640,8 @@ router.post('/import-sheets', checkRole(['ADMIN', 'MANAGER']), async (req, res) 
 // Get all assignments
 router.get('/assignments', async (req, res) => {
   try {
-    // Create alias for the assigner user table
-    const assignerUsers = alias(users, 'assigner');
-
-    const assignments = await db
+    // First get the basic assignments with employee info
+    const assignmentsRaw = await db
       .select({
         id: toolAssignments.id,
         toolId: toolAssignments.toolId,
@@ -662,14 +660,36 @@ router.get('/assignments', async (req, res) => {
         toolCategory: toolInventory.category,
         toolSerialNumber: toolInventory.serialNumber,
         employeeName: sql`${users.firstName} || ' ' || ${users.lastName}`.as('employeeName'),
-        employeeEmail: users.email,
-        assignerName: sql`${assignerUsers.firstName} || ' ' || ${assignerUsers.lastName}`.as('assignerName')
+        employeeEmail: users.email
       })
       .from(toolAssignments)
       .leftJoin(toolInventory, eq(toolAssignments.toolId, toolInventory.id))
       .leftJoin(users, eq(toolAssignments.employeeId, users.id))
-      .leftJoin(assignerUsers, eq(toolAssignments.assignedBy, assignerUsers.id))
       .orderBy(desc(toolAssignments.assignedDate));
+
+    // Get unique assigner IDs and fetch their names
+    const assignerIds = [...new Set(assignmentsRaw.map(a => a.assignedBy).filter(Boolean))];
+    const assignerMap = new Map<string, string>();
+
+    if (assignerIds.length > 0) {
+      const assigners = await db
+        .select({
+          id: users.id,
+          name: sql`${users.firstName} || ' ' || ${users.lastName}`.as('name')
+        })
+        .from(users)
+        .where(inArray(users.id, assignerIds));
+
+      for (const assigner of assigners) {
+        assignerMap.set(assigner.id, assigner.name as string);
+      }
+    }
+
+    // Combine results
+    const assignments = assignmentsRaw.map(a => ({
+      ...a,
+      assignerName: a.assignedBy ? assignerMap.get(a.assignedBy) || null : null
+    }));
 
     res.json(assignments);
   } catch (error) {
