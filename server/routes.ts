@@ -1993,7 +1993,38 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
     }
 
     // Get the requesting user
-    const user = req.user!;
+    const requestingUser = req.user!;
+
+    // ========================================================================
+    // MANAGER-CREATED PTO: Allow managers/approvers to create PTO for team members
+    // ========================================================================
+    let targetEmployee = requestingUser;
+    let createdByManager = false;
+
+    if (req.body.employeeId && req.body.employeeId !== requestingUser.id) {
+      // Check if requesting user is a manager or PTO approver
+      const isManager = ADMIN_ROLES.includes(requestingUser.role) || MANAGER_ROLES.includes(requestingUser.role);
+      const isApprover = PTO_APPROVER_EMAILS.includes(requestingUser.email);
+
+      if (!isManager && !isApprover) {
+        return res.status(403).json({
+          error: 'Only managers can create PTO requests for other employees.'
+        });
+      }
+
+      // Fetch the target employee
+      const employee = await storage.getUserById(req.body.employeeId);
+      if (!employee) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
+
+      targetEmployee = employee;
+      createdByManager = true;
+      console.log(`[PTO] Manager ${requestingUser.email} creating PTO for ${employee.email}`);
+    }
+
+    // Use targetEmployee for all subsequent checks (either logged-in user or the specified employee)
+    const user = targetEmployee;
 
     // ========================================================================
     // PTO ELIGIBILITY CHECK - Reject Sales dept and 1099/CONTRACTOR employees
@@ -2002,7 +2033,9 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
         user.employmentType === '1099' ||
         user.employmentType === 'CONTRACTOR') {
       return res.status(403).json({
-        error: 'You are not eligible for PTO based on your department or employment type.'
+        error: createdByManager
+          ? 'This employee is not eligible for PTO based on their department or employment type.'
+          : 'You are not eligible for PTO based on your department or employment type.'
       });
     }
 
@@ -2745,7 +2778,12 @@ router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
       return res.status(404).json({ error: 'PTO request not found' });
     }
 
-    if (currentRequest.employeeId !== user.id) {
+    // Allow owner, managers, or PTO approvers to cancel
+    const isOwner = currentRequest.employeeId === user.id;
+    const isManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
+    const isApprover = PTO_APPROVER_EMAILS.includes(user.email);
+
+    if (!isOwner && !isManager && !isApprover) {
       return res.status(403).json({ error: 'You can only cancel your own PTO request' });
     }
 
@@ -2757,9 +2795,14 @@ router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
       await revokeApprovedPtoEffects(currentRequest);
     }
 
+    const cancelledByManager = !isOwner && (isManager || isApprover);
+    const cancelNote = cancelledByManager
+      ? `Cancelled by ${user.firstName || user.email} (manager)`
+      : 'Cancelled by employee';
+
     const ptoRequest = await storage.updatePtoRequest(req.params.id, {
       status: 'DENIED',
-      reviewNotes: 'Cancelled by employee',
+      reviewNotes: cancelNote,
       reviewedBy: user.id,
       reviewedAt: new Date(),
     });

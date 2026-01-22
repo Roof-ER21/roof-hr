@@ -185,13 +185,14 @@ export function canAccessRecruitingAdmin(user: { role?: string; email?: string }
 // ============================================================================
 // PTO APPROVAL RESTRICTION
 // ============================================================================
-// PTO Approvers - ONLY these 4 people can approve/deny PTO requests
+// PTO Approvers - These people can approve/deny PTO requests
 // Regardless of their role in the system
 export const PTO_APPROVER_EMAILS = [
   'ahmed.mahmoud@theroofdocs.com',
   'ford.barsi@theroofdocs.com',
   'reese.samala@theroofdocs.com',
-  'oliver.brown@theroofdocs.com'
+  'oliver.brown@theroofdocs.com',
+  'greg.campbell@theroofdocs.com'  // Greg Campbell - Production Manager (added Jan 2026)
 ];
 
 export const PTO_DEPARTMENT_APPROVERS = [
