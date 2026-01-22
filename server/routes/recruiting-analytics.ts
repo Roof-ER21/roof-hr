@@ -118,8 +118,9 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
 
     // Calculate metrics
     const totalCandidates = filteredCandidates.length;
+    // Active pipeline excludes all terminal statuses
     const activePipeline = filteredCandidates.filter((c: any) =>
-      !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED'].includes(c.status)
+      !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(c.status)
     ).length;
 
     // Hired this month
@@ -931,8 +932,9 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
 
     // Calculate OVERVIEW metrics
     const totalCandidates = filteredCandidates.length;
+    // Active pipeline excludes all terminal statuses
     const activePipeline = filteredCandidates.filter((c: any) =>
-      !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED'].includes(c.status)
+      !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(c.status)
     ).length;
 
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
