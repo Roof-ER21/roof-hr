@@ -493,7 +493,13 @@ Please use the HR system to record interview feedback.
             }
           }
         } else if (!interviewerDetails || !interviewerDetails.email) {
-          console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available');
+          console.warn('[INTERVIEW] Cannot create calendar event: interviewer email not available', {
+            interviewerId: data.interviewerId,
+            hasInterviewerDetails: !!interviewerDetails,
+            hasEmail: interviewerDetails?.email ? 'yes' : 'no'
+          });
+          // Set warning so it's included in the response to the user
+          res.locals.calendarWarning = 'Interview scheduled but calendar event was not created: Interviewer email is missing in the system. Please update the interviewer\'s profile.';
         }
       } catch (calendarError: any) {
         console.error('[INTERVIEW] ❌ Failed to create Google Calendar event:', {
@@ -1512,7 +1518,13 @@ Please use the HR system to record interview feedback.
             }
           }
         } else if (!interviewerDetails || !interviewerDetails.email) {
-          console.warn('[SOURCER INTERVIEW] Cannot create calendar event: interviewer email not available');
+          console.warn('[SOURCER INTERVIEW] Cannot create calendar event: interviewer email not available', {
+            interviewerId: data.interviewerId,
+            hasInterviewerDetails: !!interviewerDetails,
+            hasEmail: interviewerDetails?.email ? 'yes' : 'no'
+          });
+          // Set warning so it's included in the response to the user
+          res.locals.calendarWarning = 'Interview scheduled but calendar event was not created: Interviewer email is missing in the system. Please update the interviewer\'s profile.';
         }
       } catch (calendarError: any) {
         console.error('[SOURCER INTERVIEW] ❌ Failed to create Google Calendar event:', {
