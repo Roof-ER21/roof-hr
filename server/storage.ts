@@ -149,6 +149,17 @@ export interface IStorage {
   getCandidateNotesByCandidateId(candidateId: string): Promise<CandidateNote[]>;
   deleteCandidateNote(id: string): Promise<void>;
 
+  // Candidate Status History (audit trail for recruiter tracking)
+  createCandidateStatusHistory(data: {
+    candidateId: string;
+    previousStatus: string;
+    newStatus: string;
+    changedBy: string;
+    changedByName: string;
+    reason?: string | null;
+  }): Promise<any>;
+  getCandidateStatusHistory(candidateId: string): Promise<any[]>;
+
   // Employee Notes
   createEmployeeNote(data: InsertEmployeeNote): Promise<EmployeeNote>;
   getEmployeeNotesByEmployeeId(employeeId: string): Promise<EmployeeNote[]>;
@@ -756,6 +767,36 @@ class DrizzleStorage implements IStorage {
   
   async deleteCandidateNote(id: string): Promise<void> {
     await db.delete(candidateNotes).where(eq(candidateNotes.id, id));
+  }
+
+  // Candidate Status History - Audit trail for recruiter tracking
+  async createCandidateStatusHistory(data: {
+    candidateId: string;
+    previousStatus: string;
+    newStatus: string;
+    changedBy: string;
+    changedByName: string;
+    reason?: string | null;
+  }): Promise<any> {
+    const id = uuidv4();
+    const { candidateStatusHistory } = await import('@shared/schema');
+    const [history] = await db.insert(candidateStatusHistory).values({
+      id,
+      candidateId: data.candidateId,
+      previousStatus: data.previousStatus,
+      newStatus: data.newStatus,
+      changedBy: data.changedBy,
+      changedByName: data.changedByName,
+      reason: data.reason || null
+    }).returning();
+    return history;
+  }
+
+  async getCandidateStatusHistory(candidateId: string): Promise<any[]> {
+    const { candidateStatusHistory } = await import('@shared/schema');
+    return await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.candidateId, candidateId))
+      .orderBy(desc(candidateStatusHistory.createdAt));
   }
 
   async updateCandidateNote(id: string, data: Partial<InsertCandidateNote>): Promise<CandidateNote> {

@@ -3395,7 +3395,37 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
       }
     }
 
+    // Validate HIRED status transition - require candidate to be in OFFER status first
+    // This ensures proper pipeline tracking for recruiter compensation
+    if (updateData.status === 'HIRED' && currentCandidate?.status !== 'HIRED') {
+      if (currentCandidate?.status !== 'OFFER') {
+        return res.status(400).json({
+          error: 'Candidate must be in OFFER status before being marked as HIRED. Please extend an offer first.',
+          currentStatus: currentCandidate?.status,
+          requiredStatus: 'OFFER'
+        });
+      }
+    }
+
     const candidate = await storage.updateCandidate(req.params.id, updateData);
+
+    // Log status change to history for recruiter tracking and audit
+    if (updateData.status && updateData.status !== previousStatus) {
+      try {
+        await storage.createCandidateStatusHistory({
+          candidateId: req.params.id,
+          previousStatus: previousStatus || 'APPLIED',
+          newStatus: updateData.status,
+          changedBy: user.id,
+          changedByName: `${user.firstName} ${user.lastName}`,
+          reason: req.body.statusChangeReason || null
+        });
+        console.log(`[STATUS HISTORY] ${currentCandidate?.firstName} ${currentCandidate?.lastName}: ${previousStatus} → ${updateData.status} by ${user.email}`);
+      } catch (historyError) {
+        console.error('[STATUS HISTORY] Failed to log status change:', historyError);
+        // Don't fail the request, just log the error
+      }
+    }
 
     // Trigger workflows if the status has changed
     if (updateData.status && updateData.status !== previousStatus && previousStatus) {
@@ -3796,6 +3826,16 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
+    // Validate candidate is in OFFER status before hiring
+    // This ensures proper pipeline tracking for recruiter compensation
+    if (candidate.status !== 'OFFER') {
+      return res.status(400).json({
+        error: 'Candidate must be in OFFER status before being hired. Please extend an offer first.',
+        currentStatus: candidate.status,
+        requiredStatus: 'OFFER'
+      });
+    }
+
     // Check if user already exists
     const existingUser = await storage.getUserByEmail(candidate.email);
     if (existingUser) {
@@ -3971,8 +4011,24 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     console.log(`[HIRE] Created ${onboardingTasks.length} onboarding tasks`);
 
     // Update candidate status to HIRED
+    const previousStatus = candidate.status;
     await storage.updateCandidate(candidateId, { status: 'HIRED' });
     console.log(`[HIRE] Updated candidate ${candidateId} status to HIRED`);
+
+    // Log status change to history for recruiter tracking
+    try {
+      await storage.createCandidateStatusHistory({
+        candidateId,
+        previousStatus: previousStatus || 'OFFER',
+        newStatus: 'HIRED',
+        changedBy: user.id,
+        changedByName: `${user.firstName} ${user.lastName}`,
+        reason: 'Hired via formal hire process'
+      });
+      console.log(`[HIRE] Logged status history: ${previousStatus} → HIRED`);
+    } catch (historyError) {
+      console.error('[HIRE] Failed to log status history:', historyError);
+    }
 
     // Send welcome email (async/non-blocking to prevent UI freeze)
     const emailTriggered = sendWelcomeEmail;

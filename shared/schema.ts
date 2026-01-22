@@ -391,6 +391,24 @@ export const insertCandidateNoteSchema = createInsertSchema(candidateNotes).omit
   createdAt: true,
 });
 
+// Candidate Status History - Audit trail for recruiter tracking and compliance
+export const candidateStatusHistory = pgTable('candidate_status_history', {
+  id: text('id').primaryKey(),
+  candidateId: text('candidate_id').notNull(),
+  previousStatus: text('previous_status').notNull(),
+  newStatus: text('new_status').notNull(),
+  changedBy: text('changed_by').notNull(), // User ID who made the change
+  changedByName: text('changed_by_name').notNull(), // Denormalized for quick lookup
+  reason: text('reason'), // Optional reason for the change
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const candidateStatusHistorySchema = createInsertSchema(candidateStatusHistory);
+export const insertCandidateStatusHistorySchema = createInsertSchema(candidateStatusHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Employee Notes (for HR/manager notes on employees)
 export const employeeNotes = pgTable('employee_notes', {
   id: text('id').primaryKey(),
