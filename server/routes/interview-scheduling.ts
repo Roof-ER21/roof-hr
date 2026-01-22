@@ -192,12 +192,42 @@ router.post('/interviews/generate-meeting-link', requireAuth, checkRole([...ADMI
   }
 });
 
-// Get interviews by candidate
+// Get interviews by candidate (with interviewer names)
 router.get('/interviews/candidate/:candidateId', requireAuth, async (req, res) => {
   try {
     const { candidateId } = req.params;
     const interviews = await storage.getInterviewsByCandidate(candidateId);
-    res.json(interviews);
+
+    // Enrich interviews with interviewer names
+    const allUsers = await storage.getAllUsers();
+    const userMap = new Map(allUsers.map(u => [u.id, `${u.firstName} ${u.lastName}`]));
+
+    const enrichedInterviews = await Promise.all(interviews.map(async (interview) => {
+      // Get main interviewer name
+      let interviewerName = interview.customInterviewerName || null;
+      if (!interviewerName && interview.interviewerId) {
+        interviewerName = userMap.get(interview.interviewerId) || null;
+      }
+
+      // Get panel members if this is a panel interview
+      let panelMembers: { userId: string; name: string; role: string }[] = [];
+      if (interview.type === 'PANEL') {
+        const members = await storage.getInterviewPanelMembersByInterview(interview.id);
+        panelMembers = members.map(m => ({
+          userId: m.userId,
+          name: userMap.get(m.userId) || 'Unknown',
+          role: m.role
+        }));
+      }
+
+      return {
+        ...interview,
+        interviewerName,
+        panelMembers
+      };
+    }));
+
+    res.json(enrichedInterviews);
   } catch (error) {
     console.error('Error fetching candidate interviews:', error);
     res.status(500).json({ error: 'Failed to fetch candidate interviews' });

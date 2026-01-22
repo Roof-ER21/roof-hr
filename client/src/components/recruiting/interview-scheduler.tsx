@@ -1223,6 +1223,16 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                       <CardContent>
                         <div className="text-sm space-y-1">
                           <p>Duration: {interview.duration} minutes</p>
+                          {interview.interviewerName && (
+                            <p className="flex items-center gap-1">
+                              <User className="h-3 w-3" /> Interviewer: {interview.interviewerName}
+                            </p>
+                          )}
+                          {interview.panelMembers && interview.panelMembers.length > 0 && (
+                            <p className="flex items-center gap-1">
+                              <Users className="h-3 w-3" /> Panel: {interview.panelMembers.map((m: any) => m.name).join(', ')}
+                            </p>
+                          )}
                           {interview.location && <p>Location: {interview.location}</p>}
                           {interview.meetingLink && (
                             <p>Meeting Link: <a href={interview.meetingLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Join</a></p>

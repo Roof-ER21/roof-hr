@@ -943,6 +943,18 @@ export function CandidateDetailsDialog({
                                 <div className="text-sm text-muted-foreground">
                                   {format(new Date(interview.scheduledDate), 'PPP p')} ET • {interview.duration} min
                                 </div>
+                                {/* Interviewer info */}
+                                {interview.interviewerName && (
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <User className="h-3 w-3" /> Interviewer: {interview.interviewerName}
+                                  </div>
+                                )}
+                                {/* Panel members for panel interviews */}
+                                {interview.panelMembers && interview.panelMembers.length > 0 && (
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Users className="h-3 w-3" /> Panel: {interview.panelMembers.map((m: any) => m.name).join(', ')}
+                                  </div>
+                                )}
                                 {interview.location && (
                                   <div className="text-xs text-muted-foreground flex items-center gap-1">
                                     <MapPin className="h-3 w-3" /> {interview.location}
