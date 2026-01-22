@@ -44,17 +44,13 @@ export interface DashboardStats {
 }
 
 // Active candidate statuses (not rejected, hired, or dead)
+// IMPORTANT: These must match the actual database schema values:
+// 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW'
 const ACTIVE_CANDIDATE_STATUSES = [
-  'NEW',
+  'APPLIED',
   'SCREENING',
-  'PHONE_SCREEN',
   'INTERVIEW',
-  'INTERVIEW_SCHEDULED',
-  'SECOND_INTERVIEW',
-  'OFFER_PENDING',
-  'OFFER_SENT',
-  'REFERENCE_CHECK',
-  'BACKGROUND_CHECK'
+  'OFFER'
 ];
 
 // Inactive/terminal candidate statuses
@@ -63,8 +59,7 @@ const INACTIVE_CANDIDATE_STATUSES = [
   'HIRED',
   'DEAD_BY_US',
   'DEAD_BY_CANDIDATE',
-  'WITHDRAWN',
-  'OFFER_DECLINED'
+  'NO_SHOW'
 ];
 
 export async function getDashboardStats(): Promise<DashboardStats> {
@@ -111,14 +106,14 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Candidate stats - use consistent status filter
   const activeCandidates = candidates.filter(c =>
-    ACTIVE_CANDIDATE_STATUSES.includes(c.status || 'NEW')
+    ACTIVE_CANDIDATE_STATUSES.includes(c.status || 'APPLIED')
   );
 
   const candidatesByStatus: Record<string, number> = {};
   const candidatesByStage: Record<string, number> = {};
 
   candidates.forEach(c => {
-    const status = c.status || 'NEW';
+    const status = c.status || 'APPLIED';
     candidatesByStatus[status] = (candidatesByStatus[status] || 0) + 1;
 
     const stage = c.stage || 'Applied';

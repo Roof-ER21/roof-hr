@@ -221,7 +221,7 @@ router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) =
     const offer = filteredCandidates.filter((c: any) => c.status === 'OFFER').length;
     const hired = filteredCandidates.filter((c: any) => c.status === 'HIRED').length;
     const deadByUs = filteredCandidates.filter((c: any) => c.status === 'DEAD_BY_US' || c.status === 'REJECTED').length;
-    const deadByCandidate = filteredCandidates.filter((c: any) => c.status === 'DEAD_BY_CANDIDATE' || c.status === 'WITHDRAWN').length;
+    const deadByCandidate = filteredCandidates.filter((c: any) => c.status === 'DEAD_BY_CANDIDATE').length;
 
     // Calculate conversion rates
     const screeningConversion = applied > 0 ? Math.round((screening / applied) * 100) : 0;
@@ -959,10 +959,12 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
     }
 
     // Calculate PIPELINE data
+    // Note: Only using statuses that exist in the database schema:
+    // 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW'
     const stages = {
-      applied: filteredCandidates.filter((c: any) => c.status === 'APPLIED' || c.status === 'NEW').length,
+      applied: filteredCandidates.filter((c: any) => c.status === 'APPLIED').length,
       screening: filteredCandidates.filter((c: any) => c.status === 'SCREENING').length,
-      interview: filteredCandidates.filter((c: any) => c.status === 'INTERVIEW' || c.status === 'INTERVIEWED').length,
+      interview: filteredCandidates.filter((c: any) => c.status === 'INTERVIEW').length,
       offer: filteredCandidates.filter((c: any) => c.status === 'OFFER').length,
       hired: filteredCandidates.filter((c: any) => c.status === 'HIRED').length,
     };
@@ -980,10 +982,10 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
     });
     const interviewStats = {
       total: filteredInterviews.length,
-      completed: filteredInterviews.filter((i: any) => i.status === 'completed').length,
-      scheduled: filteredInterviews.filter((i: any) => i.status === 'scheduled').length,
-      cancelled: filteredInterviews.filter((i: any) => i.status === 'cancelled').length,
-      noShow: filteredInterviews.filter((i: any) => i.status === 'no_show').length,
+      completed: filteredInterviews.filter((i: any) => i.status === 'COMPLETED').length,
+      scheduled: filteredInterviews.filter((i: any) => i.status === 'SCHEDULED').length,
+      cancelled: filteredInterviews.filter((i: any) => i.status === 'CANCELLED').length,
+      noShow: filteredInterviews.filter((i: any) => i.status === 'NO_SHOW').length,
     };
 
     // Calculate TEAM PERFORMANCE (assignee breakdown)

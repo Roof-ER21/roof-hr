@@ -4976,7 +4976,13 @@ router.get('/api/dashboard/metrics', requireAuth, async (req, res) => {
     const metrics = {
       activeEmployees: users.filter(u => u.isActive).length,
       pendingPTO: ptoRequests.filter(p => p.status === 'PENDING').length,
-      activeCandidates: candidates.filter(c => c.status !== 'REJECTED' && c.status !== 'HIRED').length,
+      activeCandidates: candidates.filter(c =>
+        c.status !== 'REJECTED' &&
+        c.status !== 'HIRED' &&
+        c.status !== 'DEAD_BY_US' &&
+        c.status !== 'DEAD_BY_CANDIDATE' &&
+        c.status !== 'NO_SHOW'
+      ).length,
       totalDocuments: 0,
       pendingReviews: 0,
     };
