@@ -3380,32 +3380,8 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
       updateData.interviewScreeningDate = new Date(updateData.interviewScreeningDate);
     }
 
-    // Validate OFFER status transition - require completed interview questions
-    if (updateData.status === 'OFFER' && currentCandidate?.status !== 'OFFER') {
-      const candidateNotes = await storage.getCandidateNotes(req.params.id);
-      const hasCompletedInterview = candidateNotes.some((note: any) =>
-        note.type === 'INTERVIEW' &&
-        note.content?.includes('=== STRUCTURED INTERVIEW ===')
-      );
-
-      if (!hasCompletedInterview) {
-        return res.status(400).json({
-          error: 'Interview questions must be completed before moving to Offer Extended. Please complete the interview process first.'
-        });
-      }
-    }
-
-    // Validate HIRED status transition - require candidate to be in OFFER status first
-    // This ensures proper pipeline tracking for recruiter compensation
-    if (updateData.status === 'HIRED' && currentCandidate?.status !== 'HIRED') {
-      if (currentCandidate?.status !== 'OFFER') {
-        return res.status(400).json({
-          error: 'Candidate must be in OFFER status before being marked as HIRED. Please extend an offer first.',
-          currentStatus: currentCandidate?.status,
-          requiredStatus: 'OFFER'
-        });
-      }
-    }
+    // Note: OFFER and HIRED status validations removed to allow flexible workflow
+    // Status history is still tracked for analytics purposes
 
     const candidate = await storage.updateCandidate(req.params.id, updateData);
 
@@ -3554,20 +3530,7 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
       return res.status(403).json({ error: errorMsg });
     }
 
-    // Validate OFFER status transition - require completed interview questions
-    if (newStatus === 'OFFER' && candidate.status !== 'OFFER') {
-      const candidateNotes = await storage.getCandidateNotes(candidateId);
-      const hasCompletedInterview = candidateNotes.some((note: any) =>
-        note.type === 'INTERVIEW' &&
-        note.content?.includes('=== STRUCTURED INTERVIEW ===')
-      );
-
-      if (!hasCompletedInterview) {
-        return res.status(400).json({
-          error: 'Interview questions must be completed before moving to Offer Extended. Please complete the interview process first.'
-        });
-      }
-    }
+    // Note: OFFER validation removed to allow flexible workflow
 
     // Update the candidate
     const previousStatus = candidate.status;
@@ -3826,15 +3789,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    // Validate candidate is in OFFER status before hiring
-    // This ensures proper pipeline tracking for recruiter compensation
-    if (candidate.status !== 'OFFER') {
-      return res.status(400).json({
-        error: 'Candidate must be in OFFER status before being hired. Please extend an offer first.',
-        currentStatus: candidate.status,
-        requiredStatus: 'OFFER'
-      });
-    }
+    // Note: OFFER status validation removed to allow flexible hiring workflow
+    // Status history is still tracked for analytics purposes
 
     // Check if user already exists
     const existingUser = await storage.getUserByEmail(candidate.email);
