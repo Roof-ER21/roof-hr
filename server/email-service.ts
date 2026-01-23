@@ -315,17 +315,28 @@ class EmailService {
 
         return true;
       } catch (impersonationError: any) {
+        const errorMessage = impersonationError?.message || 'Unknown impersonation error';
         console.error('[Email] ❌ Service account impersonation failed:', {
           fromUser: senderEmail,
           to: config.to,
           subject: config.subject,
           errorType: impersonationError?.constructor?.name,
-          errorMessage: impersonationError?.message,
+          errorMessage,
           errorCode: impersonationError?.code,
           errorDetails: impersonationError?.errors || impersonationError?.response?.data,
         });
         console.error('[Email] Full impersonation error stack:', impersonationError?.stack);
         console.warn('[Email] ⚠️ Falling back to default nodemailer transporter...');
+        // Track the service account failure for debugging
+        if (emailLogId) {
+          try {
+            await storage.updateEmailLog(emailLogId, {
+              errorMessage: `Service account failed: ${errorMessage} - trying nodemailer fallback`,
+            });
+          } catch (logError) {
+            console.error('[Email] Failed to update email log with impersonation error:', logError);
+          }
+        }
         // Fall through to default transporter
       }
     }
@@ -411,6 +422,17 @@ class EmailService {
             to: config.to,
             subject: config.subject,
           });
+          // Update log to reflect dev mode status (not actually sent)
+          if (emailLogId) {
+            try {
+              await storage.updateEmailLog(emailLogId, {
+                status: 'FAILED',
+                errorMessage: 'Development mode - email not actually sent (no Gmail credentials configured)',
+              });
+            } catch (logError) {
+              console.error('[Email] Failed to update email log for dev mode:', logError);
+            }
+          }
           // Return false in development mode so caller knows email wasn't sent
           return false;
         }
