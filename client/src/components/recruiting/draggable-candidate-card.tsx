@@ -78,6 +78,7 @@ interface Candidate {
   aiPotentialScore?: number;
   assignedTo?: string | null;
   isArchived?: boolean;
+  decisionType?: 'CANDIDATE_DECIDING' | 'COMPANY_DECIDING';
   sourcer?: {
     id: string;
     firstName: string;
@@ -199,6 +200,16 @@ export function DraggableCandidateCard({
           {candidate.status === 'DEAD_BY_CANDIDATE' && (
             <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 text-[9px] px-1 py-0 flex-shrink-0">
               By Candidate
+            </Badge>
+          )}
+          {candidate.status === 'OFFER' && candidate.decisionType === 'CANDIDATE_DECIDING' && (
+            <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-[9px] px-1 py-0 flex-shrink-0">
+              Candidate deciding
+            </Badge>
+          )}
+          {candidate.status === 'OFFER' && candidate.decisionType === 'COMPANY_DECIDING' && (
+            <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[9px] px-1 py-0 flex-shrink-0">
+              Company deciding
             </Badge>
           )}
         </div>

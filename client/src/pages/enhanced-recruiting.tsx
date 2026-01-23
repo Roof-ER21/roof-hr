@@ -47,6 +47,7 @@ import { InPersonInterviewScreening, type ScreeningData } from '@/components/rec
 import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-candidate-modal';
 import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
 import { OfferNotesDialog } from '@/components/recruiting/offer-notes-dialog';
+import { DecisionTypeDialog, type DecisionType } from '@/components/recruiting/decision-type-dialog';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
@@ -76,10 +77,10 @@ function DroppableColumn({ status, children, disabled = false }: { status: strin
 }
 
 const stages = {
-  APPLIED: { name: 'Called', next: 'SCREENING', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
-  SCREENING: { name: 'Phone Screening', next: 'INTERVIEW', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
-  INTERVIEW: { name: 'Interview Process', next: 'OFFER', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
-  OFFER: { name: 'Offer Extended', next: 'HIRED', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  SCREENING: { name: 'Phone Screening', next: 'APPLIED', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  APPLIED: { name: 'Called', next: 'INTERVIEW', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  INTERVIEW: { name: 'Interview Scheduled', next: 'OFFER', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
+  OFFER: { name: 'Decision Pending', next: 'HIRED', color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 font-semibold' },
   HIRED: { name: 'Hired', next: null, color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 font-semibold' },
   DEAD: { name: 'Dead', next: null, color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 font-semibold' },
   // Keep these for internal status but combine in display
@@ -89,7 +90,8 @@ const stages = {
 };
 
 // Display stages for Kanban view (combines DEAD_BY_US and DEAD_BY_CANDIDATE into one column)
-const kanbanStages = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD'] as const;
+// Order: Phone Screening (first contact) → Called → Interview Scheduled → Decision Pending → Hired → Dead
+const kanbanStages = ['SCREENING', 'APPLIED', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD'] as const;
 
 const positionTypes = [
   'Insurance Sales',
@@ -1059,9 +1061,13 @@ export default function EnhancedRecruiting() {
   const [selectedAssignedEmployee, setSelectedAssignedEmployee] = useState<string>('');
   const [showInterviewScreening, setShowInterviewScreening] = useState(false);
   const [candidateForInterviewScreening, setCandidateForInterviewScreening] = useState<{candidate: Candidate; nextStatus: string} | null>(null);
+  // Decision type dialog - shown first when moving to OFFER stage
+  const [showDecisionTypeDialog, setShowDecisionTypeDialog] = useState(false);
+  const [candidateForDecisionType, setCandidateForDecisionType] = useState<{candidate: Candidate; newStatus: string} | null>(null);
+  const [selectedDecisionType, setSelectedDecisionType] = useState<DecisionType | null>(null);
   // Offer notes dialog - requires notes when moving to OFFER stage
   const [showOfferNotesDialog, setShowOfferNotesDialog] = useState(false);
-  const [candidateForOfferNotes, setCandidateForOfferNotes] = useState<{candidate: Candidate; newStatus: string} | null>(null);
+  const [candidateForOfferNotes, setCandidateForOfferNotes] = useState<{candidate: Candidate; newStatus: string; decisionType?: DecisionType} | null>(null);
   const [isSubmittingOfferNotes, setIsSubmittingOfferNotes] = useState(false);
   const [isCandidateDialogOpen, setIsCandidateDialogOpen] = useState(false);
   const [isNewHireDialogOpen, setIsNewHireDialogOpen] = useState(false);
@@ -1800,13 +1806,13 @@ export default function EnhancedRecruiting() {
         // Continue anyway if check fails - server will validate
       }
 
-      // Interview completed - if moving to OFFER, show offer notes dialog
+      // Interview completed - if moving to OFFER, show decision type dialog first
       if (newStatus === 'OFFER') {
-        setCandidateForOfferNotes({
+        setCandidateForDecisionType({
           candidate: currentCandidate,
           newStatus: newStatus
         });
-        setShowOfferNotesDialog(true);
+        setShowDecisionTypeDialog(true);
         return;
       }
     }
@@ -2611,6 +2617,30 @@ export default function EnhancedRecruiting() {
         />
       )}
 
+      {/* Decision Type Dialog - shown first when moving to OFFER stage */}
+      {candidateForDecisionType && (
+        <DecisionTypeDialog
+          open={showDecisionTypeDialog}
+          onClose={() => {
+            setShowDecisionTypeDialog(false);
+            setCandidateForDecisionType(null);
+          }}
+          onSelect={(decisionType) => {
+            // After selecting decision type, show the offer notes dialog
+            setCandidateForOfferNotes({
+              candidate: candidateForDecisionType.candidate,
+              newStatus: candidateForDecisionType.newStatus,
+              decisionType: decisionType
+            });
+            setSelectedDecisionType(decisionType);
+            setShowDecisionTypeDialog(false);
+            setCandidateForDecisionType(null);
+            setShowOfferNotesDialog(true);
+          }}
+          candidateName={`${candidateForDecisionType.candidate.firstName} ${candidateForDecisionType.candidate.lastName}`}
+        />
+      )}
+
       {/* Offer Notes Dialog - requires notes when moving to offer stage */}
       {candidateForOfferNotes && (
         <OfferNotesDialog
@@ -2618,15 +2648,19 @@ export default function EnhancedRecruiting() {
           onClose={() => {
             setShowOfferNotesDialog(false);
             setCandidateForOfferNotes(null);
+            setSelectedDecisionType(null);
           }}
           onSubmit={async (notes, expectedDecisionDate) => {
             setIsSubmittingOfferNotes(true);
             try {
+              const decisionType = candidateForOfferNotes.decisionType;
+              const decisionLabel = decisionType === 'CANDIDATE_DECIDING' ? 'Candidate Deciding' : 'Company Deciding';
+
               // 1. Save the note to the candidate
               await apiRequest(`/api/candidates/${candidateForOfferNotes.candidate.id}/notes`, {
                 method: 'POST',
                 body: JSON.stringify({
-                  content: `[OFFER STATUS UPDATE]${expectedDecisionDate ? `\nExpected Decision: ${expectedDecisionDate}` : ''}\n\n${notes}`,
+                  content: `[DECISION PENDING - ${decisionLabel}]${expectedDecisionDate ? `\nExpected Decision: ${expectedDecisionDate}` : ''}\n\n${notes}`,
                   type: 'INTERNAL'
                 }),
               });
@@ -2634,19 +2668,23 @@ export default function EnhancedRecruiting() {
               // Invalidate notes cache so the notes section refreshes
               queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateForOfferNotes.candidate.id}/notes`] });
 
-              // 2. Update the candidate status
+              // 2. Update the candidate status and decisionType
               await updateCandidateMutation.mutateAsync({
                 id: candidateForOfferNotes.candidate.id,
-                data: { status: candidateForOfferNotes.newStatus as 'OFFER' }
+                data: {
+                  status: candidateForOfferNotes.newStatus as 'OFFER',
+                  decisionType: decisionType
+                }
               });
 
               toast({
-                title: 'Moved to Offer',
-                description: `${candidateForOfferNotes.candidate.firstName} has been moved to offer stage.`
+                title: 'Moved to Decision Pending',
+                description: `${candidateForOfferNotes.candidate.firstName} has been moved to Decision Pending (${decisionLabel}).`
               });
 
               setShowOfferNotesDialog(false);
               setCandidateForOfferNotes(null);
+              setSelectedDecisionType(null);
             } catch (error) {
               toast({
                 title: 'Error',
@@ -2660,6 +2698,7 @@ export default function EnhancedRecruiting() {
           candidateName={`${candidateForOfferNotes.candidate.firstName} ${candidateForOfferNotes.candidate.lastName}`}
           newStatus={candidateForOfferNotes.newStatus}
           isSubmitting={isSubmittingOfferNotes}
+          decisionType={candidateForOfferNotes.decisionType}
         />
       )}
 
@@ -2969,13 +3008,13 @@ export default function EnhancedRecruiting() {
             return;
           }
 
-          // 4. OFFER - require notes (already implemented)
+          // 4. OFFER - show decision type dialog first, then notes
           if (nextStatus === 'OFFER' && candidate.status !== 'OFFER') {
-            setCandidateForOfferNotes({
+            setCandidateForDecisionType({
               candidate: candidate,
               newStatus: nextStatus
             });
-            setShowOfferNotesDialog(true);
+            setShowDecisionTypeDialog(true);
             setShowCandidateDetails(false);
             return;
           }
