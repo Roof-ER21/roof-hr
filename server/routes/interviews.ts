@@ -95,6 +95,18 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
       });
     }
 
+    // Validate same-day scheduling has at least 1 hour notice
+    const scheduledDateTime = new Date(data.scheduledDate);
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+
+    if (scheduledDateTime < oneHourFromNow) {
+      return res.status(400).json({
+        error: 'Insufficient notice',
+        message: 'Interviews must be scheduled at least 1 hour in advance. Same-day interviews are allowed with at least 1 hour notice.'
+      });
+    }
+
     // Check interviewer availability if interviewerId is provided
     if (data.interviewerId && interviewer) {
       const scheduledDate = new Date(data.scheduledDate);
@@ -962,6 +974,197 @@ router.delete('/:id', requireAuth, requireManager, async (req, res) => {
   }
 });
 
+// Reschedule interview with notifications
+router.post('/:id/reschedule', requireAuth, async (req, res) => {
+  try {
+    const { interviewId, scheduledDate, duration, type, location, meetingLink, notes, interviewerId, sendCalendarInvite } = req.body;
+
+    // Get existing interview
+    const existingInterview = await storage.getInterviewById(req.params.id);
+    if (!existingInterview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+
+    // Validate same-day scheduling has at least 1 hour notice
+    const newScheduledDate = new Date(scheduledDate);
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+
+    if (newScheduledDate < oneHourFromNow) {
+      return res.status(400).json({
+        error: 'Insufficient notice',
+        message: 'Interviews must be scheduled at least 1 hour in advance'
+      });
+    }
+
+    // Store original date for notifications
+    const originalDate = existingInterview.scheduledDate;
+
+    // Update the interview
+    const updatedInterview = await storage.updateInterview(req.params.id, {
+      scheduledDate: newScheduledDate,
+      duration: duration || existingInterview.duration,
+      type: type || existingInterview.type,
+      location: location !== undefined ? location : existingInterview.location,
+      meetingLink: meetingLink !== undefined ? meetingLink : existingInterview.meetingLink,
+      notes: notes !== undefined ? notes : existingInterview.notes,
+      interviewerId: interviewerId || existingInterview.interviewerId,
+      status: 'SCHEDULED', // Reset to SCHEDULED (in case it was RESCHEDULED before)
+    });
+
+    // Get candidate and interviewer details for notifications
+    const candidate = await storage.getCandidateById(existingInterview.candidateId);
+    const interviewer = updatedInterview.interviewerId
+      ? await storage.getUserById(updatedInterview.interviewerId)
+      : null;
+
+    // Add a note about the reschedule
+    if (candidate) {
+      const originalDateStr = new Date(originalDate).toLocaleDateString('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+      const newDateStr = newScheduledDate.toLocaleDateString('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+
+      await storage.createCandidateNote({
+        candidateId: existingInterview.candidateId,
+        content: `Interview rescheduled from ${originalDateStr} to ${newDateStr}`,
+        type: 'INTERVIEW',
+        authorId: (req as any).user?.id || 'system'
+      });
+    }
+
+    // Update or recreate Google Calendar event
+    if (sendCalendarInvite !== false) {
+      try {
+        const GoogleCalendarService = (await import('../services/google-calendar-service')).default;
+        const calendarService = new GoogleCalendarService();
+
+        // Get interviewer's email for calendar
+        const interviewerEmail = interviewer?.email || (req as any).user?.email;
+
+        if (interviewerEmail) {
+          // Delete old event if exists
+          if (existingInterview.googleEventId) {
+            try {
+              await calendarService.initialize();
+              await calendarService.deleteEvent(existingInterview.googleEventId);
+              console.log('[RESCHEDULE] Old calendar event deleted');
+            } catch (deleteError) {
+              console.warn('[RESCHEDULE] Could not delete old calendar event:', deleteError);
+            }
+          }
+
+          // Create new calendar event
+          const endDateTime = new Date(newScheduledDate.getTime() + (duration || existingInterview.duration) * 60 * 1000);
+          const attendees = [candidate?.email, interviewerEmail].filter(Boolean) as string[];
+
+          const calendarEvent = await calendarService.createEventForUser(
+            interviewerEmail,
+            {
+              summary: `Interview: ${candidate?.firstName} ${candidate?.lastName} - ${candidate?.position || 'Interview'} (Rescheduled)`,
+              description: `Rescheduled Interview\n\nCandidate: ${candidate?.firstName} ${candidate?.lastName}\nPosition: ${candidate?.position || 'N/A'}\nType: ${type || existingInterview.type}\n${notes ? `Notes: ${notes}` : ''}`,
+              location: location || meetingLink || existingInterview.location || existingInterview.meetingLink,
+              startDateTime: newScheduledDate,
+              endDateTime,
+              attendees,
+              sendNotifications: true,
+            }
+          );
+
+          // Update interview with new Google Event ID
+          await storage.updateInterview(req.params.id, {
+            googleEventId: calendarEvent.id
+          });
+
+          console.log('[RESCHEDULE] New calendar event created:', calendarEvent.id);
+        }
+      } catch (calendarError) {
+        console.error('[RESCHEDULE] Calendar error:', calendarError);
+        // Don't fail the reschedule if calendar fails
+      }
+    }
+
+    // Send notification emails
+    try {
+      const { EmailService } = await import('../email-service');
+      const emailService = new EmailService();
+      await emailService.initialize();
+
+      // Send reschedule notification to candidate
+      if (candidate?.email) {
+        await emailService.sendEmail({
+          to: candidate.email,
+          subject: `Interview Rescheduled - ${candidate.position || 'Open Position'}`,
+          html: `
+            <p>Dear ${candidate.firstName},</p>
+            <p>Your interview has been rescheduled to a new date and time.</p>
+            <p><strong>New Interview Details:</strong></p>
+            <ul>
+              <li>Date: ${newScheduledDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}</li>
+              <li>Time: ${newScheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET</li>
+              <li>Type: ${type || existingInterview.type}</li>
+              ${(location || existingInterview.location) ? `<li>Location: ${location || existingInterview.location}</li>` : ''}
+              ${(meetingLink || existingInterview.meetingLink) ? `<li>Meeting Link: <a href="${meetingLink || existingInterview.meetingLink}">${meetingLink || existingInterview.meetingLink}</a></li>` : ''}
+            </ul>
+            <p>If you have any questions, please reply to this email.</p>
+            <p>Best regards,<br>The Roof Docs HR Team</p>
+          `,
+          candidateId: candidate.id,
+        });
+        console.log('[RESCHEDULE] Notification email sent to candidate:', candidate.email);
+      }
+
+      // Send notification to interviewer
+      if (interviewer?.email) {
+        await emailService.sendEmail({
+          to: interviewer.email,
+          subject: `Interview Rescheduled: ${candidate?.firstName} ${candidate?.lastName}`,
+          html: `
+            <p>Hi ${interviewer.firstName},</p>
+            <p>An interview has been rescheduled.</p>
+            <p><strong>Updated Interview Details:</strong></p>
+            <ul>
+              <li>Candidate: ${candidate?.firstName} ${candidate?.lastName}</li>
+              <li>Position: ${candidate?.position || 'N/A'}</li>
+              <li>Date: ${newScheduledDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}</li>
+              <li>Time: ${newScheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET</li>
+              <li>Duration: ${duration || existingInterview.duration} minutes</li>
+              ${(location || existingInterview.location) ? `<li>Location: ${location || existingInterview.location}</li>` : ''}
+              ${(meetingLink || existingInterview.meetingLink) ? `<li>Meeting Link: <a href="${meetingLink || existingInterview.meetingLink}">${meetingLink || existingInterview.meetingLink}</a></li>` : ''}
+            </ul>
+            <p>A calendar invite has been sent to your calendar.</p>
+          `,
+        });
+        console.log('[RESCHEDULE] Notification email sent to interviewer:', interviewer.email);
+      }
+    } catch (emailError) {
+      console.error('[RESCHEDULE] Email error:', emailError);
+      // Don't fail the reschedule if email fails
+    }
+
+    res.json({
+      success: true,
+      interview: updatedInterview,
+      message: 'Interview rescheduled successfully'
+    });
+  } catch (error) {
+    console.error('[RESCHEDULE INTERVIEW ERROR]', error);
+    res.status(500).json({ error: 'Failed to reschedule interview' });
+  }
+});
+
 // Get interviews for a specific candidate
 router.get('/candidate/:candidateId', requireAuth, async (req, res) => {
   try {
@@ -1216,6 +1419,18 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
     if (!interviewer && !data.customInterviewerName) {
       return res.status(400).json({
         error: 'Either interviewer or custom interviewer name is required'
+      });
+    }
+
+    // Validate same-day scheduling has at least 1 hour notice
+    const scheduledDateTime = new Date(data.scheduledDate);
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+
+    if (scheduledDateTime < oneHourFromNow) {
+      return res.status(400).json({
+        error: 'Insufficient notice',
+        message: 'Interviews must be scheduled at least 1 hour in advance. Same-day interviews are allowed with at least 1 hour notice.'
       });
     }
 

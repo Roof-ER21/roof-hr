@@ -13,7 +13,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle, UserX, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle, UserX, Loader2, RefreshCw } from 'lucide-react';
 import { MANAGER_ROLES, ADMIN_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 import { DialogFooter } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth';
@@ -78,6 +78,11 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const [statusDialogInterview, setStatusDialogInterview] = useState<any>(null);
   const [outcomeNotes, setOutcomeNotes] = useState('');
   const [notesError, setNotesError] = useState('');
+
+  // Reschedule state
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduleInterviewId, setRescheduleInterviewId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('schedule');
 
   // Office locations
   const officeLocations = {
@@ -431,6 +436,114 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     },
   });
 
+  // Reschedule interview mutation
+  const rescheduleMutation = useMutation({
+    mutationFn: async (data: {
+      interviewId: string;
+      scheduledDate: string;
+      duration: number;
+      type: string;
+      location?: string;
+      meetingLink?: string;
+      notes?: string;
+      interviewerId?: string;
+      sendCalendarInvite?: boolean;
+    }) => {
+      return await apiRequest(`/api/interviews/${data.interviewId}/reschedule`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/interviews/candidate/${candidateId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/interviews'] });
+      setIsRescheduling(false);
+      setRescheduleInterviewId(null);
+      setActiveTab('history');
+      resetForm();
+      toast({
+        title: 'Interview Rescheduled',
+        description: 'The interview has been rescheduled successfully',
+      });
+      onScheduled?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to reschedule interview',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Handler for starting reschedule flow
+  const handleReschedule = (interview: any) => {
+    // Pre-populate form with existing interview data
+    setSelectedDate(new Date(interview.scheduledDate));
+    const interviewDate = new Date(interview.scheduledDate);
+    setSelectedTime(`${interviewDate.getHours().toString().padStart(2, '0')}:${interviewDate.getMinutes().toString().padStart(2, '0')}`);
+    setInterviewType(interview.type || 'IN_PERSON');
+    setDuration(String(interview.duration || 60));
+    setLocation(interview.location || '');
+    setMeetingLink(interview.meetingLink || '');
+    setNotes(interview.notes || '');
+    if (interview.interviewerId) {
+      setSelectedInterviewer(interview.interviewerId);
+    }
+
+    // Set reschedule mode
+    setIsRescheduling(true);
+    setRescheduleInterviewId(interview.id);
+    setActiveTab('schedule');
+  };
+
+  // Handler for submitting reschedule
+  const handleSubmitReschedule = () => {
+    if (!selectedDate || !rescheduleInterviewId) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please select a new date and time',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
+
+    // Check for same-day with 1-hour minimum
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    if (scheduledDate < oneHourFromNow) {
+      toast({
+        title: 'Insufficient Notice',
+        description: 'Interviews must be scheduled at least 1 hour in advance',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    rescheduleMutation.mutate({
+      interviewId: rescheduleInterviewId,
+      scheduledDate: scheduledDate.toISOString(),
+      duration: parseInt(duration),
+      type: interviewType,
+      location: interviewType === 'IN_PERSON' ? location : undefined,
+      meetingLink: ['VIDEO', 'PHONE'].includes(interviewType) ? meetingLink : undefined,
+      notes,
+      interviewerId: selectedInterviewer || undefined,
+      sendCalendarInvite,
+    });
+  };
+
+  // Cancel reschedule mode
+  const handleCancelReschedule = () => {
+    setIsRescheduling(false);
+    setRescheduleInterviewId(null);
+    setActiveTab('history');
+    resetForm();
+  };
+
   // Handler for opening status dialog
   const handleOpenStatusDialog = (interview: any, type: 'COMPLETED' | 'CANCELLED') => {
     setStatusDialogInterview(interview);
@@ -505,6 +618,18 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
+
+    // Validate same-day interviews must be at least 1 hour in advance
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    if (scheduledDate < oneHourFromNow) {
+      toast({
+        title: 'Insufficient Notice',
+        description: 'Interviews must be scheduled at least 1 hour in advance',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     // Check if there are hard conflicts and not forcing
     const hardConflicts = conflicts.filter(c => c.severity === 'hard');
@@ -594,9 +719,11 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
   // The actual scheduler content (shared between controlled and uncontrolled modes)
   const schedulerContent = (
-    <Tabs defaultValue="schedule" className="mt-4">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="schedule">Schedule New</TabsTrigger>
+              <TabsTrigger value="schedule">
+                {isRescheduling ? 'Reschedule Interview' : 'Schedule New'}
+              </TabsTrigger>
               <TabsTrigger value="history">Interview History</TabsTrigger>
             </TabsList>
 
@@ -854,9 +981,11 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                     mode="single"
                     selected={selectedDate}
                     onSelect={setSelectedDate}
-                    disabled={(date) => 
-                      date < new Date() || date.getDay() === 0 || date.getDay() === 6
-                    }
+                    disabled={(date) => {
+                      const today = startOfDay(new Date());
+                      // Allow today (same-day interviews) but disable past days and weekends
+                      return date < today || date.getDay() === 0 || date.getDay() === 6;
+                    }}
                     className="rounded-md border"
                   />
                 </div>
@@ -875,7 +1004,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           : [];
 
                         // If we have availability-based slots, use them; otherwise use defaults (7 AM - 6 PM ET, 15-min increments)
-                        const timeSlots = availableSlots.length > 0 ? availableSlots : [
+                        let timeSlots = availableSlots.length > 0 ? availableSlots : [
                           '07:00', '07:15', '07:30', '07:45',
                           '08:00', '08:15', '08:30', '08:45',
                           '09:00', '09:15', '09:30', '09:45',
@@ -889,6 +1018,31 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           '17:00', '17:15', '17:30', '17:45',
                           '18:00'
                         ];
+
+                        // Filter out times less than 1 hour from now for same-day interviews
+                        if (selectedDate) {
+                          const now = new Date();
+                          const isToday = startOfDay(selectedDate).getTime() === startOfDay(now).getTime();
+
+                          if (isToday) {
+                            const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+                            const minHour = oneHourFromNow.getHours();
+                            const minMinutes = oneHourFromNow.getMinutes();
+
+                            timeSlots = timeSlots.filter(time => {
+                              const [hour, minutes] = time.split(':').map(Number);
+                              return hour > minHour || (hour === minHour && minutes >= minMinutes);
+                            });
+                          }
+                        }
+
+                        if (timeSlots.length === 0) {
+                          return (
+                            <SelectItem value="none" disabled>
+                              No available times (must be 1+ hour from now)
+                            </SelectItem>
+                          );
+                        }
 
                         return timeSlots.map(time => (
                           <SelectItem key={time} value={time}>{formatTime12Hour(time)} ET</SelectItem>
@@ -1158,39 +1312,59 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
               </div>
 
               <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setIsOpen(false)}>
-                  Cancel
-                </Button>
-                {showConflictOverride && conflicts.filter(c => c.severity === 'hard').length > 0 ? (
+                {isRescheduling ? (
                   <>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowConflictOverride(false);
-                        setSuggestedTimes([]);
-                      }}
-                    >
-                      Choose Different Time
+                    <Button variant="outline" onClick={handleCancelReschedule}>
+                      Cancel Reschedule
                     </Button>
                     <Button
-                      variant="destructive"
-                      onClick={() => handleSchedule(true)}
-                      disabled={scheduleMutation.isPending}
+                      onClick={handleSubmitReschedule}
+                      disabled={rescheduleMutation.isPending || isCheckingConflicts}
                     >
-                      {scheduleMutation.isPending ? 'Scheduling...' : 'Schedule Anyway'}
+                      {rescheduleMutation.isPending
+                        ? 'Rescheduling...'
+                        : isCheckingConflicts
+                        ? 'Checking Conflicts...'
+                        : 'Confirm Reschedule'}
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    onClick={() => handleSchedule()}
-                    disabled={scheduleMutation.isPending || isCheckingConflicts}
-                  >
-                    {scheduleMutation.isPending
-                      ? 'Scheduling...'
-                      : isCheckingConflicts
-                      ? 'Checking Conflicts...'
-                      : 'Schedule Interview'}
-                  </Button>
+                  <>
+                    <Button variant="outline" onClick={() => setIsOpen(false)}>
+                      Cancel
+                    </Button>
+                    {showConflictOverride && conflicts.filter(c => c.severity === 'hard').length > 0 ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowConflictOverride(false);
+                            setSuggestedTimes([]);
+                          }}
+                        >
+                          Choose Different Time
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleSchedule(true)}
+                          disabled={scheduleMutation.isPending}
+                        >
+                          {scheduleMutation.isPending ? 'Scheduling...' : 'Schedule Anyway'}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        onClick={() => handleSchedule()}
+                        disabled={scheduleMutation.isPending || isCheckingConflicts}
+                      >
+                        {scheduleMutation.isPending
+                          ? 'Scheduling...'
+                          : isCheckingConflicts
+                          ? 'Checking Conflicts...'
+                          : 'Schedule Interview'}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </TabsContent>
@@ -1254,6 +1428,16 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           {/* Action buttons for SCHEDULED interviews */}
                           {interview.status === 'SCHEDULED' && (
                             <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                onClick={() => handleReschedule(interview)}
+                                disabled={updateInterviewStatusMutation.isPending || rescheduleMutation.isPending}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Reschedule
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
