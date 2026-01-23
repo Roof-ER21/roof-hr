@@ -1770,18 +1770,48 @@ export default function EnhancedRecruiting() {
       return;
     }
 
-    // Check if moving to OFFER - show offer notes dialog
-    if (newStatus === 'OFFER' && currentCandidate.status !== 'OFFER') {
-      // Proceed directly to offer notes dialog (interview validation removed for flexible workflow)
-      setCandidateForOfferNotes({
-        candidate: currentCandidate,
-        newStatus: newStatus
-      });
-      setShowOfferNotesDialog(true);
-      return;
+    // Check if moving to OFFER or HIRED - require completed structured interview
+    if ((newStatus === 'OFFER' || newStatus === 'HIRED') &&
+        currentCandidate.status !== 'OFFER' && currentCandidate.status !== 'HIRED') {
+      // Verify interview questions have been completed
+      try {
+        const notesResponse = await fetch(`/api/candidates/${candidateId}/notes`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        if (notesResponse.ok) {
+          const notes = await notesResponse.json();
+          // Check for structured interview (supports both Insurance and Retail types)
+          const hasCompletedInterview = notes.some((note: any) =>
+            note.type === 'INTERVIEW' &&
+            note.content?.includes('=== STRUCTURED INTERVIEW')
+          );
+
+          if (!hasCompletedInterview) {
+            toast({
+              title: 'Interview Required',
+              description: 'Cannot move to Offer or Hired: You must complete the structured interview first. Click on the candidate and use "Start Interview" to record responses.',
+              variant: 'destructive'
+            });
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check interview completion:', error);
+        // Continue anyway if check fails - server will validate
+      }
+
+      // Interview completed - if moving to OFFER, show offer notes dialog
+      if (newStatus === 'OFFER') {
+        setCandidateForOfferNotes({
+          candidate: currentCandidate,
+          newStatus: newStatus
+        });
+        setShowOfferNotesDialog(true);
+        return;
+      }
     }
 
-    // Directly update status without questionnaire
+    // Directly update status
     updateCandidateMutation.mutate({
       id: candidateId,
       data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }

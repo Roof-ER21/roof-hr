@@ -3380,8 +3380,23 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
       updateData.interviewScreeningDate = new Date(updateData.interviewScreeningDate);
     }
 
-    // Note: OFFER and HIRED status validations removed to allow flexible workflow
-    // Status history is still tracked for analytics purposes
+    // Validate OFFER or HIRED status transition - require completed structured interview
+    if ((updateData.status === 'OFFER' || updateData.status === 'HIRED') &&
+        currentCandidate?.status !== 'OFFER' && currentCandidate?.status !== 'HIRED') {
+      const candidateNotes = await storage.getCandidateNotes(req.params.id);
+      // Check for structured interview note (supports both old and new format with type)
+      const hasCompletedInterview = candidateNotes.some((note: any) =>
+        note.type === 'INTERVIEW' &&
+        note.content?.includes('=== STRUCTURED INTERVIEW')
+      );
+
+      if (!hasCompletedInterview) {
+        return res.status(400).json({
+          error: 'Interview questions must be completed before moving to Offer or Hired. Please complete the structured interview first.',
+          action: 'complete_interview'
+        });
+      }
+    }
 
     const candidate = await storage.updateCandidate(req.params.id, updateData);
 
@@ -3530,7 +3545,21 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
       return res.status(403).json({ error: errorMsg });
     }
 
-    // Note: OFFER validation removed to allow flexible workflow
+    // Validate OFFER status transition - require completed structured interview
+    if (newStatus === 'OFFER' && candidate.status !== 'OFFER') {
+      const candidateNotes = await storage.getCandidateNotes(candidateId);
+      const hasCompletedInterview = candidateNotes.some((note: any) =>
+        note.type === 'INTERVIEW' &&
+        note.content?.includes('=== STRUCTURED INTERVIEW')
+      );
+
+      if (!hasCompletedInterview) {
+        return res.status(400).json({
+          error: 'Interview questions must be completed before moving to Offer. Please complete the structured interview first.',
+          action: 'complete_interview'
+        });
+      }
+    }
 
     // Update the candidate
     const previousStatus = candidate.status;
@@ -3789,8 +3818,19 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    // Note: OFFER status validation removed to allow flexible hiring workflow
-    // Status history is still tracked for analytics purposes
+    // Validate structured interview completion before hiring
+    const candidateNotes = await storage.getCandidateNotes(candidateId);
+    const hasCompletedInterview = candidateNotes.some((note: any) =>
+      note.type === 'INTERVIEW' &&
+      note.content?.includes('=== STRUCTURED INTERVIEW')
+    );
+
+    if (!hasCompletedInterview) {
+      return res.status(400).json({
+        error: 'Interview questions must be completed before hiring. Please complete the structured interview first.',
+        action: 'complete_interview'
+      });
+    }
 
     // Check if user already exists
     const existingUser = await storage.getUserByEmail(candidate.email);
