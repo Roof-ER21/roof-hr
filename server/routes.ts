@@ -3812,6 +3812,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     } = req.body;
 
     console.log(`[HIRE] Starting hire process for candidate ${candidateId}`);
+    console.log(`[HIRE] Email settings: sendWelcomeEmail=${sendWelcomeEmail}, welcomeEmailType=${welcomeEmailType}`);
 
     // Get candidate
     const candidate = await storage.getCandidateById(candidateId);
@@ -4068,7 +4069,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
           );
 
           if (emailSent) {
-            console.log(`[HIRE] Welcome email sent to ${candidateEmail}${emailSigningUrl ? ' with signing link' : ''}`);
+            console.log(`[HIRE] Welcome email (${emailType}) sent to ${candidateEmail}${emailSigningUrl ? ' with signing link' : ''}`);
           } else {
             console.error(`[HIRE] Failed to send welcome email to ${candidateEmail}`);
           }
