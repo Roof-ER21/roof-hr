@@ -16,7 +16,7 @@ import {
   User, Mail, Phone, Calendar, Users, ChevronRight, Pencil,
   Brain, FileText, CheckCircle, XCircle, Clock, AlertCircle,
   ClipboardList, Sparkles, TrendingUp, ShieldAlert, ExternalLink,
-  Loader2, Trash2, MessageSquare, FileQuestion, Video, MapPin, UserX, AtSign
+  Loader2, Trash2, MessageSquare, FileQuestion, Video, MapPin, UserX, AtSign, RefreshCw
 } from 'lucide-react';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -267,6 +267,12 @@ export function CandidateDetailsDialog({
   const [outcomeNotes, setOutcomeNotes] = useState('');
   const [notesError, setNotesError] = useState('');
 
+  // Reschedule state
+  const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
+  const [rescheduleInterview, setRescheduleInterview] = useState<any>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('09:00');
+
   // Fetch resume with authentication to bypass iframe auth issues
   useEffect(() => {
     if (!candidate?.resumeUrl || !isOpen) {
@@ -420,6 +426,97 @@ export function CandidateDetailsDialog({
       });
     },
   });
+
+  // Reschedule interview mutation
+  const rescheduleInterviewMutation = useMutation({
+    mutationFn: async ({ interviewId, scheduledDate, duration, type, location, meetingLink }: {
+      interviewId: string;
+      scheduledDate: string;
+      duration: number;
+      type: string;
+      location?: string;
+      meetingLink?: string;
+    }) => {
+      return await apiRequest(`/api/interviews/${interviewId}/reschedule`, {
+        method: 'POST',
+        body: JSON.stringify({ interviewId, scheduledDate, duration, type, location, meetingLink, sendCalendarInvite: true }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/interviews/candidate/${candidate?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/interviews'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidate?.id}/notes`] });
+
+      toast({
+        title: 'Interview Rescheduled',
+        description: 'The interview has been rescheduled. Notifications have been sent.',
+      });
+
+      setShowRescheduleDialog(false);
+      setRescheduleInterview(null);
+      setRescheduleDate('');
+      setRescheduleTime('09:00');
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to reschedule interview',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Handler for opening reschedule dialog
+  const handleOpenReschedule = (interview: any) => {
+    const interviewDate = new Date(interview.scheduledDate);
+    // Format date for input (YYYY-MM-DD)
+    const dateStr = interviewDate.toISOString().split('T')[0];
+    // Format time (HH:MM)
+    const timeStr = `${interviewDate.getHours().toString().padStart(2, '0')}:${interviewDate.getMinutes().toString().padStart(2, '0')}`;
+
+    setRescheduleInterview(interview);
+    setRescheduleDate(dateStr);
+    setRescheduleTime(timeStr);
+    setShowRescheduleDialog(true);
+  };
+
+  // Handler for submitting reschedule
+  const handleSubmitReschedule = () => {
+    if (!rescheduleDate || !rescheduleTime || !rescheduleInterview) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please select a date and time',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Combine date and time
+    const [year, month, day] = rescheduleDate.split('-').map(Number);
+    const [hours, minutes] = rescheduleTime.split(':').map(Number);
+    const scheduledDate = new Date(year, month - 1, day, hours, minutes);
+
+    // Validate 1 hour minimum
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    if (scheduledDate < oneHourFromNow) {
+      toast({
+        title: 'Insufficient Notice',
+        description: 'Interviews must be scheduled at least 1 hour in advance',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    rescheduleInterviewMutation.mutate({
+      interviewId: rescheduleInterview.id,
+      scheduledDate: scheduledDate.toISOString(),
+      duration: rescheduleInterview.duration,
+      type: rescheduleInterview.type,
+      location: rescheduleInterview.location,
+      meetingLink: rescheduleInterview.meetingLink,
+    });
+  };
 
   // Handler for opening status dialog
   const handleOpenStatusDialog = (interview: any, type: 'COMPLETED' | 'CANCELLED') => {
@@ -977,6 +1074,16 @@ export function CandidateDetailsDialog({
                                     <Button
                                       size="sm"
                                       variant="outline"
+                                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                      onClick={() => handleOpenReschedule(interview)}
+                                      disabled={rescheduleInterviewMutation.isPending}
+                                    >
+                                      <RefreshCw className="h-4 w-4 mr-1" />
+                                      Reschedule
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
                                       className="text-green-600 border-green-200 hover:bg-green-50"
                                       onClick={() => handleOpenStatusDialog(interview, 'COMPLETED')}
                                       disabled={updateInterviewStatusMutation.isPending}
@@ -1158,6 +1265,92 @@ export function CandidateDetailsDialog({
                 </>
               ) : (
                 <>Save</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Interview Dialog */}
+      <Dialog open={showRescheduleDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowRescheduleDialog(false);
+          setRescheduleInterview(null);
+          setRescheduleDate('');
+          setRescheduleTime('09:00');
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reschedule Interview</DialogTitle>
+            <DialogDescription>
+              Select a new date and time for this interview. The candidate and interviewer will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-date">Date</Label>
+              <input
+                type="date"
+                id="reschedule-date"
+                value={rescheduleDate}
+                onChange={(e) => setRescheduleDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-time">Time (ET)</Label>
+              <select
+                id="reschedule-time"
+                value={rescheduleTime}
+                onChange={(e) => setRescheduleTime(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              >
+                {[
+                  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30',
+                  '10:00', '10:30', '11:00', '11:30', '12:00', '12:30',
+                  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+                  '16:00', '16:30', '17:00', '17:30', '18:00'
+                ].map(time => {
+                  const [h, m] = time.split(':').map(Number);
+                  const period = h >= 12 ? 'PM' : 'AM';
+                  const hour12 = h % 12 || 12;
+                  return (
+                    <option key={time} value={time}>
+                      {hour12}:{m.toString().padStart(2, '0')} {period}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            {rescheduleInterview && (
+              <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-md">
+                <p><strong>Current:</strong> {format(new Date(rescheduleInterview.scheduledDate), 'PPP p')} ET</p>
+                <p><strong>Type:</strong> {rescheduleInterview.type}</p>
+                <p><strong>Duration:</strong> {rescheduleInterview.duration} minutes</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowRescheduleDialog(false)}
+              disabled={rescheduleInterviewMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitReschedule}
+              disabled={rescheduleInterviewMutation.isPending || !rescheduleDate || !rescheduleTime}
+            >
+              {rescheduleInterviewMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Rescheduling...
+                </>
+              ) : (
+                'Confirm Reschedule'
               )}
             </Button>
           </DialogFooter>
