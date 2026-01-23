@@ -1699,12 +1699,13 @@ export default function EnhancedRecruiting() {
   };
   
   // Helper function to get next status
+  // Flow: Phone Screening → Called → Interview Scheduled → Decision Pending → Hired
   const getNextStatus = (currentStatus: string): string | null => {
     const statusFlow: Record<string, string> = {
-      'APPLIED': 'SCREENING',
-      'SCREENING': 'INTERVIEW',
-      'INTERVIEW': 'OFFER',
-      'OFFER': 'HIRED'
+      'SCREENING': 'APPLIED',     // Phone Screening → Called
+      'APPLIED': 'INTERVIEW',     // Called → Interview Scheduled
+      'INTERVIEW': 'OFFER',       // Interview Scheduled → Decision Pending
+      'OFFER': 'HIRED'            // Decision Pending → Hired
     };
     return statusFlow[currentStatus] || null;
   };
@@ -1977,10 +1978,10 @@ export default function EnhancedRecruiting() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Statuses</SelectItem>
-                  <SelectItem value="APPLIED">Applied</SelectItem>
-                  <SelectItem value="SCREENING">Screening</SelectItem>
-                  <SelectItem value="INTERVIEW">Interview</SelectItem>
-                  <SelectItem value="OFFER">Offer</SelectItem>
+                  <SelectItem value="SCREENING">Phone Screening</SelectItem>
+                  <SelectItem value="APPLIED">Called</SelectItem>
+                  <SelectItem value="INTERVIEW">Interview Scheduled</SelectItem>
+                  <SelectItem value="OFFER">Decision Pending</SelectItem>
                   <SelectItem value="HIRED">Hired</SelectItem>
                   <SelectItem value="DEAD">Dead (All)</SelectItem>
                 </SelectContent>
@@ -2431,10 +2432,10 @@ export default function EnhancedRecruiting() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="APPLIED">Applied</SelectItem>
-                          <SelectItem value="SCREENING">Screening</SelectItem>
-                          <SelectItem value="INTERVIEW">Interview</SelectItem>
-                          <SelectItem value="OFFER">Offer</SelectItem>
+                          <SelectItem value="SCREENING">Phone Screening</SelectItem>
+                          <SelectItem value="APPLIED">Called</SelectItem>
+                          <SelectItem value="INTERVIEW">Interview Scheduled</SelectItem>
+                          <SelectItem value="OFFER">Decision Pending</SelectItem>
                           <SelectItem value="HIRED">Hired</SelectItem>
                           <SelectItem value="DEAD">Dead</SelectItem>
                         </SelectContent>
@@ -3622,10 +3623,10 @@ export default function EnhancedRecruiting() {
               <SelectValue placeholder="Move to..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="APPLIED">Called</SelectItem>
               <SelectItem value="SCREENING">Phone Screening</SelectItem>
-              <SelectItem value="INTERVIEW">Interview</SelectItem>
-              <SelectItem value="OFFER">Offer</SelectItem>
+              <SelectItem value="APPLIED">Called</SelectItem>
+              <SelectItem value="INTERVIEW">Interview Scheduled</SelectItem>
+              <SelectItem value="OFFER">Decision Pending</SelectItem>
               <SelectItem value="HIRED">Hired</SelectItem>
               <SelectItem value="DEAD_BY_US">Dead (By Us)</SelectItem>
               <SelectItem value="DEAD_BY_CANDIDATE">Dead (By Candidate)</SelectItem>

@@ -318,12 +318,13 @@ export default function RecruitingAnalytics() {
   };
 
   // Transform pipeline data for chart
+  // Order: Phone Screening → Called → Interview Scheduled → Decision Pending → Hired
   const pipelineChartData = pipeline?.stages
     ? [
-        { stage: 'Applied', count: pipeline.stages.applied.count, fill: COLORS[0] },
-        { stage: 'Screening', count: pipeline.stages.screening.count, fill: COLORS[1] },
-        { stage: 'Interview', count: pipeline.stages.interview.count, fill: COLORS[2] },
-        { stage: 'Offer', count: pipeline.stages.offer.count, fill: COLORS[3] },
+        { stage: 'Phone Screening', count: pipeline.stages.screening.count, fill: COLORS[0] },
+        { stage: 'Called', count: pipeline.stages.applied.count, fill: COLORS[1] },
+        { stage: 'Interview Scheduled', count: pipeline.stages.interview.count, fill: COLORS[2] },
+        { stage: 'Decision Pending', count: pipeline.stages.offer.count, fill: COLORS[3] },
         { stage: 'Hired', count: pipeline.stages.hired.count, fill: COLORS[4] },
       ]
     : [];

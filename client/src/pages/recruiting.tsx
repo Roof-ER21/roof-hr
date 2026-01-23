@@ -633,10 +633,10 @@ function Recruiting() {
                               </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="APPLIED">Applied</SelectItem>
-                              <SelectItem value="SCREENING">Screening</SelectItem>
-                              <SelectItem value="INTERVIEW">Interview</SelectItem>
-                              <SelectItem value="OFFER">Offer</SelectItem>
+                              <SelectItem value="SCREENING">Phone Screening</SelectItem>
+                              <SelectItem value="APPLIED">Called</SelectItem>
+                              <SelectItem value="INTERVIEW">Interview Scheduled</SelectItem>
+                              <SelectItem value="OFFER">Decision Pending</SelectItem>
                               {isManager && <SelectItem value="HIRED">Hired</SelectItem>}
                               <SelectItem value="REJECTED">Rejected</SelectItem>
                             </SelectContent>
