@@ -560,6 +560,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       assigned: number;
       hired: number;
       totalDays: number;
+      hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string }>;
     }>();
 
     // Count candidates by assignee (including unassigned)
@@ -567,7 +568,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       const assigneeId = c.assignedTo?.toString() || null;
 
       if (!assigneeMap.has(assigneeId)) {
-        assigneeMap.set(assigneeId, { assigned: 0, hired: 0, totalDays: 0 });
+        assigneeMap.set(assigneeId, { assigned: 0, hired: 0, totalDays: 0, hiredCandidates: [] });
       }
 
       const data = assigneeMap.get(assigneeId)!;
@@ -578,6 +579,13 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
         const applied = new Date(c.appliedDate || c.createdAt);
         const hired = new Date(c.updatedAt || c.createdAt);
         data.totalDays += Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
+        // Track hired candidate details
+        data.hiredCandidates.push({
+          id: c.id,
+          name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email,
+          position: c.position || 'Unknown Position',
+          hiredDate: c.updatedAt || c.createdAt,
+        });
       }
     });
 
@@ -591,6 +599,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       hiredCount: number;
       hireRate: number;
       avgDaysToHire: number;
+      hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string }>;
     }> = [];
 
     for (const [assigneeId, data] of assigneeMap.entries()) {
@@ -605,6 +614,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
           hiredCount: data.hired,
           hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100 * 10) / 10 : 0,
           avgDaysToHire: data.hired > 0 ? Math.round(data.totalDays / data.hired) : 0,
+          hiredCandidates: data.hiredCandidates.sort((a, b) => new Date(b.hiredDate).getTime() - new Date(a.hiredDate).getTime()),
         });
       } else {
         // Find user info
@@ -619,6 +629,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
             hiredCount: data.hired,
             hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100 * 10) / 10 : 0,
             avgDaysToHire: data.hired > 0 ? Math.round(data.totalDays / data.hired) : 0,
+            hiredCandidates: data.hiredCandidates.sort((a, b) => new Date(b.hiredDate).getTime() - new Date(a.hiredDate).getTime()),
           });
         } else {
           // User not found - still show their data
@@ -631,6 +642,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
             hiredCount: data.hired,
             hireRate: data.assigned > 0 ? Math.round((data.hired / data.assigned) * 100 * 10) / 10 : 0,
             avgDaysToHire: data.hired > 0 ? Math.round(data.totalDays / data.hired) : 0,
+            hiredCandidates: data.hiredCandidates.sort((a, b) => new Date(b.hiredDate).getTime() - new Date(a.hiredDate).getTime()),
           });
         }
       }

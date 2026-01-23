@@ -31,13 +31,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   LineChart,
   Line,
   Legend,
   LabelList,
+  Cell,
 } from 'recharts';
 import {
   Users,
@@ -57,6 +55,12 @@ import {
   Printer,
 } from 'lucide-react';
 import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -87,6 +91,11 @@ export default function RecruitingAnalytics() {
   const [selectedArchivedIds, setSelectedArchivedIds] = useState<string[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [showCandidateDetails, setShowCandidateDetails] = useState(false);
+  const [showHiredDialog, setShowHiredDialog] = useState(false);
+  const [selectedTeamMember, setSelectedTeamMember] = useState<{
+    name: string;
+    hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string }>;
+  } | null>(null);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -319,15 +328,6 @@ export default function RecruitingAnalytics() {
       ]
     : [];
 
-  // Transform assignee data for pie chart
-  const assigneeChartData = assignees?.recruiters?.map((r: any, idx: number) => ({
-    name: r.name || 'Unassigned',
-    value: r.candidatesAssigned,
-    percentage: assignees?.totals?.totalCandidates > 0
-      ? Math.round((r.candidatesAssigned / assignees.totals.totalCandidates) * 100)
-      : 0,
-    fill: COLORS[idx % COLORS.length],
-  })) || [];
 
   const MetricCard = ({
     title,
@@ -573,50 +573,73 @@ export default function RecruitingAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Assignee Breakdown */}
+        {/* Team Hires - Shows hired candidates per team member */}
         <Card>
           <CardHeader>
-            <CardTitle>Assignee Breakdown</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5" />
+              Team Hires
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {loadingAssignees ? (
-              <div className="h-[300px] flex items-center justify-center">
-                <Skeleton className="h-full w-full" />
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
               </div>
-            ) : assigneeChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={320}>
-                <PieChart>
-                  <Pie
-                    data={assigneeChartData}
-                    cx="35%"
-                    cy="50%"
-                    outerRadius={90}
-                    dataKey="value"
-                    nameKey="name"
-                  >
-                    {assigneeChartData.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [`${value} candidates`, name]}
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                  />
-                  <Legend
-                    layout="vertical"
-                    align="right"
-                    verticalAlign="middle"
-                    formatter={(value: string, entry: any) => {
-                      const item = assigneeChartData.find((d: any) => d.name === value);
-                      return `${value} (${item?.percentage || 0}%)`;
-                    }}
-                    wrapperStyle={{ fontSize: '12px', paddingLeft: '10px' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+            ) : recruiters?.recruiters?.length > 0 ? (
+              <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                {recruiters.recruiters
+                  .filter((r: any) => r.hiredCount > 0)
+                  .map((recruiter: any) => (
+                    <div
+                      key={recruiter.id}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedTeamMember({
+                          name: recruiter.name,
+                          hiredCandidates: recruiter.hiredCandidates || [],
+                        });
+                        setShowHiredDialog(true);
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                          <span className="text-green-700 font-bold text-lg">{recruiter.hiredCount}</span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{recruiter.name}</p>
+                          {recruiter.role && (
+                            <p className="text-xs text-muted-foreground">{recruiter.role.replace(/_/g, ' ')}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {recruiter.hireRate}% rate
+                        </Badge>
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  ))}
+                {recruiters.recruiters.filter((r: any) => r.hiredCount > 0).length === 0 && (
+                  <div className="py-8 text-center text-muted-foreground">
+                    <UserCheck className="mx-auto h-10 w-10 mb-3 opacity-50" />
+                    <p>No hires in this period</p>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                No assignee data available
+                No team data available
+              </div>
+            )}
+            {/* Total Hires Summary */}
+            {recruiters?.totals?.totalHired > 0 && (
+              <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Total Hires</span>
+                <span className="text-2xl font-bold text-green-600">{recruiters.totals.totalHired}</span>
               </div>
             )}
           </CardContent>
@@ -1068,6 +1091,50 @@ export default function RecruitingAnalytics() {
         isAnalyzing={false}
         isUpdating={false}
       />
+
+      {/* Hired Candidates Dialog */}
+      <Dialog open={showHiredDialog} onOpenChange={setShowHiredDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-green-600" />
+              Hired by {selectedTeamMember?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {selectedTeamMember?.hiredCandidates && selectedTeamMember.hiredCandidates.length > 0 ? (
+              selectedTeamMember.hiredCandidates.map((candidate) => (
+                <div
+                  key={candidate.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                >
+                  <div>
+                    <p className="font-medium">{candidate.name}</p>
+                    <p className="text-sm text-muted-foreground">{candidate.position}</p>
+                  </div>
+                  <div className="text-right">
+                    <Badge variant="default" className="bg-green-600">Hired</Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(candidate.hiredDate).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-8 text-center text-muted-foreground">
+                No hired candidates found
+              </div>
+            )}
+          </div>
+          {selectedTeamMember?.hiredCandidates && selectedTeamMember.hiredCandidates.length > 0 && (
+            <div className="pt-4 border-t text-center">
+              <p className="text-sm text-muted-foreground">
+                Total: <span className="font-bold text-green-600">{selectedTeamMember.hiredCandidates.length}</span> hired
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
