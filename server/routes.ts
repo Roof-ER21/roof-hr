@@ -3807,7 +3807,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       employmentType,
       shirtSize,
       welcomePackageId,
-      sendWelcomeEmail = true
+      sendWelcomeEmail = true,
+      welcomeEmailType = 'insurance'
     } = req.body;
 
     console.log(`[HIRE] Starting hire process for candidate ${candidateId}`);
@@ -4037,12 +4038,16 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       const senderEmail = user.email;
       const emailStartDate = new Date(startDate);
       const emailSigningUrl = equipmentSigningUrl; // Capture for async
+      const emailType = welcomeEmailType as 'insurance' | 'retail';
 
       (async () => {
         try {
           const { EmailService } = await import('./email-service');
           const emailService = new EmailService();
           await emailService.initialize();
+
+          // Retail emails don't include equipment checklist
+          const includeEquipmentChecklist = emailType !== 'retail';
 
           const emailSent = await emailService.sendWelcomeEmail(
             {
@@ -4055,9 +4060,10 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
             senderEmail,
             {
               startDate: emailStartDate,
-              includeAttachments: true,
-              includeEquipmentChecklist: true,
-              equipmentSigningUrl: emailSigningUrl,
+              includeAttachments: emailType !== 'retail', // Retail emails don't include attachments
+              includeEquipmentChecklist,
+              equipmentSigningUrl: includeEquipmentChecklist ? emailSigningUrl : undefined,
+              welcomeEmailType: emailType,
             }
           );
 

@@ -67,6 +67,7 @@ export interface HireData {
   shirtSize: string;
   welcomePackageId?: string;
   sendWelcomeEmail: boolean;
+  welcomeEmailType?: 'insurance' | 'retail';
 }
 
 interface HireCandidateModalProps {
@@ -106,6 +107,7 @@ export function HireCandidateModal({
   const [shirtSize, setShirtSize] = useState('L');
   const [welcomePackageId, setWelcomePackageId] = useState<string>('');
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
+  const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail'>('insurance');
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
   // Fetch bundles for welcome packages
@@ -132,6 +134,7 @@ export function HireCandidateModal({
       shirtSize,
       welcomePackageId: welcomePackageId || undefined,
       sendWelcomeEmail,
+      welcomeEmailType: sendWelcomeEmail ? welcomeEmailType : undefined,
     });
   };
 
@@ -332,6 +335,26 @@ export function HireCandidateModal({
                   Send welcome email with login credentials
                 </label>
               </div>
+
+              {sendWelcomeEmail && (
+                <div className="space-y-2 pl-6">
+                  <Label>Welcome Email Type</Label>
+                  <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail')}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="insurance">Insurance (Original)</SelectItem>
+                      <SelectItem value="retail">Retail</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500">
+                    {welcomeEmailType === 'insurance'
+                      ? 'Includes apps, training, HR portal, and equipment checklist'
+                      : 'Retail division training with Bruno - no equipment checklist'}
+                  </p>
+                </div>
+              )}
 
               <Collapsible open={showEmailPreview} onOpenChange={setShowEmailPreview}>
                 <CollapsibleTrigger className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800">
