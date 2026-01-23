@@ -2686,10 +2686,28 @@ export default function EnhancedRecruiting() {
               setShowOfferNotesDialog(false);
               setCandidateForOfferNotes(null);
               setSelectedDecisionType(null);
-            } catch (error) {
+            } catch (error: any) {
+              // Parse error message from API response
+              let errorMessage = 'Failed to update candidate status.';
+              try {
+                // Error message format: "400: {\"error\":\"message\"}"
+                const errorText = error?.message || '';
+                const jsonMatch = errorText.match(/\{.*\}/);
+                if (jsonMatch) {
+                  const parsed = JSON.parse(jsonMatch[0]);
+                  errorMessage = parsed.error || errorMessage;
+                }
+              } catch {
+                errorMessage = error?.message || errorMessage;
+              }
+
+              const isInterviewRequired = errorMessage.toLowerCase().includes('interview');
+
               toast({
-                title: 'Error',
-                description: 'Failed to update candidate status.',
+                title: isInterviewRequired ? 'Interview Required' : 'Error',
+                description: isInterviewRequired
+                  ? 'Complete the structured interview first. Click on the candidate and use "Start Interview" to record responses.'
+                  : errorMessage,
                 variant: 'destructive'
               });
             } finally {
