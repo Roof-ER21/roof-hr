@@ -3383,7 +3383,7 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
     // Validate OFFER or HIRED status transition - require completed structured interview
     if ((updateData.status === 'OFFER' || updateData.status === 'HIRED') &&
         currentCandidate?.status !== 'OFFER' && currentCandidate?.status !== 'HIRED') {
-      const candidateNotes = await storage.getCandidateNotes(req.params.id);
+      const candidateNotes = await storage.getCandidateNotesByCandidateId(req.params.id);
       // Check for structured interview note (supports both old and new format with type)
       const hasCompletedInterview = candidateNotes.some((note: any) =>
         note.type === 'INTERVIEW' &&
@@ -3547,7 +3547,7 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
 
     // Validate OFFER status transition - require completed structured interview
     if (newStatus === 'OFFER' && candidate.status !== 'OFFER') {
-      const candidateNotes = await storage.getCandidateNotes(candidateId);
+      const candidateNotes = await storage.getCandidateNotesByCandidateId(candidateId);
       const hasCompletedInterview = candidateNotes.some((note: any) =>
         note.type === 'INTERVIEW' &&
         note.content?.includes('=== STRUCTURED INTERVIEW')
@@ -3819,7 +3819,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     }
 
     // Validate structured interview completion before hiring
-    const candidateNotes = await storage.getCandidateNotes(candidateId);
+    const candidateNotes = await storage.getCandidateNotesByCandidateId(candidateId);
     const hasCompletedInterview = candidateNotes.some((note: any) =>
       note.type === 'INTERVIEW' &&
       note.content?.includes('=== STRUCTURED INTERVIEW')
@@ -4118,7 +4118,7 @@ router.get('/api/candidates/:candidateId/notes', requireAuth, async (req: any, r
       }
     }
 
-    const notes = await storage.getCandidateNotesByCandidateId(candidateId);
+    const notes = await storage.getCandidateNotesByCandidateIdByCandidateId(candidateId);
     res.json(notes);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch candidate notes' });
