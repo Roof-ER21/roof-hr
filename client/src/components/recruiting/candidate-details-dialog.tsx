@@ -272,6 +272,7 @@ export function CandidateDetailsDialog({
   const [rescheduleInterview, setRescheduleInterview] = useState<any>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('09:00');
+  const [rescheduleInterviewerId, setRescheduleInterviewerId] = useState('');
 
   // Fetch resume with authentication to bypass iframe auth issues
   useEffect(() => {
@@ -429,17 +430,18 @@ export function CandidateDetailsDialog({
 
   // Reschedule interview mutation
   const rescheduleInterviewMutation = useMutation({
-    mutationFn: async ({ interviewId, scheduledDate, duration, type, location, meetingLink }: {
+    mutationFn: async ({ interviewId, scheduledDate, duration, type, location, meetingLink, interviewerId }: {
       interviewId: string;
       scheduledDate: string;
       duration: number;
       type: string;
       location?: string;
       meetingLink?: string;
+      interviewerId?: string;
     }) => {
       return await apiRequest(`/api/interviews/${interviewId}/reschedule`, {
         method: 'POST',
-        body: JSON.stringify({ interviewId, scheduledDate, duration, type, location, meetingLink, sendCalendarInvite: true }),
+        body: JSON.stringify({ interviewId, scheduledDate, duration, type, location, meetingLink, interviewerId, sendCalendarInvite: true }),
       });
     },
     onSuccess: () => {
@@ -477,6 +479,7 @@ export function CandidateDetailsDialog({
     setRescheduleInterview(interview);
     setRescheduleDate(dateStr);
     setRescheduleTime(timeStr);
+    setRescheduleInterviewerId(interview.interviewerId || '');
     setShowRescheduleDialog(true);
   };
 
@@ -515,6 +518,7 @@ export function CandidateDetailsDialog({
       type: rescheduleInterview.type,
       location: rescheduleInterview.location,
       meetingLink: rescheduleInterview.meetingLink,
+      interviewerId: rescheduleInterviewerId || undefined,
     });
   };
 
@@ -1278,6 +1282,7 @@ export function CandidateDetailsDialog({
           setRescheduleInterview(null);
           setRescheduleDate('');
           setRescheduleTime('09:00');
+          setRescheduleInterviewerId('');
         }
       }}>
         <DialogContent className="max-w-md">
@@ -1324,11 +1329,30 @@ export function CandidateDetailsDialog({
                 })}
               </select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-interviewer">Interviewer</Label>
+              <select
+                id="reschedule-interviewer"
+                value={rescheduleInterviewerId}
+                onChange={(e) => setRescheduleInterviewerId(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              >
+                <option value="">Select interviewer...</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.firstName} {u.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
             {rescheduleInterview && (
               <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-md">
                 <p><strong>Current:</strong> {format(new Date(rescheduleInterview.scheduledDate), 'PPP p')} ET</p>
                 <p><strong>Type:</strong> {rescheduleInterview.type}</p>
                 <p><strong>Duration:</strong> {rescheduleInterview.duration} minutes</p>
+                {rescheduleInterview.interviewerId && (
+                  <p><strong>Current Interviewer:</strong> {users.find(u => u.id === rescheduleInterview.interviewerId)?.firstName} {users.find(u => u.id === rescheduleInterview.interviewerId)?.lastName}</p>
+                )}
               </div>
             )}
           </div>

@@ -4124,7 +4124,7 @@ router.get('/api/candidates/:candidateId/notes', requireAuth, async (req: any, r
       }
     }
 
-    const notes = await storage.getCandidateNotesByCandidateIdByCandidateId(candidateId);
+    const notes = await storage.getCandidateNotesByCandidateId(candidateId);
     res.json(notes);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch candidate notes' });
