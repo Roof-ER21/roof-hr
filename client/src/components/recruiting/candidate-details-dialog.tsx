@@ -21,6 +21,7 @@ import {
 import { DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { InterviewQuestionsDialog } from './interview-questions-dialog';
+import { MANAGER_ROLES, ADMIN_ROLES } from '@shared/constants/roles';
 
 interface CandidateNote {
   id: string;
@@ -333,10 +334,18 @@ export function CandidateDetailsDialog({
     enabled: !!candidate?.id && isOpen,
   });
 
-  // Fetch users for author names
-  const { data: users = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string }>>({
+  // Fetch users for author names and interviewer selection
+  const { data: users = [] } = useQuery<Array<{ id: string; firstName: string; lastName: string; role?: string }>>({
     queryKey: ['/api/users'],
     enabled: isOpen,
+  });
+
+  // Filter users to only show eligible interviewers (managers/admins) for reschedule dropdown
+  const eligibleInterviewers = users.filter((u) => {
+    const userRole = (u.role || '').toUpperCase();
+    const managerRolesUpper = MANAGER_ROLES.map(r => r.toUpperCase());
+    const adminRolesUpper = ADMIN_ROLES.map(r => r.toUpperCase());
+    return managerRolesUpper.includes(userRole) || adminRolesUpper.includes(userRole);
   });
 
   // Fetch interviews for the candidate
@@ -1338,7 +1347,7 @@ export function CandidateDetailsDialog({
                 className="w-full px-3 py-2 border rounded-md text-sm"
               >
                 <option value="">Select interviewer...</option>
-                {users.map((u) => (
+                {eligibleInterviewers.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.firstName} {u.lastName}
                   </option>
