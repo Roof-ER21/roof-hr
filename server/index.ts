@@ -146,6 +146,19 @@ async function runMigrations() {
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()`);
     logger.info('[Migration] ✅ employee_contracts columns aligned');
 
+    // One-time migration: Deactivate admin@theroofdocs.com (Jan 2026)
+    const deactivateResult = await db.execute(sql`
+      UPDATE users
+      SET "isActive" = false,
+          status = 'INACTIVE',
+          "updatedAt" = NOW()
+      WHERE email = 'admin@theroofdocs.com'
+        AND "isActive" = true
+    `);
+    if (deactivateResult.rowCount && deactivateResult.rowCount > 0) {
+      logger.info('[Migration] ✅ Deactivated admin@theroofdocs.com');
+    }
+
     logger.info('[Migration] All migrations completed successfully');
   } catch (error: any) {
     // If the column already exists, that's fine
