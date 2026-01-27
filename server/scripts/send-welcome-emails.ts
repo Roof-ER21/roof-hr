@@ -117,7 +117,7 @@ async function sendWelcomeEmails(productionUrl: string = 'https://your-app.repli
         to: recipient.email,
         subject: '🎉 Welcome to ROOF-ER HR System - Your Access is Ready!',
         html: emailContent,
-        from: '"ROOF-ER HR System" <admin@theroofdocs.com>'
+        from: '"ROOF-ER HR System" <careers@theroofdocs.com>'
       });
       
       console.log(`✅ Welcome email sent to ${recipient.name} (${recipient.email})`);

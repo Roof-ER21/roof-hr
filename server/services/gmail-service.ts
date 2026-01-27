@@ -56,7 +56,7 @@ class GmailService {
   }) {
     try {
       let gmailService = this.systemGmail;
-      let fromEmail = options.from || '"ROOF-ER HR System" <admin@theroofdocs.com>';
+      let fromEmail = options.from || '"ROOF-ER HR System" <careers@theroofdocs.com>';
       
       // If userEmail is provided and service account is configured, use impersonation
       if (options.userEmail && serviceAccountAuth.isConfigured()) {

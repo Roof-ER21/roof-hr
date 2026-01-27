@@ -38,9 +38,9 @@ export function getDepartment(position: string): string {
 }
 
 export const theRoofDocsEmployees: EmployeeData[] = [
-  // ===== ADMIN (7) =====
+  // ===== ADMIN (6) =====
   { firstName: 'Mike', lastName: 'Rafter', email: 'mike.rafter@theroofdocs.com', phone: '(703) 239-3769', position: 'Admin', department: 'Administration' },
-  { firstName: 'Mike', lastName: 'Harvey', email: 'admin@theroofdocs.com', phone: '(717) 476-8998', position: 'Admin', department: 'Administration' },
+  // Mike Harvey (admin@theroofdocs.com) - REMOVED: Email deactivated Jan 2026
   { firstName: 'Ford', lastName: 'Barsi', email: 'ford.barsi@theroofdocs.com', phone: '(240) 354-6718', position: 'Admin', department: 'Administration' },
   { firstName: 'Chris', lastName: 'Davis', email: 'developer@theroofdocs.com', phone: '(717) 451-2083', position: 'Admin', department: 'Administration' },
   { firstName: 'Oliver', lastName: 'Brown', email: 'oliver.brown@theroofdocs.com', phone: '(703) 375-9618', position: 'Admin', department: 'Administration' },
