@@ -2171,20 +2171,20 @@ export default function EnhancedRecruiting() {
                   return (
                   <DroppableColumn key={status} status={status} disabled={isDropDisabled}>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-medium text-gray-900 dark:text-white">
+                      <div className="flex items-center justify-between mb-3 gap-2">
+                        <h3 className="font-medium text-gray-900 dark:text-white truncate min-w-0 flex-1">
                           {stageName}
                         </h3>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-2 text-xs"
+                            className="h-6 px-2 text-xs hidden sm:inline-flex"
                             onClick={() => handleSelectAllInStage(status)}
                           >
                             Select All
                           </Button>
-                          <Badge className={stageColor}>
+                          <Badge className={`${stageColor} min-w-[24px] text-center`}>
                             {candidatesByStatus[status as keyof typeof candidatesByStatus]?.length || 0}
                           </Badge>
                         </div>
