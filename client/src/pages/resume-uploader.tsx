@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -192,11 +192,15 @@ export default function ResumeUploaderPage() {
     }
   });
 
-  // Set default territory to DMV when territories load
-  const dmvTerritory = territories?.find(t => t.name.includes('DMV'));
-  if (dmvTerritory && !selectedTerritory && showAssignmentDialog) {
-    setSelectedTerritory(dmvTerritory.id);
-  }
+  // Set default territory to DMV when dialog opens
+  useEffect(() => {
+    if (showAssignmentDialog && territories && territories.length > 0 && !selectedTerritory) {
+      const dmvTerritory = territories.find(t => t.name.includes('DMV'));
+      if (dmvTerritory) {
+        setSelectedTerritory(dmvTerritory.id);
+      }
+    }
+  }, [showAssignmentDialog, territories, selectedTerritory]);
 
   // Upload mutation
   const uploadMutation = useMutation({
