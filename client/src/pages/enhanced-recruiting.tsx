@@ -1112,6 +1112,7 @@ export default function EnhancedRecruiting() {
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [filterSourcer, setFilterSourcer] = useState<string>('ALL');
   const [filterReferral, setFilterReferral] = useState<string>('');
+  const [filterTerritory, setFilterTerritory] = useState<string>('ALL');
   const [filterDateType, setFilterDateType] = useState<'all' | 'specific' | 'range'>('all');
   const [filterDateSingle, setFilterDateSingle] = useState<Date | undefined>(undefined);
   const [filterDateStart, setFilterDateStart] = useState<Date | undefined>(undefined);
@@ -1345,6 +1346,22 @@ export default function EnhancedRecruiting() {
       });
       if (!response.ok) return [];
       return response.json();
+    },
+    enabled: canAssignCandidates(),
+  });
+
+  const { data: territories = [] } = useQuery<Territory[]>({
+    queryKey: ['/api/territories'],
+    queryFn: async () => {
+      const response = await fetch('/api/territories', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        credentials: 'include',
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.filter((t: Territory) => t.isActive);
     },
     enabled: canAssignCandidates(),
   });
@@ -1739,6 +1756,8 @@ export default function EnhancedRecruiting() {
       (filterStatus === 'DEAD' ? (candidate.status === 'DEAD_BY_US' || candidate.status === 'DEAD_BY_CANDIDATE' || candidate.status === 'NO_SHOW') : candidate.status === filterStatus);
     const matchesPosition = filterPosition === 'ALL' || candidate.position === filterPosition;
     const matchesSourcer = filterSourcer === 'ALL' || (candidate as any).assignedTo === filterSourcer;
+    const candidateTerritoryId = (candidate as any).territoryId || (candidate as any).territory?.id;
+    const matchesTerritory = filterTerritory === 'ALL' || candidateTerritoryId === filterTerritory;
     const matchesReferral = filterReferral === '' ||
       (candidate.referralName && candidate.referralName.toLowerCase().includes(filterReferral.toLowerCase()));
     const searchDigits = normalizeDigits(searchTerm);
@@ -1764,7 +1783,7 @@ export default function EnhancedRecruiting() {
       }) : false;
     }
 
-    return matchesFilter && matchesPosition && matchesSourcer && matchesReferral && matchesSearch && matchesDate;
+    return matchesFilter && matchesPosition && matchesSourcer && matchesTerritory && matchesReferral && matchesSearch && matchesDate;
   });
 
   const sortedCandidates = [...filteredCandidates].sort((a, b) => (
@@ -2102,6 +2121,31 @@ export default function EnhancedRecruiting() {
                   </SelectContent>
                 </Select>
               )}
+              {/* Territory filter */}
+              <Select value={filterTerritory} onValueChange={setFilterTerritory}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by territory" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Territories</SelectItem>
+                  {territories.map((territory) => {
+                    const colors = TERRITORY_COLORS[territory.name] || { bg: 'bg-gray-100', text: 'text-gray-700', short: territory.name };
+                    const colorHex = territory.name.includes('DMV') ? '#3B82F6' : territory.name.includes('PA') ? '#22C55E' : '#A855F7';
+                    return (
+                      <SelectItem key={territory.id} value={territory.id}>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: colorHex }}
+                          />
+                          <span>{colors.short || territory.name}</span>
+                          <span className="text-muted-foreground text-xs">({territory.region})</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
               {/* Referral filter */}
               <Input
                 placeholder="Filter by referral..."

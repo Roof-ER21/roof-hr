@@ -661,6 +661,25 @@ export function CandidateDetailsDialog({
   const screeningData = parseScreeningData(candidate?.interviewScreeningData);
 
   const assignedEmployee = availableEmployees.find((e) => e.id === candidate?.assignedTo);
+  const territory = candidate?.territory;
+  const territoryName = territory?.name;
+  const territoryRegion = territory?.region;
+  const territoryShort = territoryName?.includes('DMV')
+    ? 'DMV'
+    : territoryName?.includes('PA')
+    ? 'PA'
+    : territoryName?.includes('Richmond')
+    ? 'RA'
+    : territoryName;
+  const territoryBadgeClass = territoryName
+    ? territoryName.includes('DMV')
+      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+      : territoryName.includes('PA')
+        ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+        : territoryName.includes('Richmond')
+          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+    : '';
 
   if (!candidate) return null;
 
@@ -808,6 +827,23 @@ export function CandidateDetailsDialog({
                               <User className="h-3 w-3" /> Referred By
                             </span>
                             <span className="font-medium">{candidate.referralName}</span>
+                          </div>
+                        )}
+                        {territoryName && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <MapPin className="h-3 w-3" /> Territory
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Badge className={`text-xs ${territoryBadgeClass}`}>
+                                {territoryShort}
+                              </Badge>
+                              {territoryRegion && (
+                                <span className="text-xs text-muted-foreground">
+                                  {territoryRegion}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
