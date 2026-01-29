@@ -1,5 +1,5 @@
-# Use Node.js 20 via .nvmrc/.node-version detection
-# Don't specify nixPkgs - let nixpacks auto-detect from .node-version file
+[variables]
+NIXPACKS_NODE_VERSION = "20"
 
 [phases.install]
 cmds = ["npm ci"]
