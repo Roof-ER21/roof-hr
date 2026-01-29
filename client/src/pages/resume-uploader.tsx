@@ -690,39 +690,6 @@ export default function ResumeUploaderPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Territory Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="territory">Territory</Label>
-              <Select
-                value={selectedTerritory}
-                onValueChange={setSelectedTerritory}
-                disabled={isAssigning}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select territory..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {territories?.map((territory) => {
-                    const colors = TERRITORY_COLORS[territory.name] || { bg: 'bg-gray-100', text: 'text-gray-700', short: territory.name };
-                    const colorHex = territory.name.includes('DMV') ? '#3B82F6' : territory.name.includes('PA') ? '#22C55E' : '#A855F7';
-                    return (
-                      <SelectItem key={territory.id} value={territory.id}>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-2 h-2 rounded-full"
-                                style={{ backgroundColor: colorHex }} />
-                          <span>{colors.short || territory.name}</span>
-                          <span className="text-muted-foreground text-xs">({territory.region})</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                DMV is selected by default. Change if candidate is for another territory.
-              </p>
-            </div>
-
             {/* Referral Name Input */}
             <div className="space-y-2">
               <Label htmlFor="referral-name">Referred By (optional)</Label>
@@ -832,6 +799,39 @@ export default function ResumeUploaderPage() {
               </Popover>
               <p className="text-xs text-muted-foreground">
                 jobs@ and sima@ appear first. Type to search by name or email.
+              </p>
+            </div>
+
+            {/* Territory Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="territory">Territory (optional)</Label>
+              <Select
+                value={selectedTerritory}
+                onValueChange={setSelectedTerritory}
+                disabled={isAssigning}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select territory..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {territories?.map((territory) => {
+                    const colors = TERRITORY_COLORS[territory.name] || { bg: 'bg-gray-100', text: 'text-gray-700', short: territory.name };
+                    const colorHex = territory.name.includes('DMV') ? '#3B82F6' : territory.name.includes('PA') ? '#22C55E' : '#A855F7';
+                    return (
+                      <SelectItem key={territory.id} value={territory.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block w-2 h-2 rounded-full"
+                                style={{ backgroundColor: colorHex }} />
+                          <span>{colors.short || territory.name}</span>
+                          <span className="text-muted-foreground text-xs">({territory.region})</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                DMV is selected by default. Change if candidate is for another territory.
               </p>
             </div>
           </div>
