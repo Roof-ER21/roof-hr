@@ -1,8 +1,8 @@
-[phases.setup]
-nixPkgs = ["nodejs-20_x", "npm-9_x"]
+# Use Node.js 20 via .nvmrc/.node-version detection
+# Don't specify nixPkgs - let nixpacks auto-detect from .node-version file
 
 [phases.install]
-cmds = ["rm -rf node_modules/.cache 2>/dev/null || true", "npm ci"]
+cmds = ["npm ci"]
 
 [phases.build]
 cmds = ["npm run build"]
