@@ -109,7 +109,24 @@ export function serveStatic(app: Express) {
     console.error(`[Static] Error reading directory:`, e);
   }
 
-  app.use(express.static(servePath));
+  // Serve static files with appropriate cache headers
+  app.use(express.static(servePath, {
+    maxAge: 0, // Don't cache index.html
+    setHeaders: (res, path) => {
+      // Cache assets (JS/CSS) for 1 year since they have content hashes
+      if (path.endsWith('.js') || path.endsWith('.css')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (path.endsWith('.html')) {
+        // Never cache HTML files
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else {
+        // Cache other assets (images, fonts) for 1 day
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
+    }
+  }));
 
   // SPA fallback: serve index.html for ALL non-API GET requests
   // This must come AFTER express.static so actual files are served first
@@ -126,6 +143,11 @@ export function serveStatic(app: Express) {
 
     // Log SPA fallback for debugging
     console.log(`[Static] SPA fallback: ${req.path} -> index.html`);
+
+    // Set no-cache headers for SPA fallback
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     // Serve index.html for all other routes (SPA routing)
     res.sendFile(path.resolve(servePath, "index.html"));
