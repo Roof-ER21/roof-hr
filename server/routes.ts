@@ -3274,10 +3274,25 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
       }
     }
 
-    // Enrich candidates with cached sourcer data (no additional DB calls)
+    // Build a map of territory info (one query for all)
+    const territoryMap = new Map<string, any>();
+    const territoryIds = [...new Set(candidates.map((c: any) => c.territoryId).filter(Boolean))];
+    if (territoryIds.length > 0) {
+      const allTerritories = await storage.getAllTerritories();
+      for (const territory of allTerritories) {
+        territoryMap.set(territory.id, {
+          id: territory.id,
+          name: territory.name,
+          region: territory.region
+        });
+      }
+    }
+
+    // Enrich candidates with cached sourcer and territory data (no additional DB calls)
     const enriched = candidates.map((c: any) => ({
       ...c,
-      sourcer: c.assignedTo ? sourcerMap.get(c.assignedTo) || null : null
+      sourcer: c.assignedTo ? sourcerMap.get(c.assignedTo) || null : null,
+      territory: c.territoryId ? territoryMap.get(c.territoryId) || null : null
     }));
 
     res.json(enriched);

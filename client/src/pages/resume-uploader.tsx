@@ -116,6 +116,20 @@ interface Sourcer {
   activeAssignments?: number;
 }
 
+interface Territory {
+  id: string;
+  name: string;
+  region: string;
+  isActive: boolean;
+}
+
+// Territory colors for visual identification
+const TERRITORY_COLORS: Record<string, { bg: string; text: string; short: string }> = {
+  'DMV Territory': { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', short: 'DMV' },
+  'PA Territory': { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', short: 'PA' },
+  'Richmond Territory': { bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-700 dark:text-purple-300', short: 'RA' },
+};
+
 export default function ResumeUploaderPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -128,6 +142,7 @@ export default function ResumeUploaderPage() {
   const [pendingCandidate, setPendingCandidate] = useState<any>(null);
   const [selectedSourcer, setSelectedSourcer] = useState<string>('');
   const [referralName, setReferralName] = useState<string>('');
+  const [selectedTerritory, setSelectedTerritory] = useState<string>('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [sourcerComboboxOpen, setSourcerComboboxOpen] = useState(false);
 
@@ -160,6 +175,28 @@ export default function ResumeUploaderPage() {
       return res.json();
     }
   });
+
+  // Query for territories
+  const { data: territories } = useQuery<Territory[]>({
+    queryKey: ['/api/territories'],
+    queryFn: async () => {
+      const res = await fetch('/api/territories', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.filter((t: Territory) => t.isActive);
+    }
+  });
+
+  // Set default territory to DMV when territories load
+  const dmvTerritory = territories?.find(t => t.name.includes('DMV'));
+  if (dmvTerritory && !selectedTerritory && showAssignmentDialog) {
+    setSelectedTerritory(dmvTerritory.id);
+  }
 
   // Upload mutation
   const uploadMutation = useMutation({
@@ -262,8 +299,16 @@ export default function ResumeUploaderPage() {
     setIsAssigning(true);
 
     try {
-      // Update candidate with referral name if provided
+      // Update candidate with referral name and territory if provided
+      const updateData: any = {};
       if (referralName.trim()) {
+        updateData.referralName = referralName.trim();
+      }
+      if (selectedTerritory) {
+        updateData.territoryId = selectedTerritory;
+      }
+
+      if (Object.keys(updateData).length > 0) {
         const updateResponse = await fetch(`/api/candidates/${pendingCandidate.id}`, {
           method: 'PATCH',
           headers: {
@@ -271,11 +316,11 @@ export default function ResumeUploaderPage() {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
           },
           credentials: 'include',
-          body: JSON.stringify({ referralName: referralName.trim() }),
+          body: JSON.stringify(updateData),
         });
 
         if (!updateResponse.ok) {
-          console.error('[Referral] Failed to save referral name');
+          console.error('[Update] Failed to save candidate details');
         }
       }
 
@@ -297,14 +342,16 @@ export default function ResumeUploaderPage() {
         }
 
         const sourcerName = sourcers?.find(s => s.id === selectedSourcer);
+        const territoryName = territories?.find(t => t.id === selectedTerritory)?.name;
         toast({
           title: 'Candidate Created & Assigned',
-          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
+          description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}${territoryName ? ` • ${territoryName}` : ''}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
         });
       } else {
+        const territoryName = territories?.find(t => t.id === selectedTerritory)?.name;
         toast({
           title: 'Resume Uploaded',
-          description: `Created candidate: ${pendingCandidate.firstName} ${pendingCandidate.lastName}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
+          description: `Created candidate: ${pendingCandidate.firstName} ${pendingCandidate.lastName}${territoryName ? ` • ${territoryName}` : ''}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
         });
       }
     } catch (error: any) {
@@ -321,6 +368,7 @@ export default function ResumeUploaderPage() {
       setPendingCandidate(null);
       setSelectedSourcer('');
       setReferralName('');
+      setSelectedTerritory('');
       refetchRecent();
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
       queryClient.invalidateQueries({ queryKey: ['/api/sourcers/available'] });
@@ -625,6 +673,7 @@ export default function ResumeUploaderPage() {
           setPendingCandidate(null);
           setSelectedSourcer('');
           setReferralName('');
+          setSelectedTerritory('');
           setSourcerComboboxOpen(false);
         }
       }}>
@@ -637,6 +686,39 @@ export default function ResumeUploaderPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Territory Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="territory">Territory</Label>
+              <Select
+                value={selectedTerritory}
+                onValueChange={setSelectedTerritory}
+                disabled={isAssigning}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select territory..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {territories?.map((territory) => {
+                    const colors = TERRITORY_COLORS[territory.name] || { bg: 'bg-gray-100', text: 'text-gray-700', short: territory.name };
+                    const colorHex = territory.name.includes('DMV') ? '#3B82F6' : territory.name.includes('PA') ? '#22C55E' : '#A855F7';
+                    return (
+                      <SelectItem key={territory.id} value={territory.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block w-2 h-2 rounded-full"
+                                style={{ backgroundColor: colorHex }} />
+                          <span>{colors.short || territory.name}</span>
+                          <span className="text-muted-foreground text-xs">({territory.region})</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                DMV is selected by default. Change if candidate is for another territory.
+              </p>
+            </div>
+
             {/* Referral Name Input */}
             <div className="space-y-2">
               <Label htmlFor="referral-name">Referred By (optional)</Label>
@@ -758,6 +840,7 @@ export default function ResumeUploaderPage() {
                 setPendingCandidate(null);
                 setSelectedSourcer('');
                 setReferralName('');
+                setSelectedTerritory('');
                 setSourcerComboboxOpen(false);
                 toast({
                   title: 'Resume Uploaded',

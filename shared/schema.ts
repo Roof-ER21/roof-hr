@@ -361,6 +361,8 @@ export const candidates = pgTable('candidates', {
   interviewScreeningBy: text('interview_screening_by'), // User ID who conducted screening
   // Referral tracking
   referralName: text('referral_name'), // Who referred this candidate (simple text, not FK)
+  // Territory assignment for candidate (DMV, PA, RA, etc.)
+  territoryId: text('territory_id'), // References territories table
   // Decision type for OFFER stage
   decisionType: text('decision_type').$type<'CANDIDATE_DECIDING' | 'COMPANY_DECIDING'>(),
   // Archive fields

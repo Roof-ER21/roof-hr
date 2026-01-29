@@ -79,6 +79,12 @@ interface Candidate {
   assignedTo?: string | null;
   isArchived?: boolean;
   decisionType?: 'CANDIDATE_DECIDING' | 'COMPANY_DECIDING';
+  territoryId?: string;
+  territory?: {
+    id: string;
+    name: string;
+    region: string;
+  };
   sourcer?: {
     id: string;
     firstName: string;
@@ -181,8 +187,25 @@ export function DraggableCandidateCard({
         >
           {candidate.firstName} {candidate.lastName}
         </span>
-        {/* Indicators row - sourcer dot and dead badges */}
+        {/* Indicators row - territory badge, sourcer dot, and status badges */}
         <div className="flex items-center gap-1.5 mt-0.5">
+          {/* Territory badge */}
+          {candidate.territory && (
+            <Badge
+              className={`text-[9px] px-1 py-0 flex-shrink-0 ${
+                candidate.territory.name.includes('DMV') ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                candidate.territory.name.includes('PA') ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                candidate.territory.name.includes('Richmond') ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' :
+                'bg-gray-100 text-gray-700 dark:bg-gray-800/40 dark:text-gray-300'
+              }`}
+              title={`Territory: ${candidate.territory.name} (${candidate.territory.region})`}
+            >
+              {candidate.territory.name.includes('DMV') ? 'DMV' :
+               candidate.territory.name.includes('PA') ? 'PA' :
+               candidate.territory.name.includes('Richmond') ? 'RA' :
+               candidate.territory.name}
+            </Badge>
+          )}
           {/* Sourcer color dot - gray if unassigned */}
           <div
             className="w-2 h-2 rounded-full flex-shrink-0 border border-white/50 shadow-sm"
