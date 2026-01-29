@@ -1750,6 +1750,46 @@ export default function EnhancedRecruiting() {
   const normalizeDigits = (value?: string | null) =>
     (value || '').replace(/\D/g, '');
 
+  const hasCompletedStructuredInterview = async (candidateId: string) => {
+    try {
+      const notesResponse = await fetch(`/api/candidates/${candidateId}/notes`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (notesResponse.ok) {
+        const notes = await notesResponse.json();
+        const hasCompletedInterview = notes.some((note: any) =>
+          note.type === 'INTERVIEW' &&
+          note.content?.includes('=== STRUCTURED INTERVIEW')
+        );
+        if (!hasCompletedInterview) {
+          toast({
+            title: 'Interview Required',
+            description: 'Cannot move to Offer or Hired: You must complete the structured interview first. Click on the candidate and use "Start Interview" to record responses.',
+            variant: 'destructive'
+          });
+          return false;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check interview completion:', error);
+      // Continue if check fails - server will validate
+    }
+    return true;
+  };
+
+  const openInterviewScheduler = (candidate: Candidate) => {
+    if (candidate.status !== 'INTERVIEW') {
+      toast({
+        title: 'Interview Stage Required',
+        description: 'Move the candidate to Interview (complete screening) before scheduling.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setSelectedCandidateForInterview(candidate);
+    setShowInterviewScheduler(true);
+  };
+
   const filteredCandidates = candidates.filter(candidate => {
     // Handle combined DEAD filter option
     const matchesFilter = filterStatus === 'ALL' ||
@@ -1882,31 +1922,9 @@ export default function EnhancedRecruiting() {
     // Check if moving to OFFER or HIRED - require completed structured interview
     if ((newStatus === 'OFFER' || newStatus === 'HIRED') &&
         currentCandidate.status !== 'OFFER' && currentCandidate.status !== 'HIRED') {
-      // Verify interview questions have been completed
-      try {
-        const notesResponse = await fetch(`/api/candidates/${candidateId}/notes`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        if (notesResponse.ok) {
-          const notes = await notesResponse.json();
-          // Check for structured interview (supports both Insurance and Retail types)
-          const hasCompletedInterview = notes.some((note: any) =>
-            note.type === 'INTERVIEW' &&
-            note.content?.includes('=== STRUCTURED INTERVIEW')
-          );
-
-          if (!hasCompletedInterview) {
-            toast({
-              title: 'Interview Required',
-              description: 'Cannot move to Offer or Hired: You must complete the structured interview first. Click on the candidate and use "Start Interview" to record responses.',
-              variant: 'destructive'
-            });
-            return;
-          }
-        }
-      } catch (error) {
-        console.error('Failed to check interview completion:', error);
-        // Continue anyway if check fails - server will validate
+      const hasCompletedInterview = await hasCompletedStructuredInterview(candidateId);
+      if (!hasCompletedInterview) {
+        return;
       }
 
       // Interview completed - if moving to OFFER, show decision type dialog first
@@ -2403,8 +2421,7 @@ export default function EnhancedRecruiting() {
                           onScheduleInterview={(candidate) => {
                             const originalCandidate = candidates.find(c => c.id === candidate.id);
                             if (originalCandidate) {
-                              setSelectedCandidateForInterview(originalCandidate);
-                              setShowInterviewScheduler(true);
+                              openInterviewScheduler(originalCandidate);
                             }
                           }}
                           onArchive={['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'].includes(candidate.status) ? (candidate) => {
@@ -2502,8 +2519,7 @@ export default function EnhancedRecruiting() {
                         onScheduleInterview={(candidate) => {
                           const originalCandidate = candidates.find(c => c.id === candidate.id);
                           if (originalCandidate) {
-                            setSelectedCandidateForInterview(originalCandidate);
-                            setShowInterviewScheduler(true);
+                            openInterviewScheduler(originalCandidate);
                           }
                         }}
                         onArchive={(candidate) => {
@@ -3119,7 +3135,7 @@ export default function EnhancedRecruiting() {
           setShowEditCandidate(true);
           setShowCandidateDetails(false);
         }}
-        onMoveToNextStage={(candidate, nextStatus) => {
+        onMoveToNextStage={async (candidate, nextStatus) => {
           // 1. INTERVIEW - requires screening (same as drag-and-drop)
           if (nextStatus === 'INTERVIEW' && candidate.status !== 'INTERVIEW') {
             let skipScreening = false;
@@ -3134,6 +3150,15 @@ export default function EnhancedRecruiting() {
               setCandidateForInterviewScreening({ candidate, nextStatus });
               setShowInterviewScreening(true);
               setShowCandidateDetails(false);
+              return;
+            }
+          }
+
+          // Require structured interview before OFFER or HIRED
+          if ((nextStatus === 'OFFER' || nextStatus === 'HIRED') &&
+              candidate.status !== 'OFFER' && candidate.status !== 'HIRED') {
+            const hasCompletedInterview = await hasCompletedStructuredInterview(candidate.id);
+            if (!hasCompletedInterview) {
               return;
             }
           }
@@ -3172,8 +3197,7 @@ export default function EnhancedRecruiting() {
           });
         }}
         onScheduleInterview={(candidate) => {
-          setSelectedCandidateForInterview(candidate);
-          setShowInterviewScheduler(true);
+          openInterviewScheduler(candidate);
         }}
         onSendEmail={(candidate) => {
           setSelectedCandidateForEmail(candidate);

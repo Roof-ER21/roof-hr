@@ -1209,7 +1209,17 @@ export function CandidateDetailsDialog({
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => setShowInterviewDialog(true)}
+                onClick={() => {
+                  if (candidate.status !== 'INTERVIEW') {
+                    toast({
+                      title: 'Interview Stage Required',
+                      description: 'Move the candidate to Interview before starting the structured interview.',
+                      variant: 'destructive'
+                    });
+                    return;
+                  }
+                  setShowInterviewDialog(true);
+                }}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 <ClipboardList className="h-4 w-4 mr-1" />
