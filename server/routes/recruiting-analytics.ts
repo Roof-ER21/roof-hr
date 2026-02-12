@@ -113,15 +113,34 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
       }
     }
 
-    // Filter by date range
+    // Get status history for HIRED transitions to find actual hire dates
+    const allStatusHistory = await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
+    const hireDateMap = new Map<string, Date>();
+    allStatusHistory.forEach((h: any) => {
+      const existing = hireDateMap.get(h.candidateId);
+      const hDate = new Date(h.createdAt);
+      if (!existing || hDate > existing) {
+        hireDateMap.set(h.candidateId, hDate);
+      }
+    });
+
+    const getHireDate = (c: any): Date => {
+      return hireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+    };
+
+    // Filter by date range: applied date for non-hired, hire date for hired
     const filteredCandidates = candidates.filter((c: any) => {
+      if (c.status === 'HIRED') {
+        const hireDate = getHireDate(c);
+        return hireDate >= start && hireDate <= end;
+      }
       const appliedDate = new Date(c.appliedDate || c.createdAt);
       return appliedDate >= start && appliedDate <= end;
     });
 
     // Calculate metrics
     const totalCandidates = filteredCandidates.length;
-    // Active pipeline excludes all terminal statuses
     const activePipeline = filteredCandidates.filter((c: any) =>
       !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(c.status)
     ).length;
@@ -134,29 +153,11 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
     const lastMonthStart = new Date(thisMonthStart);
     lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
 
-    // Get status history for HIRED transitions to find actual hire dates
-    const allStatusHistory = await db.select().from(candidateStatusHistory)
-      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
-    const hireDateMap = new Map<string, Date>();
-    allStatusHistory.forEach((h: any) => {
-      const existing = hireDateMap.get(h.candidateId);
-      const hDate = new Date(h.createdAt);
-      // Use the latest HIRED transition date
-      if (!existing || hDate > existing) {
-        hireDateMap.set(h.candidateId, hDate);
-      }
-    });
-
-    // Helper to get actual hire date for a candidate
-    const getHireDate = (c: any): Date => {
-      return hireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
-    };
-
     const hiredThisMonth = filteredCandidates.filter((c: any) => {
       return c.status === 'HIRED' && getHireDate(c) >= thisMonthStart;
     }).length;
 
-    const hiredLastMonth = filteredCandidates.filter((c: any) => {
+    const hiredLastMonth = candidates.filter((c: any) => {
       const hireDate = getHireDate(c);
       return c.status === 'HIRED' && hireDate >= lastMonthStart && hireDate < thisMonthStart;
     }).length;
@@ -243,8 +244,27 @@ router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) =
       }
     }
 
-    // Filter by date range
+    // Get status history for HIRED transitions to find actual hire dates
+    const allHiredHistory = await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
+    const pipelineHireDateMap = new Map<string, Date>();
+    allHiredHistory.forEach((h: any) => {
+      const existing = pipelineHireDateMap.get(h.candidateId);
+      const hDate = new Date(h.createdAt);
+      if (!existing || hDate > existing) {
+        pipelineHireDateMap.set(h.candidateId, hDate);
+      }
+    });
+    const getPipelineHireDate = (c: any): Date => {
+      return pipelineHireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+    };
+
+    // Filter by date range: applied date for non-hired, hire date for hired
     const filteredCandidates = candidates.filter((c: any) => {
+      if (c.status === 'HIRED') {
+        const hireDate = getPipelineHireDate(c);
+        return hireDate >= start && hireDate <= end;
+      }
       const appliedDate = new Date(c.appliedDate || c.createdAt);
       return appliedDate >= start && appliedDate <= end;
     });
@@ -773,20 +793,6 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       }
     }
 
-    // Filter candidates by date range
-    const filteredCandidates = candidates.filter((c: any) => {
-      const appliedDate = new Date(c.appliedDate || c.createdAt);
-      return appliedDate >= start && appliedDate <= end;
-    });
-
-    // Build assignee map from candidates (including null for unassigned)
-    const assigneeMap = new Map<string | null, {
-      assigned: number;
-      hired: number;
-      totalDays: number;
-      hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string }>;
-    }>();
-
     // Get status history for HIRED transitions
     const allHiredHistory = await db.select().from(candidateStatusHistory)
       .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
@@ -799,6 +805,16 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       }
     });
     const getHireDate = (c: any): Date => hireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+
+    // Filter candidates by date range: applied date for non-hired, hire date for hired
+    const filteredCandidates = candidates.filter((c: any) => {
+      if (c.status === 'HIRED') {
+        const hireDate = getHireDate(c);
+        return hireDate >= start && hireDate <= end;
+      }
+      const appliedDate = new Date(c.appliedDate || c.createdAt);
+      return appliedDate >= start && appliedDate <= end;
+    });
 
     // Count candidates by assignee (including unassigned)
     filteredCandidates.forEach((c: any) => {
@@ -1173,15 +1189,33 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
       employeeName = 'Unassigned Candidates';
     }
 
-    // Filter by date range
+    // Get status history for HIRED transitions to find actual hire dates
+    const reportHiredHistory = await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
+    const reportHireDateMap = new Map<string, Date>();
+    reportHiredHistory.forEach((h: any) => {
+      const existing = reportHireDateMap.get(h.candidateId);
+      const hDate = new Date(h.createdAt);
+      if (!existing || hDate > existing) {
+        reportHireDateMap.set(h.candidateId, hDate);
+      }
+    });
+    const getReportHireDate = (c: any): Date => {
+      return reportHireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+    };
+
+    // Filter by date range: applied date for non-hired, hire date for hired
     const filteredCandidates = candidates.filter((c: any) => {
+      if (c.status === 'HIRED') {
+        const hireDate = getReportHireDate(c);
+        return hireDate >= start && hireDate <= end;
+      }
       const appliedDate = new Date(c.appliedDate || c.createdAt);
       return appliedDate >= start && appliedDate <= end;
     });
 
     // Calculate OVERVIEW metrics
     const totalCandidates = filteredCandidates.length;
-    // Active pipeline excludes all terminal statuses
     const activePipeline = filteredCandidates.filter((c: any) =>
       !['HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(c.status)
     ).length;
@@ -1189,12 +1223,12 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const hiredThisMonth = filteredCandidates.filter((c: any) =>
-      c.status === 'HIRED' && new Date(c.updatedAt || c.createdAt) >= monthStart
+      c.status === 'HIRED' && getReportHireDate(c) >= monthStart
     ).length;
-    const hiredLastMonth = filteredCandidates.filter((c: any) =>
+    const hiredLastMonth = candidates.filter((c: any) =>
       c.status === 'HIRED' &&
-      new Date(c.updatedAt || c.createdAt) >= lastMonthStart &&
-      new Date(c.updatedAt || c.createdAt) < monthStart
+      getReportHireDate(c) >= lastMonthStart &&
+      getReportHireDate(c) < monthStart
     ).length;
 
     // Calculate avg days to hire
@@ -1203,7 +1237,7 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
     if (hiredCandidates.length > 0) {
       const totalDays = hiredCandidates.reduce((sum: number, c: any) => {
         const applied = new Date(c.appliedDate || c.createdAt);
-        const hired = new Date(c.updatedAt || c.createdAt);
+        const hired = getReportHireDate(c);
         return sum + Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
       }, 0);
       avgDaysToHire = Math.round(totalDays / hiredCandidates.length);
