@@ -816,6 +816,14 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       return appliedDate >= start && appliedDate <= end;
     });
 
+    // Build assignee map from candidates (including null for unassigned)
+    const assigneeMap = new Map<string | null, {
+      assigned: number;
+      hired: number;
+      totalDays: number;
+      hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string; recruitedBy?: string }>;
+    }>();
+
     // Count candidates by assignee (including unassigned)
     filteredCandidates.forEach((c: any) => {
       const assigneeId = c.assignedTo?.toString() || null;
