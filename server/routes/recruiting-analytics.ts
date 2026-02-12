@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage';
 import { db } from '../db';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
+import { candidateStatusHistory } from '@shared/schema';
 
 const router = Router();
 
@@ -99,7 +100,9 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    // Exclude archived candidates from analytics
+    const nonArchived = allCandidates.filter((c: any) => !c.isArchived);
+    let candidates = filterCandidatesForUser(nonArchived, req.user, req.isManager);
 
     // Filter by specific assignee if provided
     if (assigneeId) {
@@ -131,17 +134,34 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
     const lastMonthStart = new Date(thisMonthStart);
     lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
 
+    // Get status history for HIRED transitions to find actual hire dates
+    const allStatusHistory = await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
+    const hireDateMap = new Map<string, Date>();
+    allStatusHistory.forEach((h: any) => {
+      const existing = hireDateMap.get(h.candidateId);
+      const hDate = new Date(h.createdAt);
+      // Use the latest HIRED transition date
+      if (!existing || hDate > existing) {
+        hireDateMap.set(h.candidateId, hDate);
+      }
+    });
+
+    // Helper to get actual hire date for a candidate
+    const getHireDate = (c: any): Date => {
+      return hireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+    };
+
     const hiredThisMonth = filteredCandidates.filter((c: any) => {
-      const updatedDate = new Date(c.updatedAt || c.createdAt);
-      return c.status === 'HIRED' && updatedDate >= thisMonthStart;
+      return c.status === 'HIRED' && getHireDate(c) >= thisMonthStart;
     }).length;
 
     const hiredLastMonth = filteredCandidates.filter((c: any) => {
-      const updatedDate = new Date(c.updatedAt || c.createdAt);
-      return c.status === 'HIRED' && updatedDate >= lastMonthStart && updatedDate < thisMonthStart;
+      const hireDate = getHireDate(c);
+      return c.status === 'HIRED' && hireDate >= lastMonthStart && hireDate < thisMonthStart;
     }).length;
 
-    // Calculate average days to hire
+    // Calculate average days to hire using actual status history dates
     const hiredCandidates = filteredCandidates.filter((c: any) => c.status === 'HIRED');
     let avgDaysToHire = 0;
     let avgDaysToHireLastMonth = 0;
@@ -149,25 +169,38 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
     if (hiredCandidates.length > 0) {
       const totalDays = hiredCandidates.reduce((sum: number, c: any) => {
         const applied = new Date(c.appliedDate || c.createdAt);
-        const hired = new Date(c.updatedAt || c.createdAt);
-        return sum + Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24));
+        const hired = getHireDate(c);
+        return sum + Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
       }, 0);
       avgDaysToHire = Math.round(totalDays / hiredCandidates.length);
     }
 
     // Calculate last month's avg days to hire for comparison
     const hiredLastMonthCandidates = candidates.filter((c: any) => {
-      const updatedDate = new Date(c.updatedAt || c.createdAt);
-      return c.status === 'HIRED' && updatedDate >= lastMonthStart && updatedDate < thisMonthStart;
+      const hireDate = getHireDate(c);
+      return c.status === 'HIRED' && hireDate >= lastMonthStart && hireDate < thisMonthStart;
     });
 
     if (hiredLastMonthCandidates.length > 0) {
       const totalDaysLast = hiredLastMonthCandidates.reduce((sum: number, c: any) => {
         const applied = new Date(c.appliedDate || c.createdAt);
-        const hired = new Date(c.updatedAt || c.createdAt);
-        return sum + Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24));
+        const hired = getHireDate(c);
+        return sum + Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
       }, 0);
       avgDaysToHireLastMonth = Math.round(totalDaysLast / hiredLastMonthCandidates.length);
+    }
+
+    // Calculate drop-off: where candidates die in the pipeline
+    const deadCandidates = filteredCandidates.filter((c: any) =>
+      ['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(c.status)
+    );
+    const dropOffByStage: Record<string, number> = {};
+    // Use status history to find what stage they died from
+    for (const dead of deadCandidates) {
+      const history = allStatusHistory.length > 0 ? [] : []; // We need full history
+      // Use the candidate's stage field or last known active status
+      const lastActiveStage = dead.stage || 'APPLIED';
+      dropOffByStage[lastActiveStage] = (dropOffByStage[lastActiveStage] || 0) + 1;
     }
 
     res.json({
@@ -177,6 +210,8 @@ router.get('/overview', requireAuthOrAssignments(), async (req: any, res: any) =
       hiredLastMonth,
       avgDaysToHire,
       avgDaysToHireLastMonth,
+      deadTotal: deadCandidates.length,
+      dropOffByStage,
       period: period || '30d',
     });
   } catch (error) {
@@ -196,7 +231,8 @@ router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) =
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    const nonArchived = allCandidates.filter((c: any) => !c.isArchived);
+    let candidates = filterCandidatesForUser(nonArchived, req.user, req.isManager);
 
     // Filter by specific assignee if provided
     if (assigneeId) {
@@ -215,31 +251,88 @@ router.get('/pipeline', requireAuthOrAssignments(), async (req: any, res: any) =
 
     const total = filteredCandidates.length || 1;
 
-    // Count by status
-    const applied = filteredCandidates.filter((c: any) => c.status === 'APPLIED').length;
+    // Count by current status
     const screening = filteredCandidates.filter((c: any) => c.status === 'SCREENING').length;
+    const applied = filteredCandidates.filter((c: any) => c.status === 'APPLIED').length;
     const interview = filteredCandidates.filter((c: any) => c.status === 'INTERVIEW').length;
     const offer = filteredCandidates.filter((c: any) => c.status === 'OFFER').length;
     const hired = filteredCandidates.filter((c: any) => c.status === 'HIRED').length;
     const deadByUs = filteredCandidates.filter((c: any) => c.status === 'DEAD_BY_US' || c.status === 'REJECTED').length;
     const deadByCandidate = filteredCandidates.filter((c: any) => c.status === 'DEAD_BY_CANDIDATE').length;
+    const noShow = filteredCandidates.filter((c: any) => c.status === 'NO_SHOW').length;
 
-    // Calculate conversion rates
-    const screeningConversion = applied > 0 ? Math.round((screening / applied) * 100) : 0;
-    const interviewConversion = screening > 0 ? Math.round((interview / screening) * 100) : 0;
-    const offerConversion = interview > 0 ? Math.round((offer / interview) * 100) : 0;
-    const hiredConversion = offer > 0 ? Math.round((hired / offer) * 100) : 0;
+    // Business flow: SCREENING (Phone Screening) → APPLIED (Called) → INTERVIEW → OFFER → HIRED
+    // Use status history to calculate cumulative progression (how many ever reached each stage)
+    const allHistory = await db.select().from(candidateStatusHistory);
+    const candidateIds = new Set(filteredCandidates.map((c: any) => c.id));
+    const relevantHistory = allHistory.filter((h: any) => candidateIds.has(h.candidateId));
+
+    // Track which candidates ever reached each stage
+    const everReached: Record<string, Set<string>> = {
+      SCREENING: new Set<string>(),
+      APPLIED: new Set<string>(),
+      INTERVIEW: new Set<string>(),
+      OFFER: new Set<string>(),
+      HIRED: new Set<string>(),
+    };
+
+    // All candidates start by entering the system (count them as reaching their current + past stages)
+    filteredCandidates.forEach((c: any) => {
+      const stageOrder = ['SCREENING', 'APPLIED', 'INTERVIEW', 'OFFER', 'HIRED'];
+      const currentIdx = stageOrder.indexOf(c.status);
+      // Count current stage and all prior stages
+      if (currentIdx >= 0) {
+        for (let i = 0; i <= currentIdx; i++) {
+          everReached[stageOrder[i]]?.add(c.id);
+        }
+      }
+      // Also count from history
+      relevantHistory
+        .filter((h: any) => h.candidateId === c.id)
+        .forEach((h: any) => {
+          if (everReached[h.newStatus]) {
+            everReached[h.newStatus].add(c.id);
+          }
+        });
+      // Dead candidates also reached stages before dying
+      if (['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(c.status)) {
+        relevantHistory
+          .filter((h: any) => h.candidateId === c.id && !['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'].includes(h.newStatus))
+          .forEach((h: any) => {
+            if (everReached[h.newStatus]) {
+              everReached[h.newStatus].add(c.id);
+            }
+          });
+      }
+    });
+
+    // Cumulative counts (how many ever reached this stage)
+    const cumulativeScreening = everReached.SCREENING.size || screening;
+    const cumulativeApplied = everReached.APPLIED.size || applied;
+    const cumulativeInterview = everReached.INTERVIEW.size || interview;
+    const cumulativeOffer = everReached.OFFER.size || offer;
+    const cumulativeHired = everReached.HIRED.size || hired;
+
+    // Drop-off between stages (cumulative)
+    const dropOff = {
+      screeningToApplied: cumulativeScreening > 0 ? cumulativeScreening - cumulativeApplied : 0,
+      appliedToInterview: cumulativeApplied > 0 ? cumulativeApplied - cumulativeInterview : 0,
+      interviewToOffer: cumulativeInterview > 0 ? cumulativeInterview - cumulativeOffer : 0,
+      offerToHired: cumulativeOffer > 0 ? cumulativeOffer - cumulativeHired : 0,
+    };
+
     const overallConversion = total > 0 ? Math.round((hired / total) * 100 * 10) / 10 : 0;
 
     res.json({
       stages: {
-        applied: { count: applied, percentage: Math.round((applied / total) * 100) },
-        screening: { count: screening, percentage: Math.round((screening / total) * 100), conversionRate: screeningConversion },
-        interview: { count: interview, percentage: Math.round((interview / total) * 100), conversionRate: interviewConversion },
-        offer: { count: offer, percentage: Math.round((offer / total) * 100), conversionRate: offerConversion },
-        hired: { count: hired, percentage: Math.round((hired / total) * 100), conversionRate: hiredConversion },
-        dead: { count: deadByUs + deadByCandidate, deadByUs, deadByCandidate },
+        screening: { count: screening, percentage: Math.round((screening / total) * 100), cumulative: cumulativeScreening },
+        applied: { count: applied, percentage: Math.round((applied / total) * 100), cumulative: cumulativeApplied },
+        interview: { count: interview, percentage: Math.round((interview / total) * 100), cumulative: cumulativeInterview },
+        offer: { count: offer, percentage: Math.round((offer / total) * 100), cumulative: cumulativeOffer },
+        hired: { count: hired, percentage: Math.round((hired / total) * 100), cumulative: cumulativeHired },
+        dead: { count: deadByUs + deadByCandidate + noShow, deadByUs, deadByCandidate, noShow },
       },
+      dropOff,
       overallConversionRate: overallConversion,
       total: filteredCandidates.length,
     });
@@ -260,7 +353,8 @@ router.get('/sources', requireAuthOrAssignments(), async (req: any, res: any) =>
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    const nonArchived = allCandidates.filter((c: any) => !c.isArchived);
+    let candidates = filterCandidatesForUser(nonArchived, req.user, req.isManager);
 
     // Filter by specific assignee if provided
     if (assigneeId) {
@@ -316,6 +410,118 @@ router.get('/sources', requireAuthOrAssignments(), async (req: any, res: any) =>
   }
 });
 
+// GET /api/recruiting-analytics/dropoff
+// Where candidates are being lost in the pipeline
+router.get('/dropoff', requireAuthOrAssignments(), async (req: any, res: any) => {
+  try {
+    const { period, startDate, endDate, assigneeId } = dateRangeSchema.parse(req.query);
+    const { start, end } = getDateRange(period, startDate, endDate);
+
+    const allCandidates = await storage.getAllCandidates();
+    const nonArchived = allCandidates.filter((c: any) => !c.isArchived);
+    let candidates = filterCandidatesForUser(nonArchived, req.user, req.isManager);
+
+    if (assigneeId) {
+      if (assigneeId === 'unassigned') {
+        candidates = candidates.filter((c: any) => !c.assignedTo);
+      } else {
+        candidates = candidates.filter((c: any) => c.assignedTo?.toString() === assigneeId);
+      }
+    }
+
+    const filteredCandidates = candidates.filter((c: any) => {
+      const appliedDate = new Date(c.appliedDate || c.createdAt);
+      return appliedDate >= start && appliedDate <= end;
+    });
+
+    // Get all status history for these candidates
+    const allHistory = await db.select().from(candidateStatusHistory);
+    const candidateIds = new Set(filteredCandidates.map((c: any) => c.id));
+
+    // For dead candidates, find what stage they died from (previous status before terminal)
+    const deadStatuses = ['DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'REJECTED', 'NO_SHOW'];
+    const deadCandidates = filteredCandidates.filter((c: any) => deadStatuses.includes(c.status));
+
+    // Business flow stages for display
+    const stageLabels: Record<string, string> = {
+      'SCREENING': 'Phone Screening',
+      'APPLIED': 'Called',
+      'INTERVIEW': 'Interview Scheduled',
+      'OFFER': 'Decision Pending',
+    };
+
+    const dropOffData: Record<string, { deadByUs: number; deadByCandidate: number; noShow: number; rejected: number; total: number }> = {};
+    Object.keys(stageLabels).forEach(stage => {
+      dropOffData[stage] = { deadByUs: 0, deadByCandidate: 0, noShow: 0, rejected: 0, total: 0 };
+    });
+
+    deadCandidates.forEach((c: any) => {
+      // Find the last active stage before death from history
+      const history = allHistory
+        .filter((h: any) => h.candidateId === c.id && deadStatuses.includes(h.newStatus))
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      let lastActiveStage = 'APPLIED'; // Default
+      if (history.length > 0) {
+        lastActiveStage = history[0].previousStatus;
+      } else {
+        // Fall back to stage field
+        lastActiveStage = c.stage || 'APPLIED';
+      }
+
+      // Normalize to known stages
+      if (!dropOffData[lastActiveStage]) {
+        lastActiveStage = 'APPLIED';
+      }
+
+      const bucket = dropOffData[lastActiveStage];
+      if (bucket) {
+        bucket.total++;
+        if (c.status === 'DEAD_BY_US') bucket.deadByUs++;
+        else if (c.status === 'DEAD_BY_CANDIDATE') bucket.deadByCandidate++;
+        else if (c.status === 'NO_SHOW') bucket.noShow++;
+        else if (c.status === 'REJECTED') bucket.rejected++;
+      }
+    });
+
+    // Calculate stale candidates (stuck in stage too long)
+    const now = new Date();
+    const staleDays = 14; // Candidates not updated in 14+ days
+    const staleCandidates = filteredCandidates
+      .filter((c: any) => !deadStatuses.includes(c.status) && c.status !== 'HIRED')
+      .filter((c: any) => {
+        const lastUpdate = new Date(c.updatedAt || c.createdAt);
+        return (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24) > staleDays;
+      })
+      .map((c: any) => ({
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`,
+        status: c.status,
+        position: c.position,
+        daysSinceUpdate: Math.floor((now.getTime() - new Date(c.updatedAt || c.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
+        assignedTo: c.assignedTo,
+      }));
+
+    res.json({
+      dropOffByStage: Object.entries(dropOffData).map(([stage, data]) => ({
+        stage,
+        label: stageLabels[stage] || stage,
+        ...data,
+      })),
+      totalDead: deadCandidates.length,
+      totalActive: filteredCandidates.filter((c: any) => !deadStatuses.includes(c.status) && c.status !== 'HIRED').length,
+      staleCandidates: staleCandidates.slice(0, 20), // Top 20 stale
+      staleCount: staleCandidates.length,
+    });
+  } catch (error) {
+    console.error('Error fetching dropoff analytics:', error);
+    res.status(500).json({
+      error: 'Failed to fetch dropoff analytics',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // GET /api/recruiting-analytics/time-to-hire
 // Time to hire trend data
 router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: any) => {
@@ -324,7 +530,8 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    const nonArchived = allCandidates.filter((c: any) => !c.isArchived);
+    let candidates = filterCandidatesForUser(nonArchived, req.user, req.isManager);
 
     // Filter by specific assignee if provided
     if (assigneeId) {
@@ -335,9 +542,25 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
       }
     }
 
-    // Filter hired candidates within date range
+    // Get status history for HIRED transitions to find actual hire dates
+    const allHiredHistory = await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
+    const hireDateMap = new Map<string, Date>();
+    allHiredHistory.forEach((h: any) => {
+      const existing = hireDateMap.get(h.candidateId);
+      const hDate = new Date(h.createdAt);
+      if (!existing || hDate > existing) {
+        hireDateMap.set(h.candidateId, hDate);
+      }
+    });
+
+    const getHireDate = (c: any): Date => {
+      return hireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+    };
+
+    // Filter hired candidates within date range using actual hire date
     const hiredCandidates = candidates.filter((c: any) => {
-      const hiredDate = new Date(c.updatedAt || c.createdAt);
+      const hiredDate = getHireDate(c);
       return c.status === 'HIRED' && hiredDate >= start && hiredDate <= end;
     });
 
@@ -346,7 +569,7 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
     if (hiredCandidates.length > 0) {
       const totalDays = hiredCandidates.reduce((sum: number, c: any) => {
         const applied = new Date(c.appliedDate || c.createdAt);
-        const hired = new Date(c.updatedAt || c.createdAt);
+        const hired = getHireDate(c);
         return sum + Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
       }, 0);
       current = Math.round(totalDays / hiredCandidates.length);
@@ -358,7 +581,7 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
     const prevEnd = start;
 
     const prevHiredCandidates = candidates.filter((c: any) => {
-      const hiredDate = new Date(c.updatedAt || c.createdAt);
+      const hiredDate = getHireDate(c);
       return c.status === 'HIRED' && hiredDate >= prevStart && hiredDate < prevEnd;
     });
 
@@ -366,7 +589,7 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
     if (prevHiredCandidates.length > 0) {
       const totalDays = prevHiredCandidates.reduce((sum: number, c: any) => {
         const applied = new Date(c.appliedDate || c.createdAt);
-        const hired = new Date(c.updatedAt || c.createdAt);
+        const hired = getHireDate(c);
         return sum + Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
       }, 0);
       previous = Math.round(totalDays / prevHiredCandidates.length);
@@ -376,7 +599,7 @@ router.get('/time-to-hire', requireAuthOrAssignments(), async (req: any, res: an
     const trendMap = new Map<string, { totalDays: number; count: number }>();
 
     hiredCandidates.forEach((c: any) => {
-      const hiredDate = new Date(c.updatedAt || c.createdAt);
+      const hiredDate = getHireDate(c);
       const applied = new Date(c.appliedDate || c.createdAt);
       const days = Math.max(1, Math.ceil((hiredDate.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
 
@@ -431,7 +654,7 @@ router.get('/interviews', requireAuthOrAssignments(), async (req: any, res: any)
 
     // Get interviews and filter by assigned candidates for non-managers
     const allInterviews = await storage.getAllInterviews();
-    const allCandidates = await storage.getAllCandidates();
+    const allCandidates = (await storage.getAllCandidates()).filter((c: any) => !c.isArchived);
     let interviews = allInterviews;
 
     // Build candidate IDs to filter by
@@ -537,7 +760,8 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
     const { start, end } = getDateRange(period, startDate, endDate);
 
     const allCandidates = await storage.getAllCandidates();
-    let candidates = filterCandidatesForUser(allCandidates, req.user, req.isManager);
+    const nonArchived = allCandidates.filter((c: any) => !c.isArchived);
+    let candidates = filterCandidatesForUser(nonArchived, req.user, req.isManager);
     const users = await storage.getAllUsers();
 
     // Filter by specific assignee if provided
@@ -563,6 +787,19 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string }>;
     }>();
 
+    // Get status history for HIRED transitions
+    const allHiredHistory = await db.select().from(candidateStatusHistory)
+      .where(eq(candidateStatusHistory.newStatus, 'HIRED'));
+    const hireDateMap = new Map<string, Date>();
+    allHiredHistory.forEach((h: any) => {
+      const existing = hireDateMap.get(h.candidateId);
+      const hDate = new Date(h.createdAt);
+      if (!existing || hDate > existing) {
+        hireDateMap.set(h.candidateId, hDate);
+      }
+    });
+    const getHireDate = (c: any): Date => hireDateMap.get(c.id) || new Date(c.updatedAt || c.createdAt);
+
     // Count candidates by assignee (including unassigned)
     filteredCandidates.forEach((c: any) => {
       const assigneeId = c.assignedTo?.toString() || null;
@@ -577,14 +814,14 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       if (c.status === 'HIRED') {
         data.hired++;
         const applied = new Date(c.appliedDate || c.createdAt);
-        const hired = new Date(c.updatedAt || c.createdAt);
+        const hired = getHireDate(c);
         data.totalDays += Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
         // Track hired candidate details
         data.hiredCandidates.push({
           id: c.id,
           name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email,
           position: c.position || 'Unknown Position',
-          hiredDate: c.updatedAt || c.createdAt,
+          hiredDate: hired.toISOString(),
         });
       }
     });

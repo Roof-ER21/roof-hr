@@ -184,6 +184,20 @@ export default function RecruitingAnalytics() {
     },
   });
 
+  // Fetch drop-off data
+  const { data: dropoff, isLoading: loadingDropoff } = useQuery({
+    queryKey: ['recruiting-analytics', 'dropoff', period, selectedAssigneeId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ period });
+      if (selectedAssigneeId !== 'all') params.append('assigneeId', selectedAssigneeId);
+      const response = await fetch(`/api/recruiting-analytics/dropoff?${params}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to fetch dropoff');
+      return response.json();
+    },
+  });
+
   // Fetch all candidates (including archived) for archive management
   const { data: allCandidates = [], isLoading: loadingCandidates } = useQuery<Candidate[]>({
     queryKey: ['candidates', 'includeArchived'],
@@ -565,10 +579,26 @@ export default function RecruitingAnalytics() {
               </ResponsiveContainer>
             )}
             {pipeline && (
-              <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-                <span className="text-muted-foreground">
-                  Overall Conversion: <span className="font-semibold text-foreground">{pipeline.overallConversionRate}%</span>
-                </span>
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-center gap-4 text-sm">
+                  <span className="text-muted-foreground">
+                    Overall Conversion: <span className="font-semibold text-foreground">{pipeline.overallConversionRate}%</span>
+                  </span>
+                </div>
+                {pipeline.stages?.dead?.count > 0 && (
+                  <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+                    <span>Dead: {pipeline.stages.dead.count}</span>
+                    {pipeline.stages.dead.noShow > 0 && (
+                      <span className="text-red-500">No Show: {pipeline.stages.dead.noShow}</span>
+                    )}
+                    {pipeline.stages.dead.deadByUs > 0 && (
+                      <span>Dead by Us: {pipeline.stages.dead.deadByUs}</span>
+                    )}
+                    {pipeline.stages.dead.deadByCandidate > 0 && (
+                      <span>Dead by Candidate: {pipeline.stages.dead.deadByCandidate}</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -789,6 +819,137 @@ export default function RecruitingAnalytics() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pipeline Drop-off Analysis */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingDown className="h-5 w-5 text-red-500" />
+            Pipeline Drop-off Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingDropoff ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : dropoff ? (
+            <div className="space-y-6">
+              {/* No-show alert */}
+              {interviews?.byStatus?.noShow > 10 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex items-center gap-2 text-red-800 font-semibold mb-1">
+                    <TrendingDown className="h-4 w-4" />
+                    High No-Show Rate Alert
+                  </div>
+                  <p className="text-sm text-red-700">
+                    {interviews.byStatus.noShow} interview no-shows detected ({interviews.total > 0 ? Math.round((interviews.byStatus.noShow / interviews.total) * 100) : 0}% of all interviews).
+                    This is a major source of candidate loss.
+                  </p>
+                </div>
+              )}
+
+              {/* Drop-off by stage */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Where Candidates Are Lost</h4>
+                <div className="space-y-3">
+                  {dropoff.dropOffByStage?.map((stage: any) => (
+                    <div key={stage.stage} className="flex items-center gap-4">
+                      <div className="w-40 text-sm font-medium">{stage.label}</div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-6 bg-muted rounded-full overflow-hidden flex">
+                            {stage.deadByUs > 0 && (
+                              <div
+                                className="h-full bg-red-500"
+                                style={{ width: `${dropoff.totalDead > 0 ? (stage.deadByUs / dropoff.totalDead) * 100 : 0}%` }}
+                                title={`Dead by Us: ${stage.deadByUs}`}
+                              />
+                            )}
+                            {stage.deadByCandidate > 0 && (
+                              <div
+                                className="h-full bg-orange-400"
+                                style={{ width: `${dropoff.totalDead > 0 ? (stage.deadByCandidate / dropoff.totalDead) * 100 : 0}%` }}
+                                title={`Dead by Candidate: ${stage.deadByCandidate}`}
+                              />
+                            )}
+                            {stage.noShow > 0 && (
+                              <div
+                                className="h-full bg-yellow-500"
+                                style={{ width: `${dropoff.totalDead > 0 ? (stage.noShow / dropoff.totalDead) * 100 : 0}%` }}
+                                title={`No Show: ${stage.noShow}`}
+                              />
+                            )}
+                          </div>
+                          <span className="text-sm font-semibold w-8 text-right">{stage.total}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-4 mt-3 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-red-500" />
+                    <span>Dead by Us</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-orange-400" />
+                    <span>Dead by Candidate</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-yellow-500" />
+                    <span>No Show</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary stats */}
+              <div className="flex items-center justify-between pt-3 border-t">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Lost</p>
+                  <p className="text-xl font-bold text-red-600">{dropoff.totalDead}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Still Active</p>
+                  <p className="text-xl font-bold text-green-600">{dropoff.totalActive}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Stale ({'>'}14 days)</p>
+                  <p className="text-xl font-bold text-yellow-600">{dropoff.staleCount}</p>
+                </div>
+              </div>
+
+              {/* Stale candidates alert */}
+              {dropoff.staleCount > 0 && (
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                  <div className="flex items-center gap-2 text-yellow-800 font-semibold mb-2">
+                    <Clock className="h-4 w-4" />
+                    {dropoff.staleCount} Stale Candidates Need Attention
+                  </div>
+                  <div className="space-y-1">
+                    {dropoff.staleCandidates?.slice(0, 5).map((c: any) => (
+                      <div key={c.id} className="flex items-center justify-between text-sm">
+                        <span className="text-yellow-800">{c.name} - {c.position}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {c.daysSinceUpdate} days idle
+                        </Badge>
+                      </div>
+                    ))}
+                    {dropoff.staleCount > 5 && (
+                      <p className="text-xs text-yellow-700 pt-1">+{dropoff.staleCount - 5} more stale candidates</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              No drop-off data available
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Team Performance Table */}
       <Card>
@@ -1088,6 +1249,7 @@ export default function RecruitingAnalytics() {
         onScheduleInterview={() => {}}
         onSendEmail={() => {}}
         onRunAIAnalysis={() => {}}
+        onMoveToNextStage={() => {}}
         getNextStatus={() => ''}
         isAnalyzing={false}
         isUpdating={false}
