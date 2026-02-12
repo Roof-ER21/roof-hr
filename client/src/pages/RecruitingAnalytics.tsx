@@ -1274,6 +1274,9 @@ export default function RecruitingAnalytics() {
                   <div>
                     <p className="font-medium">{candidate.name}</p>
                     <p className="text-sm text-muted-foreground">{candidate.position}</p>
+                    {(candidate as any).recruitedBy && (
+                      <p className="text-xs text-muted-foreground">Hired by {(candidate as any).recruitedBy}</p>
+                    )}
                   </div>
                   <div className="text-right">
                     <Badge variant="default" className="bg-green-600">Hired</Badge>

@@ -3302,8 +3302,16 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
   }
 });
 
-router.post('/api/candidates', requireAuth, requireManager, async (req, res) => {
+router.post('/api/candidates', requireAuth, requireManager, async (req: any, res) => {
   try {
+    const user = req.user;
+
+    // Auto-assign to the creating user if they're a SOURCER and no assignedTo provided
+    let autoAssignedTo = req.body.assignedTo;
+    if (!autoAssignedTo && user && (user.role === 'SOURCER' || isSourcer(user))) {
+      autoAssignedTo = user.id;
+    }
+
     // Map the incoming fields to match schema expectations and provide defaults
     const mappedData = {
       firstName: req.body.firstName || 'Unknown',
@@ -3315,7 +3323,7 @@ router.post('/api/candidates', requireAuth, requireManager, async (req, res) => 
       appliedDate: req.body.appliedDate ? new Date(req.body.appliedDate) : new Date(),
       resumeUrl: req.body.resumeUrl,
       notes: req.body.notes,
-      assignedTo: req.body.assignedTo,
+      assignedTo: autoAssignedTo,
       recruiterId: req.body.recruiterId,
       customTags: req.body.customTags || [],
       questionnaireCompleted: req.body.questionnaireCompleted || false,
@@ -3411,6 +3419,11 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
           action: 'complete_interview'
         });
       }
+    }
+
+    // Auto-set recruiterId when moving to HIRED (tracks who actually hired them)
+    if (updateData.status === 'HIRED' && previousStatus !== 'HIRED') {
+      updateData.recruiterId = user.id;
     }
 
     const candidate = await storage.updateCandidate(req.params.id, updateData);

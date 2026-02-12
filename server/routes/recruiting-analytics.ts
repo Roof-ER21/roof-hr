@@ -832,12 +832,14 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
         const applied = new Date(c.appliedDate || c.createdAt);
         const hired = getHireDate(c);
         data.totalDays += Math.max(1, Math.ceil((hired.getTime() - applied.getTime()) / (1000 * 60 * 60 * 24)));
-        // Track hired candidate details
+        // Track hired candidate details including who recruited them
+        const recruiterUser = c.recruiterId ? users.find((u: any) => u.id === c.recruiterId) : null;
         data.hiredCandidates.push({
           id: c.id,
           name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email,
           position: c.position || 'Unknown Position',
           hiredDate: hired.toISOString(),
+          recruitedBy: recruiterUser ? `${recruiterUser.firstName} ${recruiterUser.lastName}` : undefined,
         });
       }
     });
@@ -852,7 +854,7 @@ router.get('/recruiters', requireAuthOrAssignments(), async (req: any, res: any)
       hiredCount: number;
       hireRate: number;
       avgDaysToHire: number;
-      hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string }>;
+      hiredCandidates: Array<{ id: string; name: string; position: string; hiredDate: string; recruitedBy?: string }>;
     }> = [];
 
     for (const [assigneeId, data] of assigneeMap.entries()) {
