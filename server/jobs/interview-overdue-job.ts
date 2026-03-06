@@ -3,7 +3,7 @@ import { interviews, candidates, users } from '@shared/schema';
 import { gmailService } from '../services/gmail-service';
 import { ALL_SOURCER_EMAILS } from '../../shared/constants/roles';
 import { logger } from '../middleware/logger';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, lt, notInArray } from 'drizzle-orm';
 import { differenceInDays } from 'date-fns';
 
 let isRunning = false;
@@ -41,7 +41,8 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
 
     const now = new Date();
 
-    // Find all interviews that are scheduled but past their scheduled date
+    // Find all interviews that are scheduled but past their scheduled date,
+    // excluding candidates already in terminal statuses (e.g. HIRED)
     const overdueInterviews = await db
       .select({
         interview: interviews,
@@ -54,7 +55,8 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
       .where(
         and(
           eq(interviews.status, 'SCHEDULED'),
-          lt(interviews.scheduledDate, now)
+          lt(interviews.scheduledDate, now),
+          notInArray(candidates.status, ['HIRED', 'REJECTED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'] as const)
         )
       );
 
@@ -77,6 +79,13 @@ export async function checkOverdueInterviews(): Promise<OverdueJobResult> {
 
         if (!interview || !candidate) {
           logger.warn(`[Interview Overdue Job] Missing interview or candidate data, skipping`);
+          continue;
+        }
+
+        // Safety guard: never touch candidates already in terminal statuses
+        const terminalGuard = ['HIRED', 'REJECTED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'];
+        if (terminalGuard.includes(candidate.status)) {
+          logger.info(`[Interview Overdue Job] Skipping ${candidate.firstName} ${candidate.lastName} — already in ${candidate.status} status`);
           continue;
         }
 
