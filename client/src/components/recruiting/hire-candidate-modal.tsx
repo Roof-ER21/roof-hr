@@ -59,6 +59,12 @@ interface Bundle {
   description?: string;
 }
 
+const OFFICE_LOCATIONS = {
+  DMV: { label: 'DMV (Vienna, VA)', address: '8100 Boone Blvd Suite 400, Vienna, VA 22182' },
+  PA: { label: 'PA (Chesterbrook, PA)', address: '851 Duportail Rd, Chesterbrook, PA 19087' },
+  RICHMOND: { label: 'Richmond (Glen Allen, VA)', address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060' },
+} as const;
+
 export interface HireData {
   startDate: string;
   department: string;
@@ -68,6 +74,8 @@ export interface HireData {
   welcomePackageId?: string;
   sendWelcomeEmail: boolean;
   welcomeEmailType?: 'insurance' | 'retail';
+  officeLocation?: string;
+  ccSalesManagers?: string[];
 }
 
 interface HireCandidateModalProps {
@@ -108,7 +116,26 @@ export function HireCandidateModal({
   const [welcomePackageId, setWelcomePackageId] = useState<string>('');
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail'>('insurance');
+  const [officeLocation, setOfficeLocation] = useState<keyof typeof OFFICE_LOCATIONS>('DMV');
+  const [ccSalesManagers, setCcSalesManagers] = useState<string[]>([]);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
+
+  // Fetch users to get sales managers for CC
+  const { data: allUsers = [] } = useQuery<any[]>({
+    queryKey: ['/api/users'],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const salesManagers = allUsers.filter((u: any) =>
+    u.role === 'TERRITORY_MANAGER' || u.role === 'TERRITORY_SALES_MANAGER' || u.role === 'GENERAL_MANAGER'
+  );
 
   // Fetch bundles for welcome packages
   const { data: bundles = [] } = useQuery<Bundle[]>({
@@ -135,6 +162,8 @@ export function HireCandidateModal({
       welcomePackageId: welcomePackageId || undefined,
       sendWelcomeEmail,
       welcomeEmailType: sendWelcomeEmail ? welcomeEmailType : undefined,
+      officeLocation: sendWelcomeEmail ? officeLocation : undefined,
+      ccSalesManagers: sendWelcomeEmail && ccSalesManagers.length > 0 ? ccSalesManagers : undefined,
     });
   };
 
@@ -337,22 +366,63 @@ export function HireCandidateModal({
               </div>
 
               {sendWelcomeEmail && (
-                <div className="space-y-2 pl-6">
-                  <Label>Welcome Email Type</Label>
-                  <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail')}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="insurance">Insurance (Original)</SelectItem>
-                      <SelectItem value="retail">Retail</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3 pl-6">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>Welcome Email Type</Label>
+                      <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail')}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="insurance">Insurance (Original)</SelectItem>
+                          <SelectItem value="retail">Retail</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Office Location</Label>
+                      <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value as keyof typeof OFFICE_LOCATIONS)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(OFFICE_LOCATIONS).map(([key, loc]) => (
+                            <SelectItem key={key} value={key}>{loc.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <p className="text-xs text-gray-500">
                     {welcomeEmailType === 'insurance'
                       ? 'Includes apps, training, HR portal, and equipment checklist'
                       : 'Retail division training with Bruno - no equipment checklist'}
+                    {' | '}Office: {OFFICE_LOCATIONS[officeLocation].address}
                   </p>
+                  {salesManagers.length > 0 && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">CC Sales Managers</Label>
+                      <div className="flex flex-wrap gap-3">
+                        {salesManagers.map((mgr: any) => (
+                          <div key={mgr.id} className="flex items-center space-x-1.5">
+                            <Checkbox
+                              id={`hire-cc-${mgr.id}`}
+                              checked={ccSalesManagers.includes(mgr.email)}
+                              onCheckedChange={() => {
+                                setCcSalesManagers(prev =>
+                                  prev.includes(mgr.email) ? prev.filter((e: string) => e !== mgr.email) : [...prev, mgr.email]
+                                );
+                              }}
+                            />
+                            <label htmlFor={`hire-cc-${mgr.id}`} className="text-xs cursor-pointer">
+                              {mgr.firstName} {mgr.lastName}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

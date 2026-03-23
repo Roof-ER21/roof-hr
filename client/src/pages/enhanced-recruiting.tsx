@@ -48,6 +48,7 @@ import { HireCandidateModal, type HireData } from '@/components/recruiting/hire-
 import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
 import { OfferNotesDialog } from '@/components/recruiting/offer-notes-dialog';
 import { DecisionTypeDialog, type DecisionType } from '@/components/recruiting/decision-type-dialog';
+import { StageNotesDialog } from '@/components/recruiting/stage-notes-dialog';
 import type { Candidate } from '@shared/schema';
 import { useDropzone } from 'react-dropzone';
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
@@ -1153,6 +1154,10 @@ export default function EnhancedRecruiting() {
   const [showOfferNotesDialog, setShowOfferNotesDialog] = useState(false);
   const [candidateForOfferNotes, setCandidateForOfferNotes] = useState<{candidate: Candidate; newStatus: string; decisionType?: DecisionType} | null>(null);
   const [isSubmittingOfferNotes, setIsSubmittingOfferNotes] = useState(false);
+  // Generic stage movement notes dialog - requires notes with @mention for all stage transitions
+  const [showStageNotesDialog, setShowStageNotesDialog] = useState(false);
+  const [candidateForStageNotes, setCandidateForStageNotes] = useState<{candidate: Candidate; fromStatus: string; toStatus: string} | null>(null);
+  const [isSubmittingStageNotes, setIsSubmittingStageNotes] = useState(false);
   const [isCandidateDialogOpen, setIsCandidateDialogOpen] = useState(false);
   const [isNewHireDialogOpen, setIsNewHireDialogOpen] = useState(false);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
@@ -1938,11 +1943,13 @@ export default function EnhancedRecruiting() {
       }
     }
 
-    // Directly update status
-    updateCandidateMutation.mutate({
-      id: candidateId,
-      data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
+    // Show stage notes dialog for mandatory note before moving
+    setCandidateForStageNotes({
+      candidate: currentCandidate,
+      fromStatus: currentCandidate.status,
+      toStatus: newStatus,
     });
+    setShowStageNotesDialog(true);
   };
 
   const activeDragCandidate = activeDragId 
@@ -2397,11 +2404,13 @@ export default function EnhancedRecruiting() {
                               return;
                             }
 
-                            // Directly update status without questionnaire
-                            updateCandidateMutation.mutate({
-                              id: candidateId,
-                              data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
+                            // Show stage notes dialog for mandatory note before moving
+                            setCandidateForStageNotes({
+                              candidate: currentCandidate,
+                              fromStatus: currentCandidate.status,
+                              toStatus: newStatus,
                             });
+                            setShowStageNotesDialog(true);
                           }}
                           onAnalyze={(candidate) => analyzeCandidateMutation.mutate(candidate.id)}
                           onEmail={(candidate) => {
@@ -2495,11 +2504,13 @@ export default function EnhancedRecruiting() {
                             }
                           }
 
-                          // Directly update status without questionnaire
-                          updateCandidateMutation.mutate({
-                            id: candidateId,
-                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
+                          // Show stage notes dialog for mandatory note before moving
+                          setCandidateForStageNotes({
+                            candidate: currentCandidate,
+                            fromStatus: currentCandidate.status,
+                            toStatus: newStatus,
                           });
+                          setShowStageNotesDialog(true);
                         }}
                         onAnalyze={(candidate) => analyzeCandidateMutation.mutate(candidate.id)}
                         onEmail={(candidate) => {
@@ -2564,11 +2575,13 @@ export default function EnhancedRecruiting() {
                             return;
                           }
 
-                          // Directly update status without questionnaire
-                          updateCandidateMutation.mutate({
-                            id: candidate.id,
-                            data: { status: newStatus as 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'DEAD_BY_US' | 'DEAD_BY_CANDIDATE' | 'NO_SHOW' }
+                          // Show stage notes dialog for mandatory note before moving
+                          setCandidateForStageNotes({
+                            candidate: currentCandidate,
+                            fromStatus: currentCandidate.status,
+                            toStatus: newStatus,
                           });
+                          setShowStageNotesDialog(true);
                         }}
                       >
                         <SelectTrigger className="w-[180px]">
@@ -2861,6 +2874,47 @@ export default function EnhancedRecruiting() {
           newStatus={candidateForOfferNotes.newStatus}
           isSubmitting={isSubmittingOfferNotes}
           decisionType={candidateForOfferNotes.decisionType}
+        />
+      )}
+
+      {/* Stage Movement Notes Dialog - requires note with @mention for all stage transitions */}
+      {candidateForStageNotes && (
+        <StageNotesDialog
+          open={showStageNotesDialog}
+          onClose={() => {
+            setShowStageNotesDialog(false);
+            setCandidateForStageNotes(null);
+          }}
+          onSubmit={async (notes) => {
+            setIsSubmittingStageNotes(true);
+            try {
+              // Add the note to the candidate
+              await apiRequest(`/api/candidates/${candidateForStageNotes.candidate.id}/notes`, {
+                method: 'POST',
+                body: JSON.stringify({
+                  content: notes,
+                  type: 'INTERNAL',
+                }),
+              });
+
+              // Now move the candidate
+              updateCandidateMutation.mutate({
+                id: candidateForStageNotes.candidate.id,
+                data: { status: candidateForStageNotes.toStatus as any },
+              });
+
+              setShowStageNotesDialog(false);
+              setCandidateForStageNotes(null);
+            } catch (error) {
+              console.error('Failed to save stage note:', error);
+            } finally {
+              setIsSubmittingStageNotes(false);
+            }
+          }}
+          candidateName={`${candidateForStageNotes.candidate.firstName} ${candidateForStageNotes.candidate.lastName}`}
+          fromStatus={candidateForStageNotes.fromStatus}
+          toStatus={candidateForStageNotes.toStatus}
+          isSubmitting={isSubmittingStageNotes}
         />
       )}
 
@@ -3190,11 +3244,14 @@ export default function EnhancedRecruiting() {
             return;
           }
 
-          // 5. Other stages - direct update
-          updateCandidateMutation.mutate({
-            id: candidate.id,
-            data: { status: nextStatus }
+          // 5. Other stages - show stage notes dialog for mandatory note
+          setCandidateForStageNotes({
+            candidate: candidate,
+            fromStatus: candidate.status,
+            toStatus: nextStatus,
           });
+          setShowStageNotesDialog(true);
+          setShowCandidateDetails(false);
         }}
         onScheduleInterview={(candidate) => {
           openInterviewScheduler(candidate);

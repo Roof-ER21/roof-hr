@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Loader2 } from 'lucide-react';
+import { Mail, Loader2, Users } from 'lucide-react';
+
+const OFFICE_LOCATIONS = {
+  DMV: { label: 'DMV (Vienna, VA)', address: '8100 Boone Blvd, Vienna, VA 22182, Suite 400', meetPerson: 'Reese Samala' },
+  PA: { label: 'PA (Chesterbrook, PA)', address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
+  RICHMOND: { label: 'Richmond (Glen Allen, VA)', address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
+} as const;
 
 interface Employee {
   id: string;
@@ -39,11 +45,40 @@ export function SendWelcomeDialog({
 }: SendWelcomeDialogProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(preselectedIds));
   const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail' | 'none'>('insurance');
+  const [officeLocation, setOfficeLocation] = useState<keyof typeof OFFICE_LOCATIONS>('DMV');
+  const [ccSalesManagers, setCcSalesManagers] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch sales managers for CC options
+  const { data: allUsers } = useQuery({
+    queryKey: ['/api/users'],
+    queryFn: async () => {
+      const res = await fetch('/api/users', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const salesManagers = (allUsers || []).filter((u: any) =>
+    u.role === 'TERRITORY_MANAGER' || u.role === 'TERRITORY_SALES_MANAGER' || u.role === 'GENERAL_MANAGER'
+  );
+
+  const toggleCcManager = (email: string) => {
+    setCcSalesManagers(prev =>
+      prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
+    );
+  };
+
   const sendEmailsMutation = useMutation({
-    mutationFn: async (payload: { employeeIds: string[]; welcomeEmailType: 'insurance' | 'retail' | 'none' }) => {
+    mutationFn: async (payload: {
+      employeeIds: string[];
+      welcomeEmailType: 'insurance' | 'retail' | 'none';
+      officeLocation: string;
+      ccRecipients: string[];
+    }) => {
       const response = await fetch('/api/users/send-welcome-emails', {
         method: 'POST',
         headers: {
@@ -109,7 +144,9 @@ export function SendWelcomeDialog({
     }
     sendEmailsMutation.mutate({
       employeeIds: Array.from(selectedIds),
-      welcomeEmailType
+      welcomeEmailType,
+      officeLocation,
+      ccRecipients: ccSalesManagers,
     });
   };
 
@@ -130,19 +167,58 @@ export function SendWelcomeDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Welcome Email Type</label>
-            <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail' | 'none')}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select email type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="insurance">Insurance (Original)</SelectItem>
-                <SelectItem value="retail">Retail</SelectItem>
-                <SelectItem value="none">None (Do Not Send)</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Welcome Email Type</label>
+              <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail' | 'none')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select email type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="insurance">Insurance (Original)</SelectItem>
+                  <SelectItem value="retail">Retail</SelectItem>
+                  <SelectItem value="none">None (Do Not Send)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Office Location</label>
+              <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value as keyof typeof OFFICE_LOCATIONS)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select office" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(OFFICE_LOCATIONS).map(([key, loc]) => (
+                    <SelectItem key={key} value={key}>{loc.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {salesManagers.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Users className="h-4 w-4" />
+                CC Sales Managers
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {salesManagers.map((mgr: any) => (
+                  <div key={mgr.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`cc-${mgr.id}`}
+                      checked={ccSalesManagers.includes(mgr.email)}
+                      onCheckedChange={() => toggleCcManager(mgr.email)}
+                    />
+                    <label htmlFor={`cc-${mgr.id}`} className="text-sm cursor-pointer">
+                      {mgr.firstName} {mgr.lastName}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center space-x-2">
               <Checkbox

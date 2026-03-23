@@ -1799,7 +1799,7 @@ router.post('/api/users/bulk-import-theroofdocs', requireAuth, requireManager, a
 // Send welcome emails to selected employees
 router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async (req, res) => {
   try {
-    const { employeeIds, password = 'TRD2026!', welcomeEmailType = 'insurance' } = req.body;
+    const { employeeIds, password = 'TRD2026!', welcomeEmailType = 'insurance', officeLocation, ccRecipients = [] } = req.body;
     const normalizedEmailType = ['auto', 'insurance', 'retail', 'none'].includes(welcomeEmailType)
       ? welcomeEmailType
       : 'insurance';
@@ -1837,7 +1837,9 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
     for (const emp of employees) {
       try {
         const emailSent = await emailService.sendWelcomeEmail(emp, password, undefined, {
-          welcomeEmailType: normalizedEmailType
+          welcomeEmailType: normalizedEmailType,
+          officeLocation: officeLocation || 'DMV',
+          ccRecipients: Array.isArray(ccRecipients) ? ccRecipients : [],
         });
         if (emailSent) {
           results.sent++;
@@ -3836,11 +3838,13 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       shirtSize,
       welcomePackageId,
       sendWelcomeEmail = true,
-      welcomeEmailType = 'insurance'
+      welcomeEmailType = 'insurance',
+      officeLocation = 'DMV',
+      ccSalesManagers = [],
     } = req.body;
 
     console.log(`[HIRE] Starting hire process for candidate ${candidateId}`);
-    console.log(`[HIRE] Email settings: sendWelcomeEmail=${sendWelcomeEmail}, welcomeEmailType=${welcomeEmailType}`);
+    console.log(`[HIRE] Email settings: sendWelcomeEmail=${sendWelcomeEmail}, welcomeEmailType=${welcomeEmailType}, officeLocation=${officeLocation}`);
 
     // Get candidate
     const candidate = await storage.getCandidateById(candidateId);
@@ -4093,6 +4097,8 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
               includeEquipmentChecklist,
               equipmentSigningUrl: includeEquipmentChecklist ? emailSigningUrl : undefined,
               welcomeEmailType: emailType,
+              officeLocation: officeLocation || 'DMV',
+              ccRecipients: Array.isArray(ccSalesManagers) ? ccSalesManagers : [],
             }
           );
 

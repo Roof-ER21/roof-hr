@@ -50,8 +50,12 @@ export function EmailPreferences({ userId, compact = false }: EmailPreferencesPr
     queryKey: ['email-preferences', userId],
     queryFn: async () => {
       if (!userId) return null;
+      const token = localStorage.getItem('token');
       const response = await fetch(`/api/email-preferences/${userId}`, {
         credentials: 'include',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       if (!response.ok) {
         if (response.status === 404) {
@@ -73,9 +77,13 @@ export function EmailPreferences({ userId, compact = false }: EmailPreferencesPr
   const updatePreferencesMutation = useMutation({
     mutationFn: async (updatedPrefs: Partial<PreferencesData>) => {
       if (!userId) throw new Error('No user ID');
+      const token = localStorage.getItem('token');
       const response = await fetch(`/api/email-preferences/${userId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: 'include',
         body: JSON.stringify(updatedPrefs),
       });

@@ -125,17 +125,10 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Notes
-          </CardTitle>
-          {!isAddingNote && (
-            <Button size="sm" onClick={() => setIsAddingNote(true)}>
-              Add Note
-            </Button>
-          )}
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Notes
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {isAddingNote && (
@@ -238,6 +231,13 @@ export function CandidateNotes({ candidateId }: CandidateNotesProps) {
               ))}
             </div>
           </ScrollArea>
+        )}
+        {!isAddingNote && (
+          <div className="flex justify-end mt-4">
+            <Button size="sm" onClick={() => setIsAddingNote(true)}>
+              Add Note
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -586,7 +586,7 @@ class EmailService {
 
           <p>Hi ${firstName},</p>
 
-          <p>We noticed you weren't able to make your scheduled interview on <strong>${formattedDate}</strong> for the <strong>${position}</strong> position at The Roof Docs.</p>
+          <p>We noticed you weren't able to make your scheduled interview on <strong>${formattedDate}</strong> at The Roof Docs.</p>
 
           <p>We understand that things come up, and we'd still love the opportunity to speak with you!</p>
 
@@ -610,7 +610,7 @@ class EmailService {
 
       const result = await this.sendEmail({
         to: candidateEmail,
-        subject: `Let's Reschedule Your Interview - ${position}`,
+        subject: `Let's Reschedule Your Interview - ROOF-ER`,
         html,
         candidateId,
       });
@@ -638,9 +638,19 @@ class EmailService {
       equipmentChecklistUrl?: string;  // Link to equipment checklist form
       equipmentSigningUrl?: string;  // Link to sign equipment receipt (locked until start date)
       welcomeEmailType?: 'auto' | 'insurance' | 'retail';
+      officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
     }
   ) {
     try {
+      // Office location addresses
+      const officeLocations: Record<string, { address: string; meetPerson: string }> = {
+        DMV: { address: '8100 Boone Blvd Suite 400, Vienna, VA 22182', meetPerson: 'Reese Samala' },
+        PA: { address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
+        RICHMOND: { address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
+      };
+
+      const selectedOffice = officeLocations[options?.officeLocation || 'DMV'] || officeLocations.DMV;
+
       // Determine start date - use provided date or default to upcoming Monday
       const startDate = options?.startDate || getUpcomingMonday();
       const formattedDate = formatStartDate(startDate);
@@ -733,7 +743,7 @@ class EmailService {
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            On this day, you'll meet with <strong>Reese Samala</strong> and the team at the office to receive your materials. We are located at <strong><em>8100 Boone Blvd Suite 400, Vienna, VA 22182</em></strong>
+            On this day, you'll meet with <strong>${selectedOffice.meetPerson}</strong> and the team at the office to receive your materials. We are located at <strong><em>${selectedOffice.address}</em></strong>
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #800080;">
@@ -803,7 +813,7 @@ class EmailService {
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>8100 Boone Blvd Suite 400, Vienna, VA 22182</strong>.
+            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>${selectedOffice.address}</strong>.
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO EXPECT:</strong></p>
