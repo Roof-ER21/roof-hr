@@ -10,6 +10,11 @@ import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer } from 
 
 const router = Router();
 
+// Format interview type for display (IN_PERSON → "In Person", VIDEO → "Video", etc.)
+function formatInterviewType(type: string): string {
+  return type.replace(/_/g, ' ').replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 // Enhanced interview scheduling
 const scheduleInterviewSchema = z.object({
   candidateId: z.string(),
@@ -381,7 +386,7 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
           const description = `
 Interview Details:
 - Candidate: ${candidateDetails.firstName} ${candidateDetails.lastName}
-- Type: ${data.type}
+- Type: ${formatInterviewType(data.type)}
 - Duration: ${data.duration} minutes
 ${data.meetingLink ? `- Meeting Link: ${data.meetingLink}` : ''}
 ${data.location && data.type === 'IN_PERSON' ? `- Location: ${data.location}` : ''}
@@ -1072,7 +1077,7 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
             interviewerEmail,
             {
               summary: `Interview: ${candidate?.firstName} ${candidate?.lastName} - ${candidate?.position || 'Interview'} (Rescheduled)`,
-              description: `Rescheduled Interview\n\nCandidate: ${candidate?.firstName} ${candidate?.lastName}\nPosition: ${candidate?.position || 'N/A'}\nType: ${type || existingInterview.type}\n${notes ? `Notes: ${notes}` : ''}`,
+              description: `Rescheduled Interview\n\nCandidate: ${candidate?.firstName} ${candidate?.lastName}\nType: ${formatInterviewType(type || existingInterview.type)}\n${notes ? `Notes: ${notes}` : ''}`,
               location: location || meetingLink || existingInterview.location || existingInterview.meetingLink,
               startDateTime: newScheduledDate,
               endDateTime,
@@ -1112,7 +1117,7 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
             <ul>
               <li>Date: ${newScheduledDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}</li>
               <li>Time: ${newScheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET</li>
-              <li>Type: ${type || existingInterview.type}</li>
+              <li>Type: ${formatInterviewType(type || existingInterview.type)}</li>
               ${(location || existingInterview.location) ? `<li>Location: ${location || existingInterview.location}</li>` : ''}
               ${(meetingLink || existingInterview.meetingLink) ? `<li>Meeting Link: <a href="${meetingLink || existingInterview.meetingLink}">${meetingLink || existingInterview.meetingLink}</a></li>` : ''}
             </ul>
@@ -1260,7 +1265,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
           <p><strong>Date:</strong> ${candidateInterviewDate}</p>
           <p><strong>Time:</strong> ${candidateInterviewTime}</p>
           <p><strong>Duration:</strong> ${interview.duration} minutes</p>
-          <p><strong>Type:</strong> ${interview.type}</p>
+          <p><strong>Type:</strong> ${formatInterviewType(interview.type)}</p>
           ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
           ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
           <p><strong>Interviewer:</strong> ${interviewerName}</p>
@@ -1309,7 +1314,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
             <p><strong>Date:</strong> ${interviewerInterviewDate}</p>
             <p><strong>Time:</strong> ${interviewerInterviewTime}</p>
             <p><strong>Duration:</strong> ${interview.duration} minutes</p>
-            <p><strong>Type:</strong> ${interview.type}</p>
+            <p><strong>Type:</strong> ${formatInterviewType(interview.type)}</p>
             ${interview.location ? `<p><strong>Location:</strong> ${interview.location}</p>` : ''}
             ${interview.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${interview.meetingLink}">${interview.meetingLink}</a></p>` : ''}
           </div>
@@ -1613,7 +1618,7 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
           const description = `
 Interview Details:
 - Candidate: ${candidateDetails.firstName} ${candidateDetails.lastName}
-- Type: ${data.type}
+- Type: ${formatInterviewType(data.type)}
 - Duration: ${data.duration} minutes
 ${data.meetingLink ? `- Meeting Link: ${data.meetingLink}` : ''}
 ${data.location && data.type === 'IN_PERSON' ? `- Location: ${data.location}` : ''}
