@@ -1,5 +1,6 @@
 import { storage } from '../storage';
 import { googleEmailService } from './google-email-service';
+import { isNotificationEnabled } from './notification-preferences';
 
 /**
  * Onboarding Notification Service
@@ -57,8 +58,9 @@ export async function sendOnboardingAssignedNotification(
 
     console.log(`[Onboarding Notification] In-app notification created for employee ${employeeId}`);
 
-    // Send email notification
-    if (employee.email) {
+    // Send email notification (respects user preference)
+    const emailEnabled = await isNotificationEnabled(employeeId, 'onboardingNotifications');
+    if (employee.email && emailEnabled) {
       const emailSubject = 'New Onboarding Process Assigned';
       const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -174,8 +176,9 @@ export async function sendOverdueTaskNotification(
 
     console.log(`[Onboarding Notification] In-app notification created for employee ${employeeId}`);
 
-    // Send email reminder
-    if (employee.email) {
+    // Send email reminder (respects user preference)
+    const emailEnabled = await isNotificationEnabled(employeeId, 'onboardingNotifications');
+    if (employee.email && emailEnabled) {
       const emailSubject = `Reminder: Overdue Onboarding Task - ${taskTitle}`;
       const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

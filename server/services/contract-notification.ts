@@ -2,6 +2,7 @@ import { storage } from '../storage';
 import { gmailService } from './gmail-service';
 import { EmailService } from '../email-service';
 import { CONTRACT_CORE_ALERT_RECIPIENTS, RETAIL_CONTRACT_ALERT_RECIPIENTS, HR_ROLES, TOP_LEADERSHIP_EMAILS } from '@shared/constants/roles';
+import { isNotificationEnabled } from './notification-preferences';
 
 interface ContractSignedNotification {
   contractId: string;
@@ -101,9 +102,36 @@ function getLeadershipRecipients(isRetail: boolean, senderEmail?: string) {
   return uniqueEmails(base);
 }
 
+async function filterRecipientsByContractPreference(emails: string[]): Promise<string[]> {
+  try {
+    const allUsers = await storage.getAllUsers();
+    const emailToUser = new Map(allUsers.map((u: any) => [normalizeEmail(u.email), u.id]));
+    const filtered: string[] = [];
+    for (const email of emails) {
+      const userId = emailToUser.get(normalizeEmail(email));
+      if (!userId) {
+        // External recipient (no account) — always send
+        filtered.push(email);
+        continue;
+      }
+      const enabled = await isNotificationEnabled(userId, 'contractNotifications');
+      if (enabled) {
+        filtered.push(email);
+      } else {
+        console.log(`[Contract Email] Skipping ${email} — contractNotifications disabled`);
+      }
+    }
+    return filtered;
+  } catch (error) {
+    console.error('[Contract Email] Error checking preferences, sending to all:', error);
+    return emails;
+  }
+}
+
 async function sendEmailBatch(recipients: string[], subject: string, html: string, senderEmail?: string) {
-  if (recipients.length === 0) return;
-  await sendEmailWithFallback(recipients, subject, html, senderEmail);
+  const filtered = await filterRecipientsByContractPreference(recipients);
+  if (filtered.length === 0) return;
+  await sendEmailWithFallback(filtered, subject, html, senderEmail);
 }
 
 export async function notifyManagersAndHROfSignedContract(notification: ContractSignedNotification, senderEmail?: string, isRetail = false) {
@@ -228,7 +256,10 @@ export async function notifyRecipientOfRescindedContract(
       </div>
     `;
 
-    await sendEmailWithFallback([contract.recipientEmail], subject, htmlContent, senderEmail);
+    const filtered = await filterRecipientsByContractPreference([contract.recipientEmail]);
+    if (filtered.length > 0) {
+      await sendEmailWithFallback(filtered, subject, htmlContent, senderEmail);
+    }
 
     return true;
   } catch (error) {
@@ -396,7 +427,10 @@ export async function notifyRecipientOfNewContract(
       </div>
     `;
 
-    await sendEmailWithFallback([recipientEmail], subject, htmlContent, senderEmail);
+    const filtered = await filterRecipientsByContractPreference([recipientEmail]);
+    if (filtered.length > 0) {
+      await sendEmailWithFallback(filtered, subject, htmlContent, senderEmail);
+    }
     return true;
   } catch (error) {
     console.error('Error sending contract notification:', error);

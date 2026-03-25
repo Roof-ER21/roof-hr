@@ -1,8 +1,9 @@
 import { db } from '../db';
 import { eq, and, inArray } from 'drizzle-orm';
-import { ptoRequests, users } from '../../shared/schema';
+import { ptoRequests, users, userEmailPreferences } from '../../shared/schema';
 import { EmailService } from '../email-service';
 import { MANAGER_ROLES, PTO_REMINDER_RECIPIENTS } from '../../shared/constants/roles';
+import { isNotificationEnabled } from '../services/notification-preferences';
 
 let isRunning = false;
 let jobInterval: NodeJS.Timeout | null = null;
@@ -125,6 +126,10 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
       managersByDepartment.get(key)?.add(manager.email.toLowerCase());
     }
 
+    // Build email→userId map for preference checks
+    const allUsers = await db.select({ id: users.id, email: users.email }).from(users);
+    const emailToUserId = new Map(allUsers.map(u => [u.email.toLowerCase(), u.id]));
+
     const getRecipientsForDepartment = (department?: string, employeeEmail?: string): string[] => {
       const recipients = new Set(PTO_REMINDER_RECIPIENTS.map((email) => email.toLowerCase()));
       const key = department?.trim().toLowerCase();
@@ -144,6 +149,15 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
       try {
         const recipients = getRecipientsForDepartment(pto.department, pto.email);
         for (const recipientEmail of recipients) {
+          // Check if recipient has PTO notifications enabled
+          const userId = emailToUserId.get(recipientEmail.toLowerCase());
+          if (userId) {
+            const enabled = await isNotificationEnabled(userId, 'ptoNotifications');
+            if (!enabled) {
+              console.log(`[PTO Reminder Job] Skipping ${recipientEmail} — ptoNotifications disabled`);
+              continue;
+            }
+          }
           await emailService.sendEmail({
             to: recipientEmail,
             subject: `PTO Reminder: ${pto.firstName} ${pto.lastName} - 1 Week Away`,
@@ -180,6 +194,15 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
       try {
         const recipients = getRecipientsForDepartment(pto.department, pto.email);
         for (const recipientEmail of recipients) {
+          // Check if recipient has PTO notifications enabled
+          const userId = emailToUserId.get(recipientEmail.toLowerCase());
+          if (userId) {
+            const enabled = await isNotificationEnabled(userId, 'ptoNotifications');
+            if (!enabled) {
+              console.log(`[PTO Reminder Job] Skipping ${recipientEmail} — ptoNotifications disabled`);
+              continue;
+            }
+          }
           await emailService.sendEmail({
             to: recipientEmail,
             subject: `PTO Notice: ${pto.firstName} ${pto.lastName} - 1 Month Away`,
