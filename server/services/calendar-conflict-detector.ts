@@ -457,7 +457,7 @@ export class CalendarConflictDetector {
   ): Promise<Date[]> {
     const suggestions: Date[] = [];
     const checkDate = new Date(preferredDate);
-    const daysToCheck = 7; // Check up to 7 days ahead
+    const daysToCheck = 5; // Check up to 5 business days ahead
 
     for (let day = 0; day < daysToCheck && suggestions.length < maxSuggestions; day++) {
       // Skip weekends
@@ -466,17 +466,32 @@ export class CalendarConflictDetector {
         continue;
       }
 
-      // Check hourly slots from 7am to 6pm (office hours)
-      for (let hour = 7; hour < 18 && suggestions.length < maxSuggestions; hour++) {
+      // Check hourly slots from 9am to 5pm (core office hours only)
+      for (let hour = 9; hour < 17 && suggestions.length < maxSuggestions; hour++) {
         const slotStart = new Date(checkDate);
         slotStart.setHours(hour, 0, 0, 0);
         const slotEnd = new Date(checkDate);
         slotEnd.setHours(hour + 1, 0, 0, 0);
 
-        // Check if this slot is available for all participants
-        const result = await this.checkConflicts(participants, slotStart, slotEnd);
-        
-        if (!result.hasConflicts && result.warnings.length === 0) {
+        // Lightweight conflict check — NO recursion (don't call checkConflicts which would loop back here)
+        let hasConflict = false;
+        try {
+          for (const email of participants) {
+            if (hasConflict) break;
+            // Only check Google Calendar (skip DB queries to avoid pool exhaustion)
+            if (this.isInitialized) {
+              const calendarConflicts = await this.checkGoogleCalendarConflicts(email, slotStart, slotEnd);
+              if (calendarConflicts.length > 0) {
+                hasConflict = true;
+              }
+            }
+          }
+        } catch (error) {
+          // On error, skip this slot rather than crashing
+          hasConflict = true;
+        }
+
+        if (!hasConflict) {
           suggestions.push(slotStart);
         }
       }
