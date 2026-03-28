@@ -159,6 +159,31 @@ async function runMigrations() {
       logger.info('[Migration] ✅ Deactivated admin@theroofdocs.com');
     }
 
+    // Ensure user_email_preferences table exists
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS user_email_preferences (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        pto_notifications BOOLEAN NOT NULL DEFAULT true,
+        contract_notifications BOOLEAN NOT NULL DEFAULT true,
+        review_notifications BOOLEAN NOT NULL DEFAULT true,
+        task_notifications BOOLEAN NOT NULL DEFAULT true,
+        system_announcements BOOLEAN NOT NULL DEFAULT true,
+        weekly_digest BOOLEAN NOT NULL DEFAULT false,
+        mention_notifications BOOLEAN NOT NULL DEFAULT true,
+        interview_notifications BOOLEAN NOT NULL DEFAULT true,
+        calendar_notifications BOOLEAN NOT NULL DEFAULT true,
+        onboarding_notifications BOOLEAN NOT NULL DEFAULT true,
+        equipment_notifications BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_email_prefs_user_id ON user_email_preferences(user_id)
+    `);
+    logger.info('[Migration] ✅ user_email_preferences table ready');
+
     logger.info('[Migration] All migrations completed successfully');
   } catch (error: any) {
     // If the column already exists, that's fine
