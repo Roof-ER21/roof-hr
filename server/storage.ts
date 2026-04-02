@@ -125,6 +125,7 @@ export interface IStorage {
   getSessionByToken(token: string): Promise<Session | null>;
   deleteSession(id: string): Promise<void>;
   deleteExpiredSessions(): Promise<void>;
+  updateSessionExpiry(id: string, expiresAt: Date): Promise<void>;
 
   // PTO Management
   createPtoRequest(data: InsertPtoRequest & { employeeId: string }): Promise<PtoRequest>;
@@ -582,6 +583,10 @@ class DrizzleStorage implements IStorage {
 
   async deleteExpiredSessions(): Promise<void> {
     await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
+  }
+
+  async updateSessionExpiry(id: string, expiresAt: Date): Promise<void> {
+    await db.update(sessions).set({ expiresAt }).where(eq(sessions.id, id));
   }
 
   // PTO methods

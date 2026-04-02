@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
+import { db } from '../db';
+import { sessions } from '../../shared/schema';
+import { eq } from 'drizzle-orm';
 import {
   ADMIN_ROLES,
   MANAGER_ROLES,
@@ -39,6 +42,17 @@ export async function requireAuth(req: any, res: Response, next: NextFunction) {
 
     console.log('[Auth] User authenticated:', user.email);
     req.user = user;
+
+    // Sliding session renewal — extend expiry by 24h on every authenticated request
+    // Fire-and-forget (don't block the request)
+    const newExpiry = new Date();
+    newExpiry.setHours(newExpiry.getHours() + 24);
+    db.update(sessions)
+      .set({ expiresAt: newExpiry })
+      .where(eq(sessions.id, session.id))
+      .then(() => {})
+      .catch((err: any) => console.warn('[Auth] Session renewal failed:', err?.message));
+
     next();
   } catch (error: any) {
     console.error('[Auth] Middleware error:', error?.message || error);

@@ -941,6 +941,10 @@ router.get('/api/auth/validate', async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Extend session on validate (sliding window — keeps active users logged in)
+    const newExpiry = getSessionExpiry();
+    storage.updateSessionExpiry?.(session.id, newExpiry).catch(() => {});
+
     res.json({
       id: user.id,
       email: user.email,
