@@ -610,7 +610,7 @@ class EmailService {
 
       const result = await this.sendEmail({
         to: candidateEmail,
-        subject: `Let's Reschedule Your Interview - ROOFER`,
+        subject: `Let's Reschedule Your Interview - ROOF ER`,
         html,
         candidateId,
       });
@@ -799,7 +799,7 @@ class EmailService {
           </p>
 
           <p style="margin-top: 20px;">
-            <img src="https://lh3.googleusercontent.com/a/ACg8ocLV5bFgDxfg7P9BHJbvJqGTRKnPvLK9_cC9N0oqxw=s96-c" alt="ROOFER Logo" style="width: 120px; height: auto;">
+            <img src="https://lh3.googleusercontent.com/a/ACg8ocLV5bFgDxfg7P9BHJbvJqGTRKnPvLK9_cC9N0oqxw=s96-c" alt="ROOF ER Logo" style="width: 120px; height: auto;">
           </p>
         </div>
       `;

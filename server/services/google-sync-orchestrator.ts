@@ -89,7 +89,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
     
     try {
       // Create or get main HR folder
-      const hrFolderName = 'ROOFER HR Management';
+      const hrFolderName = 'ROOF ER HR Management';
       let hrFolder = await driveService.findFolderByName(hrFolderName);
       
       if (!hrFolder) {
@@ -228,7 +228,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
     const sheetsService = googleServicesManager.getSheetsService();
     
     // Get or create inventory spreadsheet
-    let spreadsheetId = await this.getOrCreateSpreadsheet('ROOFER Inventory Management');
+    let spreadsheetId = await this.getOrCreateSpreadsheet('ROOF ER Inventory Management');
     
     // Get all inventory from database
     const inventory = await storage.getAllToolInventory();
@@ -273,7 +273,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
     const sheetsService = googleServicesManager.getSheetsService();
     
     // Get or create employees spreadsheet
-    let spreadsheetId = await this.getOrCreateSpreadsheet('ROOFER Employee Directory');
+    let spreadsheetId = await this.getOrCreateSpreadsheet('ROOF ER Employee Directory');
     
     // Get all employees from database
     const employees = await storage.getAllUsers();
@@ -329,7 +329,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
     const calendarService = googleServicesManager.getCalendarService();
     
     // Get or create PTO calendar
-    let calendarId = await this.getOrCreateCalendar('ROOFER PTO Calendar');
+    let calendarId = await this.getOrCreateCalendar('ROOF ER PTO Calendar');
     
     // Get all approved PTO requests
     const ptoRequests = await storage.getAllPtoRequests();
@@ -370,7 +370,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
     const calendarService = googleServicesManager.getCalendarService();
     
     // Get or create interviews calendar
-    let calendarId = await this.getOrCreateCalendar('ROOFER Interview Schedule');
+    let calendarId = await this.getOrCreateCalendar('ROOF ER Interview Schedule');
     
     // Get all scheduled interviews
     const interviews = await storage.getAllInterviews();
@@ -384,7 +384,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
       
       // Prepare event data
       const eventData = {
-        summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ROOFER`,
+        summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ROOF ER`,
         description: `Interview Type: ${interview.type}\nNotes: ${interview.notes || 'N/A'}`,
         start: { dateTime: interview.scheduledDate.toISOString() },
         end: { dateTime: new Date(interview.scheduledDate.getTime() + 60 * 60 * 1000).toISOString() },

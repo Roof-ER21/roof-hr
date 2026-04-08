@@ -417,7 +417,7 @@ Please use the HR system to record interview feedback.
             calendarEvent = await calendarService.createEventWithMeetForUser(
               interviewerDetails.email, // Create in the interviewer's calendar
               {
-                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOFER`,
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOF ER`,
                 description,
                 startDateTime,
                 endDateTime,
@@ -437,7 +437,7 @@ Please use the HR system to record interview feedback.
             calendarEvent = await calendarService.createEventForUser(
               interviewerDetails.email, // Create in the interviewer's calendar
               {
-                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOFER`,
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOF ER`,
                 description,
                 location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
                 startDateTime,
@@ -485,7 +485,7 @@ Please use the HR system to record interview feedback.
             for (const panelEmail of uniquePanelEmails) {
               try {
                 await calendarService.createEventForUser(panelEmail, {
-                  summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOFER`,
+                  summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOF ER`,
                   description: panelDescription,
                   location: panelLocation,
                   startDateTime,
@@ -1076,7 +1076,7 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
           const calendarEvent = await calendarService.createEventForUser(
             interviewerEmail,
             {
-              summary: `Interview: ${candidate?.firstName} ${candidate?.lastName} - ROOFER`,
+              summary: `Interview: ${candidate?.firstName} ${candidate?.lastName} - ROOF ER`,
               description: `Rescheduled Interview\n\nCandidate: ${candidate?.firstName} ${candidate?.lastName}\nType: ${formatInterviewType(type || existingInterview.type)}\n${notes ? `Notes: ${notes}` : ''}`,
               location: location || meetingLink || existingInterview.location || existingInterview.meetingLink,
               startDateTime: newScheduledDate,
@@ -1109,7 +1109,7 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
       if (candidate?.email) {
         await emailService.sendEmail({
           to: candidate.email,
-          subject: `Interview Rescheduled - ROOFER`,
+          subject: `Interview Rescheduled - ROOF ER`,
           html: `
             <p>Dear ${candidate.firstName},</p>
             <p>Your interview has been rescheduled to a new date and time.</p>
@@ -1257,9 +1257,9 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
     // Email HTML to candidate (with their timezone)
     const candidateHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563eb;">Interview Scheduled - ROOFER</h2>
+        <h2 style="color: #2563eb;">Interview Scheduled - ROOF ER</h2>
         <p>Dear ${candidate.firstName} ${candidate.lastName},</p>
-        <p>Your interview has been scheduled at ROOFER.</p>
+        <p>Your interview has been scheduled at ROOF ER.</p>
         <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin-top: 0; color: #374151;">Interview Details</h3>
           <p><strong>Date:</strong> ${candidateInterviewDate}</p>
@@ -1273,7 +1273,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
         </div>
         <p>If you need to reschedule or have any questions, please contact us immediately.</p>
         <p>We look forward to meeting with you!</p>
-        <p>Best regards,<br>ROOFER Hiring Team</p>
+        <p>Best regards,<br>ROOF ER Hiring Team</p>
       </div>
     `;
 
@@ -1282,7 +1282,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
     try {
       candidateEmailSent = await emailService.sendEmail({
         to: candidate.email,
-        subject: `Interview Scheduled - ROOFER`,
+        subject: `Interview Scheduled - ROOF ER`,
         html: candidateHtml,
         candidateId: candidate.id,
         interviewId: interview.id,
@@ -1326,7 +1326,7 @@ async function sendInterviewScheduledEmails(interview: any, fromUserEmail?: stri
           </div>
           ${interview.notes ? `<p><strong>Interview Notes:</strong> ${interview.notes}</p>` : ''}
           <p>Please review the candidate's profile before the interview.</p>
-          <p>Best regards,<br>ROOFER HR System</p>
+          <p>Best regards,<br>ROOF ER HR System</p>
         </div>
       `;
 
@@ -1647,7 +1647,7 @@ Please use the HR system to record interview feedback.
             calendarEvent = await calendarService.createEventWithMeetForUser(
               interviewerDetails.email,
               {
-                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOFER`,
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOF ER`,
                 description,
                 startDateTime,
                 endDateTime,
@@ -1665,7 +1665,7 @@ Please use the HR system to record interview feedback.
             calendarEvent = await calendarService.createEventForUser(
               interviewerDetails.email,
               {
-                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOFER`,
+                summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOF ER`,
                 description,
                 location: data.type === 'IN_PERSON' ? data.location : data.meetingLink,
                 startDateTime,
@@ -1711,7 +1711,7 @@ Please use the HR system to record interview feedback.
             for (const panelEmail of uniquePanelEmails) {
               try {
                 await calendarService.createEventForUser(panelEmail, {
-                  summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOFER`,
+                  summary: `Interview: ${candidateDetails.firstName} ${candidateDetails.lastName} - ROOF ER`,
                   description: panelDescription,
                   location: panelLocation,
                   startDateTime,

@@ -234,7 +234,7 @@ export class SusanRecruitingManager {
           const endDateTime = new Date(scheduledDate.getTime() + 60 * 60 * 1000); // 1 hour duration
           
           const calendarEvent = await calendarService.createEvent({
-            summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ROOFER`,
+            summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ROOF ER`,
             description: `Interview with ${candidate.firstName} ${candidate.lastName} for ${candidate.position} position.\n\nCandidate Email: ${candidate.email}\nCandidate Phone: ${candidate.phone || 'N/A'}\n\nNotes: ${interviewData.notes || 'Scheduled via Susan AI'}`,
             startDateTime: scheduledDate,
             endDateTime,
@@ -394,37 +394,37 @@ export class SusanRecruitingManager {
           subject = 'Thank you for your application';
           html = `
             <p>Dear ${candidateName},</p>
-            <p>Thank you for your interest in the ${candidate.position} position at ROOFER.</p>
+            <p>Thank you for your interest in the ${candidate.position} position at ROOF ER.</p>
             <p>We have received your application and will review it shortly.</p>
-            <p>Best regards,<br>ROOFER Recruiting Team</p>
+            <p>Best regards,<br>ROOF ER Recruiting Team</p>
           `;
           break;
         case 'interview_scheduled':
-          subject = 'Interview Scheduled - ROOFER';
+          subject = 'Interview Scheduled - ROOF ER';
           html = `
             <p>Dear ${candidateName},</p>
             <p>We are pleased to inform you that your interview for ${candidate.position} has been scheduled.</p>
             <p>Our team will contact you with the details shortly.</p>
-            <p>Best regards,<br>ROOFER Recruiting Team</p>
+            <p>Best regards,<br>ROOF ER Recruiting Team</p>
           `;
           break;
         case 'offer':
-          subject = 'Job Offer - ROOFER';
+          subject = 'Job Offer - ROOF ER';
           html = `
             <p>Dear ${candidateName},</p>
             <p>Congratulations! We are pleased to extend an offer for the ${candidate.position} position.</p>
             <p>Our HR team will contact you with the offer details.</p>
-            <p>Best regards,<br>ROOFER Team</p>
+            <p>Best regards,<br>ROOF ER Team</p>
           `;
           break;
         case 'rejection':
-          subject = 'Application Update - ROOFER';
+          subject = 'Application Update - ROOF ER';
           html = `
             <p>Dear ${candidateName},</p>
-            <p>Thank you for your interest in the ${candidate.position} position at ROOFER.</p>
+            <p>Thank you for your interest in the ${candidate.position} position at ROOF ER.</p>
             <p>After careful consideration, we have decided to move forward with other candidates.</p>
             <p>We wish you the best in your job search.</p>
-            <p>Best regards,<br>ROOFER Recruiting Team</p>
+            <p>Best regards,<br>ROOF ER Recruiting Team</p>
           `;
           break;
       }

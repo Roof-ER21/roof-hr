@@ -546,7 +546,7 @@ Notes:
     `.trim();
 
     return this.createEvent({
-      summary: `Interview: ${candidate.name} - ROOFER`,
+      summary: `Interview: ${candidate.name} - ROOF ER`,
       description,
       location: interviewDetails.location || (interviewDetails.meetingLink || 'TBD'),
       startDateTime,
