@@ -31,7 +31,7 @@ router.post('/api/test/send-email', requireAuth, async (req: any, res) => {
         <body>
           <div class="container">
             <div class="header">
-              <h2>ROOF-ER HR Management System</h2>
+              <h2>ROOFER HR Management System</h2>
             </div>
             <div class="content">
               <h3>${subject}</h3>
@@ -43,7 +43,7 @@ router.post('/api/test/send-email', requireAuth, async (req: any, res) => {
             </div>
             <div class="footer">
               <p>This is a test email from the HR Management System</p>
-              <p>&copy; 2025 ROOF-ER Roofing Company</p>
+              <p>&copy; 2025 ROOFER Roofing Company</p>
             </div>
           </div>
         </body>
@@ -320,7 +320,7 @@ router.post('/api/test/create-interview', requireAuth, async (req: any, res) => 
 
     await emailService.sendEmail({
       to: candidate.email,
-      subject: 'Interview Scheduled - ROOF-ER',
+      subject: 'Interview Scheduled - ROOFER',
       html: emailHtml,
       candidateId: candidate.id,
       interviewId: interview.id,

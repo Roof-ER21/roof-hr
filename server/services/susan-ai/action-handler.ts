@@ -1412,9 +1412,9 @@ Should I proceed with scheduling this interview?`,
   private async sendCandidateStatusEmail(candidate: any, status: string, user: User): Promise<void> {
     const subject = status === 'INTERVIEW' ? 'Interview Invitation' :
                    status === 'OFFER' ? 'Job Offer' :
-                   status === 'HIRED' ? 'Welcome to ROOF-ER!' : 'Application Update';
+                   status === 'HIRED' ? 'Welcome to ROOFER!' : 'Application Update';
 
-    const body = `Dear ${candidate.firstName},\n\nYour application status has been updated.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOF-ER HR Team`;
+    const body = `Dear ${candidate.firstName},\n\nYour application status has been updated.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOFER HR Team`;
 
     const emailService = new EmailService();
     await emailService.initialize();
@@ -1429,8 +1429,8 @@ Should I proceed with scheduling this interview?`,
    * Send interview invitation email
    */
   private async sendInterviewInvitationEmail(candidate: any, user: User): Promise<void> {
-    const subject = 'Interview Invitation - ROOF-ER';
-    const body = `Dear ${candidate.firstName},\n\nWe would like to invite you for an interview. Someone from our team will contact you shortly to schedule a convenient time.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOF-ER HR Team`;
+    const subject = 'Interview Invitation - ROOFER';
+    const body = `Dear ${candidate.firstName},\n\nWe would like to invite you for an interview. Someone from our team will contact you shortly to schedule a convenient time.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOFER HR Team`;
 
     const emailService = new EmailService();
     await emailService.initialize();
@@ -1604,20 +1604,20 @@ Should I proceed with scheduling this interview?`,
       const candidate = candidates[0];
 
       // Determine email type and content
-      let subject = 'Update on Your Application at ROOF-ER';
+      let subject = 'Update on Your Application at ROOFER';
       let body = '';
       
       if (message.toLowerCase().includes('reject')) {
-        subject = 'Application Update - ROOF-ER';
-        body = `Dear ${candidate.firstName},\n\nThank you for your interest in the ${candidate.position} position at ROOF-ER. After careful consideration, we've decided to move forward with other candidates whose experience more closely matches our current needs.\n\nWe appreciate the time you took to apply and wish you the best in your job search.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOF-ER HR Team`;
+        subject = 'Application Update - ROOFER';
+        body = `Dear ${candidate.firstName},\n\nThank you for your interest in the ${candidate.position} position at ROOFER. After careful consideration, we've decided to move forward with other candidates whose experience more closely matches our current needs.\n\nWe appreciate the time you took to apply and wish you the best in your job search.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOFER HR Team`;
       } else if (message.toLowerCase().includes('offer')) {
-        subject = 'Job Offer - ROOF-ER';
-        body = `Dear ${candidate.firstName},\n\nCongratulations! We're pleased to offer you the ${candidate.position} position at ROOF-ER. We were impressed with your qualifications and believe you'll be a great addition to our team.\n\nA formal offer letter with details will be sent separately.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOF-ER HR Team`;
+        subject = 'Job Offer - ROOFER';
+        body = `Dear ${candidate.firstName},\n\nCongratulations! We're pleased to offer you the ${candidate.position} position at ROOFER. We were impressed with your qualifications and believe you'll be a great addition to our team.\n\nA formal offer letter with details will be sent separately.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOFER HR Team`;
       } else if (message.toLowerCase().includes('interview')) {
-        subject = 'Interview Invitation - ROOF-ER';
-        body = `Dear ${candidate.firstName},\n\nWe're impressed with your application for the ${candidate.position} position and would like to invite you for an interview.\n\nWe'll be in touch shortly to schedule a convenient time.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOF-ER HR Team`;
+        subject = 'Interview Invitation - ROOFER';
+        body = `Dear ${candidate.firstName},\n\nWe're impressed with your application for the ${candidate.position} position and would like to invite you for an interview.\n\nWe'll be in touch shortly to schedule a convenient time.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOFER HR Team`;
       } else {
-        body = `Dear ${candidate.firstName},\n\nWe wanted to update you regarding your application for the ${candidate.position} position at ROOF-ER.\n\nYour application is currently under review, and we'll be in touch with next steps soon.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOF-ER HR Team`;
+        body = `Dear ${candidate.firstName},\n\nWe wanted to update you regarding your application for the ${candidate.position} position at ROOFER.\n\nYour application is currently under review, and we'll be in touch with next steps soon.\n\nBest regards,\n${user.firstName} ${user.lastName}\nROOFER HR Team`;
       }
 
       // Send email
