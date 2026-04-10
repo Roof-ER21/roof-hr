@@ -1492,9 +1492,10 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
         return scheduledStart < interviewEnd && scheduledEnd > interviewStart;
       });
 
-      if (conflictingInterview) {
+      if (conflictingInterview && !data.forceSchedule) {
         const conflictCandidate = await storage.getCandidateById(conflictingInterview.candidateId);
         const conflictTime = new Date(conflictingInterview.scheduledDate);
+        const conflictEnd = new Date(conflictTime.getTime() + conflictingInterview.duration * 60 * 1000);
         const conflictTimeStr = timezoneService.formatInTimezone(conflictTime, interviewerTimezone, {
           month: 'short',
           day: 'numeric',
@@ -1502,10 +1503,23 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
           minute: '2-digit',
           hour12: true,
         });
+        const conflictEndStr = timezoneService.formatInTimezone(conflictEnd, interviewerTimezone, {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const candidateName = conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate';
 
         return res.status(409).json({
           error: 'Interviewer has existing appointment',
-          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled on ${conflictTimeStr} with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`
+          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled on ${conflictTimeStr} – ${conflictEndStr} with ${candidateName}. You can still schedule over this if needed.`,
+          conflicts: [{
+            message: `📅 Existing interview: ${conflictTimeStr} – ${conflictEndStr} with ${candidateName} (${conflictingInterview.duration} min)`,
+            type: 'INTERVIEW',
+            severity: 'hard',
+            start: conflictTime.toISOString(),
+            end: conflictEnd.toISOString(),
+          }],
         });
       }
     }
@@ -1541,10 +1555,12 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
           location: data.location,
           meetingLink: data.meetingLink
         },
-        false,
+        data.forceSchedule,
         user.email
       );
+    }
 
+    if (hardConflicts.length > 0 && !data.forceSchedule) {
       return res.status(409).json({
         error: 'Schedule conflicts detected',
         conflicts: hardConflicts.map(c => ({
@@ -1556,7 +1572,7 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
         })),
         suggestedTimes: conflictResult.suggestedTimes,
         warnings: conflictResult.warnings,
-        message: 'The selected time has conflicts. Please choose another time.'
+        message: 'The selected time has conflicts. You can schedule anyway or choose another time.'
       });
     }
 
@@ -1568,7 +1584,7 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
       });
     }
 
-    // Create the interview (sourcers cannot force override conflicts)
+    // Create the interview
     const interview = await storage.createInterview({
       candidateId: data.candidateId,
       interviewerId: data.interviewerId || undefined,

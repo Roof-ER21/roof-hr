@@ -163,7 +163,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
       // If there are hard conflicts, show override option
       const hardConflicts = data.conflicts?.filter((c: any) => c.severity === 'hard') || [];
-      setShowConflictOverride(!isSourcerUser && hardConflicts.length > 0);
+      setShowConflictOverride(hardConflicts.length > 0);
     },
     onError: (error) => {
       console.error('[CONFLICT CHECK] Error:', error);
@@ -308,17 +308,14 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
       // Check if error is due to existing conflict (409)
       if (error.status === 409) {
-        const canOverride = !isSourcerUser;
         setConflicts(errorData.conflicts || []);
         setSuggestedTimes(errorData.suggestedTimes?.map((t: string) => new Date(t)) || []);
         setWarnings(errorData.warnings || []);
-        setShowConflictOverride(canOverride);
+        setShowConflictOverride(true);
 
         toast({
           title: 'Schedule Conflict Detected',
-          description: canOverride
-            ? 'Review the existing booking below. You can schedule anyway or choose a different time.'
-            : 'There is a conflict with the selected time. Please choose another time.',
+          description: 'Review the existing booking below. You can schedule anyway or choose a different time.',
         });
         return;
       }
@@ -623,15 +620,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     // Check if there are hard conflicts and not forcing
     const hardConflicts = conflicts.filter(c => c.severity === 'hard');
     if (hardConflicts.length > 0 && !forceSchedule) {
-      if (isSourcerUser) {
-        toast({
-          title: 'Conflicts Detected',
-          description: 'Please choose a different time to avoid conflicts.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
       if (!showConflictOverride) {
         setShowConflictOverride(true);
         toast({
@@ -656,7 +644,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       reminderHours: sendReminder ? parseInt(reminderHours) : undefined,
       sendCalendarInvite,
       panelMemberIds: panelMembers,
-      forceSchedule: !isSourcerUser && forceSchedule, // Include this to override conflicts
+      forceSchedule, // Allow both managers and sourcers to override conflicts
     });
   };
 
@@ -1185,11 +1173,9 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                                 <span className="text-sm">{conflict.message}</span>
                               </div>
                             ))}
-                          {!isSourcerUser && (
-                            <p className="text-sm text-muted-foreground mt-2">
-                              You can still schedule over this if the manager won't attend the existing booking, or choose a different time.
-                            </p>
-                          )}
+                          <p className="text-sm text-muted-foreground mt-2">
+                            You can still schedule over this if the manager won't attend the existing booking, or choose a different time.
+                          </p>
                         </div>
                       </AlertDescription>
                     </Alert>
