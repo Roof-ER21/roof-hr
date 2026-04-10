@@ -308,29 +308,18 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
       // Check if error is due to existing conflict (409)
       if (error.status === 409) {
-        if (errorData.error === 'Interviewer has existing appointment') {
-          toast({
-            title: 'Interviewer Unavailable',
-            description: errorData.message || 'The interviewer already has an appointment at this time.',
-            variant: 'destructive',
-          });
-          setWarnings([errorData.message]);
-        } else {
-          // General conflicts (PTO, etc)
-          const canOverride = !isSourcerUser;
-          setConflicts(errorData.conflicts || []);
-          setSuggestedTimes(errorData.suggestedTimes?.map((t: string) => new Date(t)) || []);
-          setWarnings(errorData.warnings || []);
-          setShowConflictOverride(canOverride);
+        const canOverride = !isSourcerUser;
+        setConflicts(errorData.conflicts || []);
+        setSuggestedTimes(errorData.suggestedTimes?.map((t: string) => new Date(t)) || []);
+        setWarnings(errorData.warnings || []);
+        setShowConflictOverride(canOverride);
 
-          toast({
-            title: 'Schedule Conflicts Detected',
-            description: canOverride
-              ? 'There are conflicts with the selected time. Please review and either choose another time or override.'
-              : 'There are conflicts with the selected time. Please choose another time.',
-            variant: 'destructive',
-          });
-        }
+        toast({
+          title: 'Schedule Conflict Detected',
+          description: canOverride
+            ? 'Review the existing booking below. You can schedule anyway or choose a different time.'
+            : 'There is a conflict with the selected time. Please choose another time.',
+        });
         return;
       }
 
@@ -646,9 +635,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       if (!showConflictOverride) {
         setShowConflictOverride(true);
         toast({
-          title: 'Conflicts Detected',
-          description: 'Please review the conflicts before scheduling',
-          variant: 'destructive',
+          title: 'Existing Booking Found',
+          description: 'Review the conflict below — you can double-book or choose a different time.',
         });
         return;
       }
@@ -1184,19 +1172,24 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                 <div className="space-y-3">
                   {/* Hard Conflicts */}
                   {conflicts.filter(c => c.severity === 'hard').length > 0 && (
-                    <Alert variant="destructive">
+                    <Alert variant={showConflictOverride ? 'default' : 'destructive'}>
                       <AlertTriangle className="h-4 w-4" />
-                      <AlertTitle>Schedule Conflicts Detected</AlertTitle>
+                      <AlertTitle>Existing Booking{conflicts.filter(c => c.severity === 'hard').length > 1 ? 's' : ''} at This Time</AlertTitle>
                       <AlertDescription>
                         <div className="space-y-2 mt-2">
                           {conflicts
                             .filter(c => c.severity === 'hard')
                             .map((conflict, idx) => (
                               <div key={idx} className="flex items-start gap-2">
-                                <XCircle className="h-4 w-4 text-destructive mt-0.5" />
+                                <XCircle className="h-4 w-4 text-orange-500 mt-0.5" />
                                 <span className="text-sm">{conflict.message}</span>
                               </div>
                             ))}
+                          {!isSourcerUser && (
+                            <p className="text-sm text-muted-foreground mt-2">
+                              You can still schedule over this if the manager won't attend the existing booking, or choose a different time.
+                            </p>
+                          )}
                         </div>
                       </AlertDescription>
                     </Alert>
@@ -1345,11 +1338,10 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           Choose Different Time
                         </Button>
                         <Button
-                          variant="destructive"
                           onClick={() => handleSchedule(true)}
                           disabled={scheduleMutation.isPending}
                         >
-                          {scheduleMutation.isPending ? 'Scheduling...' : 'Schedule Anyway'}
+                          {scheduleMutation.isPending ? 'Scheduling...' : 'Double-Book & Schedule'}
                         </Button>
                       </>
                     ) : (

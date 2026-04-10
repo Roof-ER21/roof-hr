@@ -209,6 +209,7 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
       if (conflictingInterview && !data.forceSchedule) {
         const conflictCandidate = await storage.getCandidateById(conflictingInterview.candidateId);
         const conflictTime = new Date(conflictingInterview.scheduledDate);
+        const conflictEnd = new Date(conflictTime.getTime() + conflictingInterview.duration * 60 * 1000);
         const conflictTimeStr = timezoneService.formatInTimezone(conflictTime, interviewerTimezone, {
           month: 'short',
           day: 'numeric',
@@ -216,10 +217,23 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
           minute: '2-digit',
           hour12: true,
         });
+        const conflictEndStr = timezoneService.formatInTimezone(conflictEnd, interviewerTimezone, {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const candidateName = conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate';
 
         return res.status(409).json({
           error: 'Interviewer has existing appointment',
-          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled on ${conflictTimeStr} with ${conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'another candidate'}.`,
+          message: `${interviewer.firstName} ${interviewer.lastName} already has an interview scheduled on ${conflictTimeStr} – ${conflictEndStr} with ${candidateName}. You can still schedule over this if needed.`,
+          conflicts: [{
+            message: `📅 Existing interview: ${conflictTimeStr} – ${conflictEndStr} with ${candidateName} (${conflictingInterview.duration} min)`,
+            type: 'INTERVIEW',
+            severity: 'hard',
+            start: conflictTime.toISOString(),
+            end: conflictEnd.toISOString(),
+          }],
           existingInterview: {
             time: conflictTime.toISOString(),
             candidateName: conflictCandidate ? `${conflictCandidate.firstName} ${conflictCandidate.lastName}` : 'Unknown',
