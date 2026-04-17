@@ -3836,6 +3836,7 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
     const candidateId = req.params.id;
     const {
       startDate,
+      startTime,                // e.g. "10am" — defaults applied server-side per type
       department,
       role,
       employmentType,
@@ -3845,10 +3846,12 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
       welcomeEmailType = 'insurance',
       officeLocation = 'DMV',
       ccSalesManagers = [],
+      editedEmailHtml,           // user-edited HTML from the hire modal's editor
+      editedEmailSubject,        // user-edited subject line
     } = req.body;
 
     console.log(`[HIRE] Starting hire process for candidate ${candidateId}`);
-    console.log(`[HIRE] Email settings: sendWelcomeEmail=${sendWelcomeEmail}, welcomeEmailType=${welcomeEmailType}, officeLocation=${officeLocation}`);
+    console.log(`[HIRE] Email settings: sendWelcomeEmail=${sendWelcomeEmail}, welcomeEmailType=${welcomeEmailType}, officeLocation=${officeLocation}, hasEdits=${!!editedEmailHtml}`);
 
     // Get candidate
     const candidate = await storage.getCandidateById(candidateId);
@@ -4097,12 +4100,17 @@ router.post('/api/candidates/:id/hire', requireAuth, requireManager, async (req:
             senderEmail,
             {
               startDate: emailStartDate,
+              startTime,
               includeAttachments: emailType !== 'retail', // Retail emails don't include attachments
               includeEquipmentChecklist,
               equipmentSigningUrl: includeEquipmentChecklist ? emailSigningUrl : undefined,
               welcomeEmailType: emailType,
               officeLocation: officeLocation || 'DMV',
               ccRecipients: Array.isArray(ccSalesManagers) ? ccSalesManagers : [],
+              htmlOverride: typeof editedEmailHtml === 'string' && editedEmailHtml.trim()
+                ? editedEmailHtml : undefined,
+              subjectOverride: typeof editedEmailSubject === 'string' && editedEmailSubject.trim()
+                ? editedEmailSubject : undefined,
             }
           );
 
@@ -5613,6 +5621,51 @@ export function registerRoutes(app: express.Application) {
         error: 'Test failed', 
         message: error instanceof Error ? error.message : 'Unknown error'
       });
+    }
+  });
+
+  // Render the welcome email draft (subject + html) without sending.
+  // Used by the hire modal's editor to load a fresh draft when the user changes
+  // start date/time/office/type. The modal may then edit the HTML and send it back
+  // via POST /api/candidates/:id/hire (editedEmailHtml + editedEmailSubject fields).
+  app.post('/api/email/welcome-preview', requireAuth, requireManager, async (req: any, res) => {
+    try {
+      const {
+        firstName,
+        lastName = '',
+        email = '',
+        position = 'Sales Representative',
+        startDate,       // YYYY-MM-DD
+        startTime,       // e.g. "10am" or "12:00 PM"
+        welcomeEmailType = 'insurance',
+        officeLocation = 'DMV',
+        includeEquipmentChecklist,
+      } = req.body || {};
+
+      if (!firstName) {
+        return res.status(400).json({ error: 'firstName is required' });
+      }
+
+      const parsedStartDate = startDate ? new Date(startDate) : undefined;
+
+      const emailService = new EmailService();
+      const { subject, html } = emailService.renderWelcomeEmailContent(
+        { firstName, lastName, email, position },
+        'TRD2026!', // mirrors the real tempPassword used at hire time (routes.ts ~3880)
+        {
+          startDate: parsedStartDate,
+          startTime,
+          includeEquipmentChecklist: welcomeEmailType !== 'retail'
+            && (includeEquipmentChecklist !== false),
+          welcomeEmailType,
+          officeLocation,
+        }
+      );
+
+      res.json({ subject, html });
+    } catch (error: any) {
+      console.error('[Welcome Preview] Error:', error);
+      res.status(500).json({ error: error?.message || 'Failed to render preview' });
     }
   });
 

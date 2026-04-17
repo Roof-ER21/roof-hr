@@ -42,15 +42,17 @@ function getUpcomingMonday(): Date {
 }
 
 // Format date as "Monday, December 9th"
+// Uses UTC so a YYYY-MM-DD string parsed via `new Date(str)` (which is UTC midnight)
+// renders as the intended calendar day regardless of the server's local timezone.
 function formatStartDate(date: Date): string {
   const options: Intl.DateTimeFormatOptions = {
     weekday: 'long',
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
+    timeZone: 'UTC',
   };
   const formatted = date.toLocaleDateString('en-US', options);
-  // Add ordinal suffix
-  const day = date.getDate();
+  const day = date.getUTCDate();
   const suffix = day === 1 || day === 21 || day === 31 ? 'st'
                : day === 2 || day === 22 ? 'nd'
                : day === 3 || day === 23 ? 'rd' : 'th';
@@ -626,50 +628,22 @@ class EmailService {
     }
   }
 
-  async sendWelcomeEmail(
-    user: any,
-    temporaryPassword: string,
-    fromUserEmail?: string,
-    options?: {
-      startDate?: Date;
-      includeAttachments?: boolean;
-      includeEquipmentChecklist?: boolean;
-      ccRecipients?: string[];  // CC recipients
-      equipmentChecklistUrl?: string;  // Link to equipment checklist form
-      equipmentSigningUrl?: string;  // Link to sign equipment receipt (locked until start date)
-      welcomeEmailType?: 'auto' | 'insurance' | 'retail';
-      officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
-    }
-  ) {
-    try {
-      // Office location addresses
-      const officeLocations: Record<string, { address: string; meetPerson: string }> = {
-        DMV: { address: '8100 Boone Blvd Suite 400, Vienna, VA 22182', meetPerson: 'Reese Samala' },
-        PA: { address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
-        RICHMOND: { address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
-      };
+  private buildWelcomeEmailHtml(args: {
+    user: any;
+    temporaryPassword: string;
+    formattedDate: string;
+    startTime: string;
+    selectedOffice: { address: string; meetPerson: string };
+    welcomeEmailType: 'insurance' | 'retail';
+    includeEquipmentChecklist: boolean;
+    equipmentSigningUrl?: string;
+  }): string {
+    const {
+      user, temporaryPassword, formattedDate, startTime,
+      selectedOffice, welcomeEmailType, includeEquipmentChecklist, equipmentSigningUrl,
+    } = args;
 
-      const selectedOffice = officeLocations[options?.officeLocation || 'DMV'] || officeLocations.DMV;
-
-      // Determine start date - use provided date or default to upcoming Monday
-      const startDate = options?.startDate || getUpcomingMonday();
-      const formattedDate = formatStartDate(startDate);
-
-      const subject = `Welcome to Roof-ER! Your Start Date is ${formattedDate}`;
-
-      const normalizeWelcomeEmailType = () => {
-        if (options?.welcomeEmailType === 'insurance') return 'insurance';
-        if (options?.welcomeEmailType === 'retail') return 'retail';
-        const position = (user?.position || '').toString().toLowerCase();
-        if (position.includes('retail')) return 'retail';
-        if (position.includes('insurance')) return 'insurance';
-        return 'insurance';
-      };
-
-      const welcomeEmailType = normalizeWelcomeEmailType();
-
-      // Build equipment checklist HTML
-      const equipmentChecklistHtml = options?.includeEquipmentChecklist !== false ? `
+    const equipmentChecklistHtml = includeEquipmentChecklist ? `
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0284c7;">
             <h3 style="margin-top: 0; color: #0369a1;">Equipment Checklist</h3>
             <p>You will receive the following items on your first day:</p>
@@ -703,9 +677,9 @@ class EmailService {
                 <td style="padding: 8px; border: 1px solid #e5e7eb;">Sizes: S, M, L, XL, XXL, 3X | Colors: Red, Black, White, Gray</td>
               </tr>
             </table>
-            ${options?.equipmentSigningUrl ? `
+            ${equipmentSigningUrl ? `
             <div style="text-align: center; margin: 20px 0;">
-              <a href="${options.equipmentSigningUrl}"
+              <a href="${equipmentSigningUrl}"
                  style="display: inline-block; background-color: #2563eb; color: white;
                         padding: 14px 28px; border-radius: 8px; text-decoration: none;
                         font-weight: bold; font-size: 16px;">
@@ -723,7 +697,7 @@ class EmailService {
           </div>
       ` : '';
 
-      const hrPortalHtml = temporaryPassword ? `
+    const hrPortalHtml = temporaryPassword ? `
           <div style="background-color: #fef3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
             <h3 style="margin-top: 0; color: #856404;">🔐 HR Portal Login</h3>
             <p style="font-size: 15px; margin-bottom: 10px;">Access the HR system to view your employee information and documents:</p>
@@ -734,12 +708,65 @@ class EmailService {
           </div>
           ` : '';
 
-      const insuranceHtml = `
+    if (welcomeEmailType === 'retail') {
+      return `
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
           <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            We are so excited to have you join our <strong>Sales Team</strong> with Roof ER. Your start date is <strong>${formattedDate} at 10am</strong>
+            We are so excited to have you join our <strong>Retail Division</strong> team with Roof ER. Your start date is <strong>${formattedDate} at ${startTime}</strong>.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>${selectedOffice.address}</strong>.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO EXPECT:</strong></p>
+          <ul style="font-size: 15px; line-height: 1.7; color: #333;">
+            <li><strong>Day 1 & Day 2:</strong> Office-based training covering the fundamentals of your position</li>
+            <li><strong>Following Days:</strong> In-field training with our experienced field trainers</li>
+            <li><strong>Attire:</strong> Business-comfortable clothing for your office training days (we'll cover winter field preparation during training)</li>
+          </ul>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO BRING:</strong></p>
+          <ul style="font-size: 15px; line-height: 1.7; color: #333;">
+            <li>Notebook and pen - we highly recommend taking notes as we'll be covering essential aspects of your role from Day 1</li>
+            <li>Lunch (you may bring your own or purchase from nearby restaurants)</li>
+          </ul>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #cc0000;"><strong>IMPORTANT:</strong></p>
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            Please plan to arrive <strong>10-15 minutes early</strong> to ensure a smooth start to your first day.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel shortly after joining the team.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            We look forward to welcoming you to the Roof ER Retail Division on <strong>${formattedDate}</strong>!
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            Feel free to reach out with any questions.
+          </p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">Best regards,</p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            <strong>Bruno Nacipucha</strong><br>
+            <em>Retail Marketing Manager</em>
+          </p>
+        </div>
+      `;
+    }
+
+    return `
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
+
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">
+            We are so excited to have you join our <strong>Sales Team</strong> with Roof ER. Your start date is <strong>${formattedDate} at ${startTime}</strong>
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
@@ -803,59 +830,85 @@ class EmailService {
           </p>
         </div>
       `;
+  }
 
-      const retailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
+  // Pure render: builds subject + html from form data, no side effects.
+  // Used by both sendWelcomeEmail (real send) and the /api/email/welcome-preview endpoint.
+  renderWelcomeEmailContent(
+    user: any,
+    temporaryPassword: string,
+    options?: {
+      startDate?: Date;
+      startTime?: string;  // e.g. "10am", "12:00 PM" — overrides per-type defaults
+      includeEquipmentChecklist?: boolean;
+      equipmentSigningUrl?: string;
+      welcomeEmailType?: 'auto' | 'insurance' | 'retail';
+      officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
+    }
+  ): { subject: string; html: string } {
+    const officeLocations: Record<string, { address: string; meetPerson: string }> = {
+      DMV: { address: '8100 Boone Blvd Suite 400, Vienna, VA 22182', meetPerson: 'Reese Samala' },
+      PA: { address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
+      RICHMOND: { address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
+    };
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            We are so excited to have you join our <strong>Retail Division</strong> team with Roof ER. Your start date is <strong>${formattedDate} at 12:00 PM</strong>.
-          </p>
+    const selectedOffice = officeLocations[options?.officeLocation || 'DMV'] || officeLocations.DMV;
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>${selectedOffice.address}</strong>.
-          </p>
+    const startDate = options?.startDate || getUpcomingMonday();
+    const formattedDate = formatStartDate(startDate);
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO EXPECT:</strong></p>
-          <ul style="font-size: 15px; line-height: 1.7; color: #333;">
-            <li><strong>Day 1 & Day 2:</strong> Office-based training covering the fundamentals of your position</li>
-            <li><strong>Following Days:</strong> In-field training with our experienced field trainers</li>
-            <li><strong>Attire:</strong> Business-comfortable clothing for your office training days (we'll cover winter field preparation during training)</li>
-          </ul>
+    const subject = `Welcome to Roof-ER! Your Start Date is ${formattedDate}`;
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO BRING:</strong></p>
-          <ul style="font-size: 15px; line-height: 1.7; color: #333;">
-            <li>Notebook and pen - we highly recommend taking notes as we'll be covering essential aspects of your role from Day 1</li>
-            <li>Lunch (you may bring your own or purchase from nearby restaurants)</li>
-          </ul>
+    const normalizeWelcomeEmailType = () => {
+      if (options?.welcomeEmailType === 'insurance') return 'insurance';
+      if (options?.welcomeEmailType === 'retail') return 'retail';
+      const position = (user?.position || '').toString().toLowerCase();
+      if (position.includes('retail')) return 'retail';
+      if (position.includes('insurance')) return 'insurance';
+      return 'insurance';
+    };
+    const welcomeEmailType = normalizeWelcomeEmailType();
 
-          <p style="font-size: 15px; line-height: 1.7; color: #cc0000;"><strong>IMPORTANT:</strong></p>
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            Please plan to arrive <strong>10-15 minutes early</strong> to ensure a smooth start to your first day.
-          </p>
+    const startTime = (options?.startTime && options.startTime.trim())
+      ? options.startTime.trim()
+      : (welcomeEmailType === 'retail' ? '12:00 PM' : '10am');
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel shortly after joining the team.
-          </p>
+    const html = this.buildWelcomeEmailHtml({
+      user,
+      temporaryPassword,
+      formattedDate,
+      startTime,
+      selectedOffice,
+      welcomeEmailType,
+      includeEquipmentChecklist: options?.includeEquipmentChecklist !== false,
+      equipmentSigningUrl: options?.equipmentSigningUrl,
+    });
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            We look forward to welcoming you to the Roof ER Retail Division on <strong>${formattedDate}</strong>!
-          </p>
+    return { subject, html };
+  }
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            Feel free to reach out with any questions.
-          </p>
-
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">Best regards,</p>
-
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            <strong>Bruno Nacipucha</strong><br>
-            <em>Retail Marketing Manager</em>
-          </p>
-        </div>
-      `;
-
-      const html = welcomeEmailType === 'retail' ? retailHtml : insuranceHtml;
+  async sendWelcomeEmail(
+    user: any,
+    temporaryPassword: string,
+    fromUserEmail?: string,
+    options?: {
+      startDate?: Date;
+      startTime?: string;
+      includeAttachments?: boolean;
+      includeEquipmentChecklist?: boolean;
+      ccRecipients?: string[];
+      equipmentChecklistUrl?: string;
+      equipmentSigningUrl?: string;
+      welcomeEmailType?: 'auto' | 'insurance' | 'retail';
+      officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
+      htmlOverride?: string;      // edited HTML from the hire modal — if present, used verbatim
+      subjectOverride?: string;   // edited subject from the hire modal
+    }
+  ) {
+    try {
+      const rendered = this.renderWelcomeEmailContent(user, temporaryPassword, options);
+      const subject = options?.subjectOverride?.trim() || rendered.subject;
+      const html = options?.htmlOverride?.trim() ? options.htmlOverride : rendered.html;
 
       // Prepare attachments
       const attachments: EmailAttachment[] = [];

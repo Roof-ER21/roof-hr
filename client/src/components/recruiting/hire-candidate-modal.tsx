@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
@@ -18,11 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -31,14 +26,14 @@ import {
   Phone,
   Briefcase,
   Calendar,
+  Clock,
   Building,
   Shirt,
   Package,
-  ChevronDown,
-  ChevronUp,
   Loader2,
   PartyPopper,
   Send,
+  RotateCcw,
 } from 'lucide-react';
 import { DEPARTMENTS, getDepartmentForPosition } from '@/../../shared/constants/departments';
 
@@ -67,6 +62,7 @@ const OFFICE_LOCATIONS = {
 
 export interface HireData {
   startDate: string;
+  startTime?: string;            // e.g. "10am" — editable in modal, also reflected in editable body
   department: string;
   role: string;
   employmentType: string;
@@ -76,6 +72,8 @@ export interface HireData {
   welcomeEmailType?: 'insurance' | 'retail';
   officeLocation?: string;
   ccSalesManagers?: string[];
+  editedEmailHtml?: string;      // final HTML from the contentEditable editor
+  editedEmailSubject?: string;   // final subject line from the modal
 }
 
 interface HireCandidateModalProps {
@@ -95,12 +93,6 @@ function getNextMonday(): string {
   return nextMonday.toISOString().split('T')[0];
 }
 
-// Parse YYYY-MM-DD as local date (not UTC)
-function parseLocalDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
 export function HireCandidateModal({
   candidate,
   onConfirm,
@@ -109,6 +101,7 @@ export function HireCandidateModal({
 }: HireCandidateModalProps) {
   // Form state - use candidate position to suggest department
   const [startDate, setStartDate] = useState(getNextMonday());
+  const [startTime, setStartTime] = useState('10am');
   const [department, setDepartment] = useState(() => getDepartmentForPosition(candidate.position));
   const [role, setRole] = useState('REP');
   const [employmentType, setEmploymentType] = useState('W2');
@@ -118,7 +111,63 @@ export function HireCandidateModal({
   const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail'>('insurance');
   const [officeLocation, setOfficeLocation] = useState<keyof typeof OFFICE_LOCATIONS>('DMV');
   const [ccSalesManagers, setCcSalesManagers] = useState<string[]>([]);
-  const [showEmailPreview, setShowEmailPreview] = useState(false);
+
+  // Editable welcome email state
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [editedSubject, setEditedSubject] = useState('');
+  const [userEditedBody, setUserEditedBody] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  // Switch default start time when email type changes
+  useEffect(() => {
+    if (userEditedBody) return;
+    setStartTime(welcomeEmailType === 'retail' ? '12:00 PM' : '10am');
+  }, [welcomeEmailType, userEditedBody]);
+
+  async function loadEmailTemplate() {
+    try {
+      setLoadingPreview(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/email/welcome-preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          firstName: candidate.firstName,
+          lastName: candidate.lastName,
+          email: candidate.email,
+          position: candidate.position,
+          startDate,
+          startTime,
+          welcomeEmailType,
+          officeLocation,
+        }),
+      });
+      if (!res.ok) return;
+      const { subject, html } = await res.json();
+      setEditedSubject(subject);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = html;
+      }
+      setUserEditedBody(false);
+    } catch (err) {
+      console.error('Failed to load email template:', err);
+    } finally {
+      setLoadingPreview(false);
+    }
+  }
+
+  // Auto-load template when the email section is active and the user hasn't edited yet.
+  // Regenerates on param changes only while the body is untouched; after edits, user must
+  // click "Reset to template" to pull in new values.
+  useEffect(() => {
+    if (!sendWelcomeEmail) return;
+    if (userEditedBody) return;
+    loadEmailTemplate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendWelcomeEmail, startDate, startTime, welcomeEmailType, officeLocation]);
 
   // Fetch users to get sales managers for CC
   const { data: allUsers = [] } = useQuery<any[]>({
@@ -153,8 +202,13 @@ export function HireCandidateModal({
   });
 
   const handleSubmit = () => {
+    const editedHtml = sendWelcomeEmail && editorRef.current
+      ? editorRef.current.innerHTML
+      : undefined;
+
     onConfirm({
       startDate,
+      startTime: sendWelcomeEmail ? startTime : undefined,
       department,
       role,
       employmentType,
@@ -164,6 +218,8 @@ export function HireCandidateModal({
       welcomeEmailType: sendWelcomeEmail ? welcomeEmailType : undefined,
       officeLocation: sendWelcomeEmail ? officeLocation : undefined,
       ccSalesManagers: sendWelcomeEmail && ccSalesManagers.length > 0 ? ccSalesManagers : undefined,
+      editedEmailHtml: editedHtml,
+      editedEmailSubject: sendWelcomeEmail ? editedSubject : undefined,
     });
   };
 
@@ -367,7 +423,7 @@ export function HireCandidateModal({
 
               {sendWelcomeEmail && (
                 <div className="space-y-3 pl-6">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <Label>Welcome Email Type</Label>
                       <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail')}>
@@ -392,6 +448,17 @@ export function HireCandidateModal({
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Start Time
+                      </Label>
+                      <Input
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        placeholder="10am"
+                      />
                     </div>
                   </div>
                   <p className="text-xs text-gray-500">
@@ -423,56 +490,61 @@ export function HireCandidateModal({
                       </div>
                     </div>
                   )}
-                </div>
-              )}
 
-              <Collapsible open={showEmailPreview} onOpenChange={setShowEmailPreview}>
-                <CollapsibleTrigger className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800">
-                  {showEmailPreview ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                  Preview Welcome Email
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-2">
-                  <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-2">
-                    <div className="font-medium text-gray-700">
-                      Subject: Welcome to Roof-ER! Your Start Date is{' '}
-                      {parseLocalDate(startDate).toLocaleDateString()}
+                  {/* Editable email — what you see here is what gets sent */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">
+                        Email — edit anything before sending
+                      </Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={loadEmailTemplate}
+                        disabled={loadingPreview}
+                        className="gap-1 h-7"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Reset to template
+                      </Button>
                     </div>
-                    <Separator />
-                    <div className="text-gray-600 space-y-2">
-                      <p>Hi {candidate.firstName},</p>
-                      <p>
-                        Welcome to the team! We're excited to have you join us as a{' '}
-                        {candidate.position}.
-                      </p>
-                      <p>
-                        Your first day is{' '}
-                        {parseLocalDate(startDate).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
-                        . Please arrive at 10am at our office:
-                      </p>
-                      <p className="font-medium">
-                        8100 Boone Blvd Suite 400, Vienna, VA 22182
-                      </p>
-                      <p>
-                        Before your first day, please complete our online training
-                        at: https://a21.up.railway.app/
-                      </p>
-                      <p className="text-xs text-gray-500 mt-4">
-                        (Email includes login credentials, app download list, and
-                        equipment checklist)
-                      </p>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">Subject</Label>
+                      <Input
+                        value={editedSubject}
+                        onChange={(e) => {
+                          setEditedSubject(e.target.value);
+                          setUserEditedBody(true);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">Body (click to edit)</Label>
+                      <div
+                        ref={editorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={() => setUserEditedBody(true)}
+                        className="border rounded-md p-4 bg-white min-h-[300px] max-h-[500px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                      {loadingPreview && (
+                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Loading template...
+                        </p>
+                      )}
+                      {userEditedBody && !loadingPreview && (
+                        <p className="text-xs text-amber-600">
+                          You&apos;ve edited the email. Changes to start date / time / type
+                          won&apos;t auto-apply — click <strong>Reset to template</strong> to
+                          regenerate from your current selections.
+                        </p>
+                      )}
                     </div>
                   </div>
-                </CollapsibleContent>
-              </Collapsible>
+                </div>
+              )}
             </div>
           </div>
         </div>
