@@ -368,11 +368,18 @@ export const candidates = pgTable('candidates', {
   // Archive fields
   isArchived: boolean('is_archived').default(false).notNull(),
   archivedAt: timestamp('archived_at'),
+  // Stage-ordering: timestamp of the last status transition. Nullable on purpose so
+  // existing rows remain NULL (instant ALTER, no table rewrite) and the client sort
+  // falls back to createdAt for them. Set by the server whenever status changes.
+  statusChangedAt: timestamp('status_changed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const candidateSchema = createInsertSchema(candidates);
+// statusChangedAt is intentionally kept in the insert type so server routes can
+// pass it into storage.updateCandidate. Client-originated writes of this field
+// are stripped in the PATCH handler, so trust comes from the route not the schema.
 export const insertCandidateSchema = createInsertSchema(candidates).omit({
   id: true,
   createdAt: true,

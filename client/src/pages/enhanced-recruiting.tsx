@@ -1748,7 +1748,14 @@ export default function EnhancedRecruiting() {
   };
 
   const getCandidateSortTimestamp = (candidate: Candidate) => {
-    const candidateDate = candidate.createdAt || candidate.appliedDate || candidate.updatedAt;
+    // Prefer statusChangedAt so a just-moved card jumps to the top of its new
+    // column. Fall back to createdAt/appliedDate/updatedAt for candidates that
+    // existed before this column was added — they keep their previous ordering
+    // until they're moved, at which point they behave like everyone else.
+    const candidateDate = candidate.statusChangedAt
+      || candidate.createdAt
+      || candidate.appliedDate
+      || candidate.updatedAt;
     return candidateDate ? new Date(candidateDate).getTime() : 0;
   };
 
@@ -3245,13 +3252,14 @@ export default function EnhancedRecruiting() {
           }
 
           // 5. Other stages - show stage notes dialog for mandatory note
+          //    Keep the profile open underneath so it reflects the new stage
+          //    after the note is saved (Phone → Called, etc.).
           setCandidateForStageNotes({
             candidate: candidate,
             fromStatus: candidate.status,
             toStatus: nextStatus,
           });
           setShowStageNotesDialog(true);
-          setShowCandidateDetails(false);
         }}
         onScheduleInterview={(candidate) => {
           openInterviewScheduler(candidate);

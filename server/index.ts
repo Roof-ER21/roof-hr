@@ -78,6 +78,15 @@ async function runMigrations() {
     `);
     logger.info('[Migration] ✅ Screener color column ready');
 
+    // Add status_changed_at to candidates for kanban "most recently moved" ordering.
+    // Nullable, no default — existing rows stay NULL and fall back to created_at
+    // in the client sort. Instant DDL, no table rewrite.
+    await db.execute(sql`
+      ALTER TABLE candidates
+      ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMP
+    `);
+    logger.info('[Migration] ✅ candidates.status_changed_at column ready');
+
     // Ensure employee contracts table and columns exist (new public link flow)
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS employee_contracts (

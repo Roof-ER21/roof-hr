@@ -3397,6 +3397,10 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
 
     // If questionnaire fields are being updated, mark as completed
     const updateData = { ...req.body };
+    // Strip server-managed timestamps — never trust these from the client
+    delete updateData.statusChangedAt;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
     if ('hasDriversLicense' in updateData || 'hasReliableVehicle' in updateData ||
         'canGetOnRoof' in updateData || 'isOutgoing' in updateData || 'availability' in updateData) {
       updateData.questionnaireCompleted = true;
@@ -3430,6 +3434,13 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
     // Auto-set recruiterId when moving to HIRED (tracks who actually hired them)
     if (updateData.status === 'HIRED' && previousStatus !== 'HIRED') {
       updateData.recruiterId = user.id;
+    }
+
+    // Bump statusChangedAt on any stage transition so the recruiting kanban
+    // sorts the moved card to the top of its new column. Set server-side only;
+    // client must not be able to fake this value.
+    if (updateData.status && updateData.status !== previousStatus) {
+      updateData.statusChangedAt = new Date();
     }
 
     const candidate = await storage.updateCandidate(req.params.id, updateData);
@@ -3597,7 +3608,12 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
 
     // Update the candidate
     const previousStatus = candidate.status;
-    const updatedCandidate = await storage.updateCandidate(candidateId, { status: newStatus });
+    const updatedCandidate = await storage.updateCandidate(candidateId, {
+      status: newStatus,
+      // Bump statusChangedAt on actual transitions so the kanban floats the moved
+      // card to the top of its destination column. Skip if status is unchanged.
+      ...(newStatus !== previousStatus ? { statusChangedAt: new Date() } : {}),
+    });
 
     console.log(`[SOURCER-MOVE] ${user.email} moved candidate ${candidate.firstName} ${candidate.lastName} from ${previousStatus} to ${newStatus}`);
 
