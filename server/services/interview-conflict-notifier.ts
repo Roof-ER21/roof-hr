@@ -3,6 +3,7 @@ import type { CalendarConflict } from './calendar-conflict-detector';
 import { format } from 'date-fns';
 import type { IStorage } from '../storage';
 import { INTERVIEW_CONFLICT_ALERT_RECIPIENTS } from '@shared/constants/roles';
+import { isNotificationEnabled } from './notification-preferences';
 
 // HTML escape helper to prevent injection
 function escapeHtml(unsafe: string): string {
@@ -299,16 +300,20 @@ export class InterviewConflictNotifier {
       </div>
     `;
 
-    // Send to all admins
+    // Send to all admins (respects per-user interviewNotifications preference)
     for (const admin of admins) {
-      if (admin.email) {
-        await emailService.sendEmail({
-          to: admin.email,
-          subject,
-          html: emailHtml,
-          fromUserEmail,
-        });
+      if (!admin.email) continue;
+      const enabled = await isNotificationEnabled(admin.id, 'interviewNotifications');
+      if (!enabled) {
+        console.log(`[Interview Conflict Alert] Skipping ${admin.email} — interviewNotifications disabled`);
+        continue;
       }
+      await emailService.sendEmail({
+        to: admin.email,
+        subject,
+        html: emailHtml,
+        fromUserEmail,
+      });
     }
   }
 

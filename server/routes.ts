@@ -6,6 +6,7 @@ import multer from 'multer';
 import { storage } from './storage';
 import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
+import { isNotificationEnabled } from './services/notification-preferences';
 import { db } from './db';
 import { eq, and, ne, or, lte, gte, inArray, ilike } from 'drizzle-orm';
 import {
@@ -2257,6 +2258,15 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
             // Find the approver's user ID for in-app notification
             const approver = await storage.getUserByEmail(approverEmail);
 
+            // Respect approver's ptoNotifications preference for both in-app + email
+            if (approver) {
+              const ptoEnabled = await isNotificationEnabled(approver.id, 'ptoNotifications');
+              if (!ptoEnabled) {
+                console.log(`[PTO] Skipping ${approverEmail} — ptoNotifications disabled`);
+                continue;
+              }
+            }
+
             // Create in-app notification for the approver
             if (approver) {
               await storage.createNotification({
@@ -2343,6 +2353,11 @@ const notifyPtoApprovers = async (employee: any, details: { startDate: string; e
       try {
         const approver = await storage.getUserByEmail(approverEmail);
         if (approver) {
+          const ptoEnabled = await isNotificationEnabled(approver.id, 'ptoNotifications');
+          if (!ptoEnabled) {
+            console.log(`[PTO] Skipping ${approverEmail} update notice — ptoNotifications disabled`);
+            continue;
+          }
           await storage.createNotification({
             id: `pto-${details.action}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             userId: approver.id,
@@ -3129,6 +3144,11 @@ router.patch('/api/pto/:id', requireAuth, async (req: any, res) => {
         for (const approverEmail of PTO_APPROVER_EMAILS) {
           const approver = await storage.getUserByEmail(approverEmail);
           if (approver) {
+            const ptoEnabled = await isNotificationEnabled(approver.id, 'ptoNotifications');
+            if (!ptoEnabled) {
+              console.log(`[PTO] Skipping ${approverEmail} dept-approver echo — ptoNotifications disabled`);
+              continue;
+            }
             await storage.createNotification({
               id: `pto-dept-${status.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
               userId: approver.id,
@@ -4478,8 +4498,15 @@ router.post('/api/alerts/screening-failure', requireAuth, async (req: any, res) 
     const alertRecipients = allUsers.filter((u: any) =>
       u.email && SCREENING_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
     );
-    console.log(`[Screening Alert] Sending to ${alertRecipients.length} targeted recipients (NOT company-wide)`);
-    const managersAndAdmins = alertRecipients;
+    // Respect each recipient's interviewNotifications preference
+    const filteredRecipients: any[] = [];
+    for (const r of alertRecipients) {
+      const enabled = await isNotificationEnabled(r.id, 'interviewNotifications');
+      if (enabled) filteredRecipients.push(r);
+      else console.log(`[Screening Alert] Skipping ${r.email} — interviewNotifications disabled`);
+    }
+    console.log(`[Screening Alert] Sending to ${filteredRecipients.length}/${alertRecipients.length} recipients (after preference filter)`);
+    const managersAndAdmins = filteredRecipients;
 
     // Create a candidate note recording the screening failure
     if (candidateId) {
@@ -5487,10 +5514,17 @@ export function registerRoutes(app: express.Application) {
       // FIXED: Only notify specific people, NOT all managers company-wide
       const { SCREENING_ALERT_RECIPIENTS } = await import('@shared/constants/roles');
       const allUsers = await storage.getAllUsers();
-      const managersAndAdmins = allUsers.filter((u: any) =>
+      const rawRecipients = allUsers.filter((u: any) =>
         u.email && SCREENING_ALERT_RECIPIENTS.includes(u.email.toLowerCase())
       );
-      console.log(`[Screening Alert] Sending to ${managersAndAdmins.length} targeted recipients (NOT company-wide)`);
+      // Respect each recipient's interviewNotifications preference
+      const managersAndAdmins: any[] = [];
+      for (const r of rawRecipients) {
+        const enabled = await isNotificationEnabled(r.id, 'interviewNotifications');
+        if (enabled) managersAndAdmins.push(r);
+        else console.log(`[Screening Alert] Skipping ${r.email} — interviewNotifications disabled`);
+      }
+      console.log(`[Screening Alert] Sending to ${managersAndAdmins.length}/${rawRecipients.length} recipients (after preference filter)`);
       
       // Log the alert
       console.log(`[SCREENING ALERT] Candidate ${candidateName} (${position}) failed screening requirements:`, failedRequirements);
