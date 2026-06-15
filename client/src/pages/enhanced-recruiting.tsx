@@ -955,37 +955,10 @@ function ResumeUploaderContent() {
                     <CommandInput placeholder="Type name or email to search..." />
                     <CommandList>
                       <CommandEmpty>No sourcer found.</CommandEmpty>
-                      <CommandGroup heading="Priority Sourcers">
+                      <CommandGroup heading="Sourcers">
                         {sourcers?.filter(s =>
                           s.email?.toLowerCase() === 'jobs@theroofdocs.com' ||
-                          s.email?.toLowerCase() === 'recruiting@theroofdocs.com'
-                        ).map((sourcer) => (
-                          <CommandItem
-                            key={sourcer.id}
-                            value={`${sourcer.firstName} ${sourcer.lastName} ${sourcer.email || ''}`}
-                            onSelect={() => {
-                              setSelectedSourcer(sourcer.id);
-                              setSourcerComboboxOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={`mr-2 h-4 w-4 ${selectedSourcer === sourcer.id ? "opacity-100" : "opacity-0"}`}
-                            />
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
-                              style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
-                            />
-                            <span className="flex-1">{sourcer.firstName} {sourcer.lastName}</span>
-                            <span className="text-muted-foreground text-xs">
-                              ({sourcer.activeAssignments || 0} active)
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                      <CommandGroup heading="All Sourcers">
-                        {sourcers?.filter(s =>
-                          s.email?.toLowerCase() !== 'jobs@theroofdocs.com' &&
-                          s.email?.toLowerCase() !== 'recruiting@theroofdocs.com'
+                          s.email?.toLowerCase() === 'careers@theroofdocs.com'
                         ).map((sourcer) => (
                           <CommandItem
                             key={sourcer.id}
@@ -1014,7 +987,7 @@ function ResumeUploaderContent() {
                 </PopoverContent>
               </Popover>
               <p className="text-xs text-muted-foreground">
-                jobs@ and sima@ appear first. Type to search by name or email.
+                Only Julian and Ryan can be set as sourcers. For referrals, add a name under “Referred By”.
               </p>
             </div>
 
@@ -1168,6 +1141,8 @@ export default function EnhancedRecruiting() {
 
   // Bulk selection state for group move
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
+  // Which stage columns have their "earlier" (older) candidates expanded
+  const [expandedEarlierStages, setExpandedEarlierStages] = useState<Set<string>>(new Set());
 
   const location = useLocation();
 
@@ -1598,9 +1573,11 @@ export default function EnhancedRecruiting() {
   const sendEmailMutation = useMutation({
     mutationFn: (emailData: {
       to: string;
+      cc?: string[];
       subject: string;
       body: string;
       templateType: string;
+      candidateId?: string;
     }) => apiRequest('/api/emails/send', 'POST', emailData),
     onSuccess: () => {
       toast({
@@ -1807,7 +1784,15 @@ export default function EnhancedRecruiting() {
     const matchesFilter = filterStatus === 'ALL' ||
       (filterStatus === 'DEAD' ? (candidate.status === 'DEAD_BY_US' || candidate.status === 'DEAD_BY_CANDIDATE' || candidate.status === 'NO_SHOW') : candidate.status === filterStatus);
     const matchesPosition = filterPosition === 'ALL' || candidate.position === filterPosition;
-    const matchesSourcer = filterSourcer === 'ALL' || (candidate as any).assignedTo === filterSourcer;
+    const candidateAssignedTo = (candidate as any).assignedTo;
+    const candidateReferral = (candidate as any).referralName;
+    const matchesSourcer =
+      filterSourcer === 'ALL' ||
+      (filterSourcer === 'REFERRAL'
+        ? (!!candidateReferral && !candidateAssignedTo)
+        : filterSourcer === 'UNASSIGNED'
+        ? (!candidateAssignedTo && !candidateReferral)
+        : candidateAssignedTo === filterSourcer);
     const candidateTerritoryId = (candidate as any).territoryId || (candidate as any).territory?.id;
     const matchesTerritory = filterTerritory === 'ALL' || candidateTerritoryId === filterTerritory;
     const matchesReferral = filterReferral === '' ||
@@ -1851,7 +1836,69 @@ export default function EnhancedRecruiting() {
     // Combined DEAD column - shows DEAD_BY_US, DEAD_BY_CANDIDATE, and NO_SHOW
     DEAD: sortedCandidates.filter(c => c.status === 'DEAD_BY_US' || c.status === 'DEAD_BY_CANDIDATE' || c.status === 'NO_SHOW'),
   };
-  
+
+  const toggleEarlier = (status: string) => {
+    setExpandedEarlierStages(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+  };
+
+  // Render a stage column's candidates grouped by recency (Today / This week / Earlier).
+  // Cards are already sorted newest→oldest; the "Earlier" bucket collapses behind a toggle
+  // so a long column reads as an ordered, contained list. The card itself is unchanged — we
+  // only wrap the existing card render (passed in as `renderCard`) with dividers + collapse.
+  const renderStageCandidates = (
+    statusKey: keyof typeof candidatesByStatus,
+    renderCard: (candidate: Candidate) => JSX.Element
+  ): JSX.Element => {
+    const list = candidatesByStatus[statusKey] || [];
+    if (list.length === 0) {
+      return <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">No candidates</p>;
+    }
+    const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+    const startTodayMs = startToday.getTime();
+    const startWeekMs = startTodayMs - 7 * 24 * 60 * 60 * 1000;
+    const today: Candidate[] = [], week: Candidate[] = [], earlier: Candidate[] = [];
+    for (const c of list) {
+      const ts = getCandidateSortTimestamp(c);
+      if (ts >= startTodayMs) today.push(c);
+      else if (ts >= startWeekMs) week.push(c);
+      else earlier.push(c);
+    }
+    const earlierOpen = expandedEarlierStages.has(statusKey as string);
+    const divider = (label: string, count: number) => (
+      <div className="flex items-center gap-2 pt-1 first:pt-0">
+        <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 dark:text-gray-500">{label}</span>
+        <span className="text-[10px] text-gray-300 dark:text-gray-600">{count}</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+      </div>
+    );
+    return (
+      <>
+        {today.length > 0 && divider('Today', today.length)}
+        {today.map(renderCard)}
+        {week.length > 0 && divider('This week', week.length)}
+        {week.map(renderCard)}
+        {earlier.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => toggleEarlier(statusKey as string)}
+              className="w-full flex items-center justify-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-1.5"
+            >
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${earlierOpen ? 'rotate-90' : ''}`} />
+              {earlierOpen ? `Hide ${earlier.length} earlier` : `Show ${earlier.length} earlier`}
+            </button>
+            {earlierOpen && divider('Earlier', earlier.length)}
+            {earlierOpen && earlier.map(renderCard)}
+          </>
+        )}
+      </>
+    );
+  };
+
   // Helper function to get next status
   // Flow: Phone Screening → Called → Interview Scheduled → Decision Pending → Hired
   const getNextStatus = (currentStatus: string): string | null => {
@@ -2139,7 +2186,12 @@ export default function EnhancedRecruiting() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Sourcers</SelectItem>
-                    {sourcers.map((sourcer) => (
+                    {sourcers
+                      .filter((sourcer) => {
+                        const e = sourcer.email?.toLowerCase();
+                        return e === 'jobs@theroofdocs.com' || e === 'careers@theroofdocs.com';
+                      })
+                      .map((sourcer) => (
                       <SelectItem key={sourcer.id} value={sourcer.id}>
                         <div className="flex items-center gap-2">
                           <div
@@ -2150,6 +2202,8 @@ export default function EnhancedRecruiting() {
                         </div>
                       </SelectItem>
                     ))}
+                    <SelectItem value="REFERRAL">Referral</SelectItem>
+                    <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -2348,8 +2402,8 @@ export default function EnhancedRecruiting() {
                           </Badge>
                         </div>
                       </div>
-                    <div className="space-y-3">
-                      {(candidatesByStatus[status as keyof typeof candidatesByStatus] || []).map(candidate => (
+                    <div className="space-y-3 max-h-[72vh] overflow-y-auto pr-1 -mr-1">
+                      {renderStageCandidates(status as keyof typeof candidatesByStatus, (candidate) => (
                         <DraggableCandidateCard
                           key={candidate.id}
                           candidate={{
@@ -2725,7 +2779,7 @@ export default function EnhancedRecruiting() {
                 email: selectedCandidateForEmail.email,
                 position: selectedCandidateForEmail.position
               } : undefined}
-              onSendEmail={(emailData) => sendEmailMutation.mutate(emailData)}
+              onSendEmail={(emailData) => sendEmailMutation.mutate({ ...emailData, candidateId: selectedCandidateForEmail?.id })}
             />
           </div>
         </DialogContent>

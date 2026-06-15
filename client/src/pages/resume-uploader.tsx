@@ -739,37 +739,10 @@ export default function ResumeUploaderPage() {
                     <CommandInput placeholder="Type name or email to search..." />
                     <CommandList>
                       <CommandEmpty>No sourcer found.</CommandEmpty>
-                      <CommandGroup heading="Priority Sourcers">
+                      <CommandGroup heading="Sourcers">
                         {sourcers?.filter(s =>
                           s.email?.toLowerCase() === 'jobs@theroofdocs.com' ||
-                          s.email?.toLowerCase() === 'recruiting@theroofdocs.com'
-                        ).map((sourcer) => (
-                          <CommandItem
-                            key={sourcer.id}
-                            value={`${sourcer.firstName} ${sourcer.lastName} ${sourcer.email || ''}`}
-                            onSelect={() => {
-                              setSelectedSourcer(sourcer.id);
-                              setSourcerComboboxOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={`mr-2 h-4 w-4 ${selectedSourcer === sourcer.id ? "opacity-100" : "opacity-0"}`}
-                            />
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
-                              style={{ backgroundColor: sourcer.screenerColor || '#6B7280' }}
-                            />
-                            <span className="flex-1">{sourcer.firstName} {sourcer.lastName}</span>
-                            <span className="text-muted-foreground text-xs">
-                              ({sourcer.activeAssignments || 0} active)
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                      <CommandGroup heading="All Sourcers">
-                        {sourcers?.filter(s =>
-                          s.email?.toLowerCase() !== 'jobs@theroofdocs.com' &&
-                          s.email?.toLowerCase() !== 'recruiting@theroofdocs.com'
+                          s.email?.toLowerCase() === 'careers@theroofdocs.com'
                         ).map((sourcer) => (
                           <CommandItem
                             key={sourcer.id}
@@ -798,7 +771,7 @@ export default function ResumeUploaderPage() {
                 </PopoverContent>
               </Popover>
               <p className="text-xs text-muted-foreground">
-                jobs@ and sima@ appear first. Type to search by name or email.
+                Only Julian and Ryan can be set as sourcers. For referrals, add a name under “Referred By”.
               </p>
             </div>
 

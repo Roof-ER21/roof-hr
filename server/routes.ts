@@ -3595,7 +3595,7 @@ router.patch('/api/candidates/:id/sourcer-move', requireAuth, async (req: any, r
       return res.status(403).json({ error: 'You can only move candidates assigned to you' });
     }
 
-    // Extended SOURCERs (Sima, Natia) can move to OFFER stage and DEAD/NO_SHOW statuses
+    // Extended SOURCERs (none currently) can move to OFFER stage and DEAD/NO_SHOW statuses
     // All SOURCERs can now move candidates to DEAD/NO_SHOW statuses when needed
     const isExtended = isExtendedSourcer(user);
     const allowedStages = isExtended

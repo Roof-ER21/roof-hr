@@ -63,7 +63,7 @@ function PTO() {
   const [denyingRequestId, setDenyingRequestId] = useState<string | null>(null);
   const [denyNotes, setDenyNotes] = useState('');
   // Status filter for PTO requests
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('PENDING');
   const [timeFilter, setTimeFilter] = useState<'ALL' | 'PAST' | 'FUTURE'>('ALL');
   const [analyticsStartDate, setAnalyticsStartDate] = useState(() => {
     const now = new Date();
@@ -1003,7 +1003,20 @@ function PTO() {
       return request.status === 'APPROVED' && startDate > today;
     }
     return true;
+  }).sort((a: any, b: any) => {
+    // Newest first (by submission date, falling back to start date)
+    const ta = new Date(a.createdAt || a.startDate || 0).getTime();
+    const tb = new Date(b.createdAt || b.startDate || 0).getTime();
+    return tb - ta;
   });
+
+  // Live counts for the status filter chips (based on the full request set, not the current filter)
+  const ptoStatusCounts = {
+    ALL: (ptoRequests || []).length,
+    PENDING: (ptoRequests || []).filter((r: any) => r.status === 'PENDING').length,
+    APPROVED: (ptoRequests || []).filter((r: any) => r.status === 'APPROVED').length,
+    DENIED: (ptoRequests || []).filter((r: any) => r.status === 'DENIED').length,
+  };
 
   const analyticsRangeStart = parseLocalDate(analyticsStartDate);
   const analyticsRangeEnd = parseLocalDate(analyticsEndDate);
@@ -1883,7 +1896,7 @@ function PTO() {
                   setTimeFilter('ALL');
                 }}
               >
-                All
+                All<span className="ml-1.5 text-xs opacity-70">{ptoStatusCounts.ALL}</span>
               </Button>
               <Button
                 size="sm"
@@ -1894,7 +1907,7 @@ function PTO() {
                 }}
                 className={statusFilter === 'PENDING' ? '' : 'border-yellow-300 text-yellow-700 hover:bg-yellow-50'}
               >
-                Pending
+                Pending<span className="ml-1.5 text-xs opacity-70">{ptoStatusCounts.PENDING}</span>
               </Button>
               <Button
                 size="sm"
@@ -1905,7 +1918,7 @@ function PTO() {
                 }}
                 className={statusFilter === 'APPROVED' ? 'bg-green-600 hover:bg-green-700' : 'border-green-300 text-green-700 hover:bg-green-50'}
               >
-                Approved
+                Approved<span className="ml-1.5 text-xs opacity-70">{ptoStatusCounts.APPROVED}</span>
               </Button>
               <Button
                 size="sm"
@@ -1916,7 +1929,7 @@ function PTO() {
                 }}
                 className={statusFilter === 'DENIED' ? 'bg-red-600 hover:bg-red-700' : 'border-red-300 text-red-700 hover:bg-red-50'}
               >
-                Denied
+                Denied<span className="ml-1.5 text-xs opacity-70">{ptoStatusCounts.DENIED}</span>
               </Button>
               <Button
                 size="sm"
@@ -1944,9 +1957,9 @@ function PTO() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[60vh]">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-card">
                 <tr className="border-b">
                   <th className="text-left py-3 px-4">Employee</th>
                   <th className="text-left py-3 px-4">Dates</th>

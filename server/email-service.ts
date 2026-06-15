@@ -4,6 +4,7 @@ import { storage } from './storage';
 import { v4 as uuidv4 } from 'uuid';
 import { serviceAccountAuth } from './services/service-account-auth';
 import { timezoneService } from './services/timezone-service';
+import { LEAD_SOURCER_EMAILS } from '../shared/constants/roles';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -25,6 +26,26 @@ interface EmailConfig {
   interviewId?: string;
   fromUserEmail?: string; // For user impersonation - sends email FROM this user's account
   attachments?: EmailAttachment[];
+}
+
+// ---------------------------------------------------------------------------
+// Per-assignee candidate email routing
+// When a candidate is assigned to a recruiter (jobs@ = Julian, careers@ = Ryan),
+// candidate-facing emails send FROM that recruiter's mailbox so replies land
+// with the owner. Returns undefined for unassigned candidates or any non-recruiter
+// assignee (caller then falls back to careers@). Disable with
+// CANDIDATE_EMAIL_PER_ASSIGNEE=false to route everything from careers@ again.
+export async function resolveAssignedSenderEmail(assignedTo?: string | null): Promise<string | undefined> {
+  if (process.env.CANDIDATE_EMAIL_PER_ASSIGNEE === 'false') return undefined;
+  if (!assignedTo) return undefined;
+  try {
+    const assignee = await storage.getUserById(assignedTo);
+    const email = assignee?.email?.toLowerCase();
+    if (email && LEAD_SOURCER_EMAILS.includes(email)) return email; // jobs@ (Julian) or careers@ (Ryan)
+  } catch (error) {
+    console.warn('[Email] Failed to resolve assigned sender, defaulting to careers@:', error);
+  }
+  return undefined;
 }
 
 // Helper function to get the upcoming Monday
@@ -1459,12 +1480,14 @@ class EmailService {
         </div>
       `;
 
+      const resolvedFrom = fromUserEmail || await resolveAssignedSenderEmail((candidate as any).assignedTo);
+
       return await this.sendEmail({
         to: candidate.email,
         subject,
         html,
         candidateId,
-        fromUserEmail,
+        fromUserEmail: resolvedFrom,
       });
     } catch (error) {
       console.error('Failed to send status update email:', error);

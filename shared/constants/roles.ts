@@ -299,16 +299,16 @@ export function canEditPtoPolicies(user: { role?: string; email?: string } | nul
 // Anyone with assigned candidates can see recruiting (restricted to their assignments)
 export const LIMITED_SOURCER_EMAILS: string[] = [];
 
-// Lead Sourcer - can see all candidates, bulk import/assign, assign to others
+// Lead Sourcers - can see all candidates, bulk import/assign, assign to others.
+// jobs@ and careers@ are the two recruiters and have identical (full) access.
 export const LEAD_SOURCER_EMAILS = [
   'careers@theroofdocs.com',     // Ryan Ferguson
+  'jobs@theroofdocs.com',        // Julian Lemmond (took over Natia's account 2026-06-15; full access, same as Ryan)
 ];
 
-// Extended Sourcers - can move candidates to OFFER stage (but not HIRED)
-export const EXTENDED_SOURCER_EMAILS = [
-  'recruiting@theroofdocs.com',  // Sima Popal
-  'jobs@theroofdocs.com',        // Natia Tutberidze
-];
+// Extended Sourcers - can move candidates to OFFER stage (but not HIRED).
+// None currently: Sima Popal (recruiting@) left the company; jobs@/Natia → Julian (promoted to Lead above).
+export const EXTENDED_SOURCER_EMAILS: string[] = [];
 
 // All sourcers combined (kept for backward compatibility)
 export const ALL_SOURCER_EMAILS = [
@@ -334,8 +334,8 @@ export function isLeadSourcer(user: { email?: string } | null): boolean {
 }
 
 /**
- * Check if user is an extended sourcer (can move to OFFER stage)
- * Extended sourcers: Sima Popal, Natia Tutberidze
+ * Check if user is an extended sourcer (can move to OFFER stage but not HIRED).
+ * Currently none — kept for back-compat. jobs@/careers@ are Lead Sourcers.
  */
 export function isExtendedSourcer(user: { email?: string } | null): boolean {
   if (!user?.email) return false;
@@ -477,8 +477,8 @@ export const TOP_LEADERSHIP_EMAILS = [
 // Recruiting Team (Sourcers)
 export const RECRUITING_TEAM_EMAILS = [
   'careers@theroofdocs.com',       // Ryan Ferguson (Lead Sourcer)
-  'jobs@theroofdocs.com',          // Natia Tutberidze (Extended Sourcer)
-  'recruiting@theroofdocs.com',    // Sima Popal (Extended Sourcer)
+  'jobs@theroofdocs.com',          // Julian Lemmond (Lead Sourcer)
+  // recruiting@ (Sima Popal) removed 2026-06-15 — no longer an employee
 ];
 
 // Screening Failure Alerts - Recruiters + Top Leadership

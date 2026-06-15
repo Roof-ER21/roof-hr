@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { MailService } from '@sendgrid/mail';
 import { gmailService } from '../services/gmail-service';
-import { EmailService } from '../email-service';
+import { EmailService, resolveAssignedSenderEmail } from '../email-service';
+import { storage } from '../storage';
 import { contractPdfService } from '../services/contractPdfService';
 import fs from 'fs/promises';
 import path from 'path';
@@ -33,7 +34,9 @@ const sendEmailSchema = z.object({
   to: z.string().email(),
   subject: z.string().min(1),
   body: z.string().min(1),
-  templateType: z.string()
+  templateType: z.string(),
+  candidateId: z.string().optional(),
+  fromUserEmail: z.string().email().optional()
 });
 
 const sendEmailWithAttachmentsSchema = z.object({
@@ -68,7 +71,15 @@ const sendContractTestSchema = z.object({
 // Send email endpoint
 router.post('/send', async (req, res) => {
   try {
-    const { to, subject, body, templateType } = sendEmailSchema.parse(req.body);
+    const { to, subject, body, templateType, candidateId, fromUserEmail } = sendEmailSchema.parse(req.body);
+
+    // Route the email FROM the assigned recruiter (jobs@ = Julian, careers@ = Ryan)
+    // so candidate replies land with the owner. Falls back to the default box.
+    let senderEmail = fromUserEmail;
+    if (!senderEmail && candidateId) {
+      const candidate = await storage.getCandidateById(candidateId).catch(() => null);
+      senderEmail = await resolveAssignedSenderEmail((candidate as any)?.assignedTo);
+    }
 
     // Try Gmail first if configured (using service account with impersonation)
     await ensureGmailInitialized();
@@ -78,7 +89,8 @@ router.post('/send', async (req, res) => {
           to,
           subject,
           text: body,
-          html: body.replace(/\n/g, '<br>')
+          html: body.replace(/\n/g, '<br>'),
+          userEmail: senderEmail
         });
 
         console.log('[GMAIL SENT] Successfully sent email to:', to);
