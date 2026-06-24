@@ -19,6 +19,7 @@ import {
   Award
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { formatPhoneNumber } from '@/lib/utils';
 
 interface Candidate {
   id: string;
@@ -188,7 +189,7 @@ export function CandidateComparison({ isOpen, onClose, initialCandidates = [] }:
                         {candidate.phone && (
                           <div className="flex items-center gap-2">
                             <Phone className="w-3 h-3 text-gray-400" />
-                            <span>{candidate.phone}</span>
+                            <span>{formatPhoneNumber(candidate.phone)}</span>
                           </div>
                         )}
                         {candidate.location && (

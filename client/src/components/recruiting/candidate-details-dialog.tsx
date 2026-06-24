@@ -11,6 +11,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { parseScreeningData } from '@/lib/parse-screening-data';
+import { formatPhoneNumber } from '@/lib/utils';
 import { format } from 'date-fns';
 import {
   User, Mail, Phone, Calendar, Users, ChevronRight, Pencil,
@@ -786,7 +787,7 @@ export function CandidateDetailsDialog({
                           className="flex items-center gap-2 text-sm hover:text-blue-600 transition-colors"
                         >
                           <Phone className="h-4 w-4 text-muted-foreground" />
-                          {candidate.phone || 'No phone'}
+                          {candidate.phone ? formatPhoneNumber(candidate.phone) : 'No phone'}
                         </a>
                       </div>
                     </div>

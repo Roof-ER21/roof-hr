@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { MessageSquare, Send, Phone, AlertCircle, CheckCircle, Clock, Users, Settings } from 'lucide-react';
 import { format } from 'date-fns';
+import { formatPhoneNumber } from '@/lib/utils';
 
 interface SmsMessage {
   id: string;
@@ -255,7 +256,7 @@ export function SmsMessaging() {
                               <span className="font-medium">
                                 {candidate
                                   ? `${candidate.firstName} ${candidate.lastName}`
-                                  : message.recipientPhone}
+                                  : formatPhoneNumber(message.recipientPhone)}
                               </span>
                               <Badge className={getStatusBadge(message.status)}>
                                 {message.status}
@@ -383,7 +384,7 @@ export function SmsMessaging() {
                   {candidates.map((candidate: any) => (
                     <SelectItem key={candidate.id} value={candidate.id}>
                       {candidate.firstName} {candidate.lastName}
-                      {candidate.phone && ` - ${candidate.phone}`}
+                      {candidate.phone && ` - ${formatPhoneNumber(candidate.phone)}`}
                     </SelectItem>
                   ))}
                 </SelectContent>

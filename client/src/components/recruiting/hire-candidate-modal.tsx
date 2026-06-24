@@ -36,6 +36,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { DEPARTMENTS, getDepartmentForPosition } from '@/../../shared/constants/departments';
+import { formatPhoneNumber } from '@/lib/utils';
 
 interface Candidate {
   id: string;
@@ -254,7 +255,7 @@ export function HireCandidateModal({
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-gray-500" />
-                  <span>{candidate.phone || 'No phone'}</span>
+                  <span>{candidate.phone ? formatPhoneNumber(candidate.phone) : 'No phone'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-gray-500" />
