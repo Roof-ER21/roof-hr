@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { insertInterviewAvailabilitySchema, insertInterviewPanelMemberSchema } from '@shared/schema';
 import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer, ADMIN_ROLES, MANAGER_ROLES } from '@shared/constants/roles';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { storage } from '../storage';
 import { requireAuth, checkRole } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
@@ -154,7 +155,7 @@ router.post('/interviews/generate-meeting-link', requireAuth, checkRole([...ADMI
         const result = await googleCalendarService.createMeetingLink({
           summary: candidateName ? `Interview: ${candidateName}` : 'Video Interview',
           startDateTime: interviewDate ? new Date(interviewDate) : undefined,
-          durationMinutes: durationMinutes || 60
+          durationMinutes: durationMinutes || DEFAULT_INTERVIEW_DURATION_MINUTES
         });
 
         res.json({

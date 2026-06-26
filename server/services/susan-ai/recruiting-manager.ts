@@ -1,5 +1,6 @@
 import { db } from '../../db';
 import { candidates, users } from '../../../shared/schema';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '../../../shared/interview-constants';
 import { eq, and, or, sql, desc, inArray, like } from 'drizzle-orm';
 import { EmailService } from '../../email-service';
 import { v4 as uuidv4 } from 'uuid';
@@ -210,7 +211,7 @@ export class SusanRecruitingManager {
         candidateId,
         interviewerId: interviewData.interviewerIds[0], // Primary interviewer
         scheduledDate,
-        duration: 60, // Default 1 hour
+        duration: DEFAULT_INTERVIEW_DURATION_MINUTES,
         type: interviewType as 'PHONE' | 'VIDEO' | 'IN_PERSON',
         status: 'SCHEDULED',
         location: interviewData.location || 'Main Office',
@@ -231,7 +232,7 @@ export class SusanRecruitingManager {
         const interviewer = await this.storage.getUserById(interviewData.interviewerIds[0]);
         
         if (candidate && interviewer) {
-          const endDateTime = new Date(scheduledDate.getTime() + 60 * 60 * 1000); // 1 hour duration
+          const endDateTime = new Date(scheduledDate.getTime() + DEFAULT_INTERVIEW_DURATION_MINUTES * 60 * 1000);
           
           const calendarEvent = await calendarService.createEvent({
             summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ROOF ER`,

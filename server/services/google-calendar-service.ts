@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { googleAuthService } from './google-auth';
 import { serviceAccountAuth } from './service-account-auth';
 
@@ -268,7 +269,7 @@ class GoogleCalendarService {
       }
 
       const startDateTime = options.startDateTime || new Date();
-      const endDateTime = new Date(startDateTime.getTime() + (options.durationMinutes || 60) * 60000);
+      const endDateTime = new Date(startDateTime.getTime() + (options.durationMinutes || DEFAULT_INTERVIEW_DURATION_MINUTES) * 60000);
       const timeZone = options.timeZone || 'America/New_York';
 
       const event = {

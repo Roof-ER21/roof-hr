@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { isBefore, startOfDay, differenceInDays } from 'date-fns';
 import { storage } from '../storage';
 import { insertInterviewSchema, insertInterviewFeedbackSchema, insertInterviewReminderSchema } from '@shared/schema';
@@ -22,7 +23,7 @@ const scheduleInterviewSchema = z.object({
   customInterviewerName: z.string().optional(), // For interviewers not in system
   panelMemberIds: z.array(z.string()).optional(),
   scheduledDate: z.string(),
-  duration: z.number().min(15).max(480),
+  duration: z.number().min(15).max(480).default(DEFAULT_INTERVIEW_DURATION_MINUTES),
   type: z.enum(['PHONE', 'VIDEO', 'IN_PERSON']),
   location: z.string().optional(),
   meetingLink: z.string().optional(),
@@ -723,7 +724,7 @@ router.post('/check-conflicts', requireAuth, async (req: any, res) => {
     console.log('[CONFLICT CHECK] Detector initialized:', (conflictDetector as any).isInitialized);
 
     const startTime = new Date(scheduledDate);
-    const endTime = new Date(startTime.getTime() + (duration || 60) * 60 * 1000);
+    const endTime = new Date(startTime.getTime() + (duration || DEFAULT_INTERVIEW_DURATION_MINUTES) * 60 * 1000);
     console.log('[CONFLICT CHECK] Time range:', { startTime: startTime.toISOString(), endTime: endTime.toISOString() });
 
     const conflictResult = await conflictDetector.checkConflicts(
@@ -1016,11 +1017,12 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
 
     // Store original date for notifications
     const originalDate = existingInterview.scheduledDate;
+    const interviewDuration = duration || existingInterview.duration || DEFAULT_INTERVIEW_DURATION_MINUTES;
 
     // Update the interview
     const updatedInterview = await storage.updateInterview(req.params.id, {
       scheduledDate: newScheduledDate,
-      duration: duration || existingInterview.duration,
+      duration: interviewDuration,
       type: type || existingInterview.type,
       location: location !== undefined ? location : existingInterview.location,
       meetingLink: meetingLink !== undefined ? meetingLink : existingInterview.meetingLink,
@@ -1084,7 +1086,7 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
           }
 
           // Create new calendar event
-          const endDateTime = new Date(newScheduledDate.getTime() + (duration || existingInterview.duration) * 60 * 1000);
+          const endDateTime = new Date(newScheduledDate.getTime() + interviewDuration * 60 * 1000);
           const attendees = [candidate?.email, interviewerEmail].filter(Boolean) as string[];
 
           const calendarEvent = await calendarService.createEventForUser(
@@ -1157,7 +1159,7 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
               <li>Position: ${candidate?.position || 'N/A'}</li>
               <li>Date: ${newScheduledDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}</li>
               <li>Time: ${newScheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET</li>
-              <li>Duration: ${duration || existingInterview.duration} minutes</li>
+              <li>Duration: ${interviewDuration} minutes</li>
               ${(location || existingInterview.location) ? `<li>Location: ${location || existingInterview.location}</li>` : ''}
               ${(meetingLink || existingInterview.meetingLink) ? `<li>Meeting Link: <a href="${meetingLink || existingInterview.meetingLink}">${meetingLink || existingInterview.meetingLink}</a></li>` : ''}
             </ul>

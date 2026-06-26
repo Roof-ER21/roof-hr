@@ -90,6 +90,7 @@ import {
   // Email Preferences
   userEmailPreferences
 } from '@shared/schema';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { db } from './db';
 import { eq, and, lt, inArray, or, sql, gte, lte, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -839,7 +840,7 @@ class DrizzleStorage implements IStorage {
       candidateId: data.candidateId,
       interviewerId: data.interviewerId,
       scheduledDate: data.scheduledDate,
-      duration: data.duration || 60,
+      duration: data.duration || DEFAULT_INTERVIEW_DURATION_MINUTES,
       type: data.type as 'PHONE' | 'VIDEO' | 'IN_PERSON',
       status: (data.status || 'SCHEDULED') as 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED',
       location: data.location,

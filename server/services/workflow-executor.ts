@@ -1,6 +1,7 @@
 import { storage } from '../storage';
 import { gmailService } from './gmail-service';
 import { googleCalendarService } from './google-calendar-service';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import OpenAI from 'openai';
 import { logger } from '../utils/logger';
 
@@ -218,7 +219,7 @@ export class WorkflowExecutor {
 
     // Create calendar event with correct API format
     const startDateTime = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
-    const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+    const endDateTime = new Date(startDateTime.getTime() + DEFAULT_INTERVIEW_DURATION_MINUTES * 60 * 1000);
 
     try {
       const createdEvent = await googleCalendarService.createEvent({

@@ -1,5 +1,6 @@
 import { googleServicesManager } from './google-services-manager';
 import { storage } from '../storage';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { EventEmitter } from 'events';
 import cron from 'node-cron';
 
@@ -387,7 +388,7 @@ class GoogleSyncOrchestrator extends EventEmitter {
         summary: `Interview: ${candidate.firstName} ${candidate.lastName} - ROOF ER`,
         description: `Interview Type: ${interview.type}\nNotes: ${interview.notes || 'N/A'}`,
         start: { dateTime: interview.scheduledDate.toISOString() },
-        end: { dateTime: new Date(interview.scheduledDate.getTime() + 60 * 60 * 1000).toISOString() },
+        end: { dateTime: new Date(interview.scheduledDate.getTime() + (interview.duration || DEFAULT_INTERVIEW_DURATION_MINUTES) * 60 * 1000).toISOString() },
         attendees: interview.interviewerId ?
           await this.getAttendeeEmails([interview.interviewerId]) : []
       };

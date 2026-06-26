@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { addMinutes, parseISO } from 'date-fns';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import type { IStorage } from '../storage';
 import { timezoneService } from './timezone-service';
 import { serviceAccountAuth } from './service-account-auth';
@@ -292,7 +293,7 @@ export class CalendarConflictDetector {
           if (!interview.scheduledDate) continue;
 
           const intStart = new Date(interview.scheduledDate);
-          const intEnd = addMinutes(intStart, interview.duration || 60);
+          const intEnd = addMinutes(intStart, interview.duration || DEFAULT_INTERVIEW_DURATION_MINUTES);
 
           if (this.datesOverlap(startTime, endTime, intStart, intEnd)) {
             const candidate = await this.storage.getCandidateById(interview.candidateId);
@@ -335,12 +336,12 @@ export class CalendarConflictDetector {
         continue;
       }
 
-      // Check hourly slots from 9am to 5pm
+      // Check default interview-length slots from 9am to 5pm
       for (let hour = 9; hour < 17 && suggestions.length < maxSuggestions; hour++) {
         const slotStart = new Date(checkDate);
         slotStart.setHours(hour, 0, 0, 0);
         const slotEnd = new Date(checkDate);
-        slotEnd.setHours(hour + 1, 0, 0, 0);
+        slotEnd.setTime(slotStart.getTime() + DEFAULT_INTERVIEW_DURATION_MINUTES * 60 * 1000);
 
         // Check if ANY busy block overlaps this slot
         const hasConflict = busyBlocks.some(block =>

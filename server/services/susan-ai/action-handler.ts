@@ -15,6 +15,7 @@ import { SusanToolsManager } from './tools-manager';
 import { SusanTerritoryManager } from './territory-manager';
 import { SusanContractManager } from './contract-manager';
 import { ALL_HOLIDAYS } from '../../../shared/constants/holidays';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '../../../shared/interview-constants';
 
 /**
  * Calculate string similarity between two strings (Levenshtein distance)
@@ -877,7 +878,7 @@ Should I proceed with scheduling this interview?`,
           interviewerId: user.id,
           interviewerName: interviewerName,
           scheduledDate: scheduledDate.toISOString(),
-          duration: 60,
+          duration: DEFAULT_INTERVIEW_DURATION_MINUTES,
           type: 'IN_PERSON',
           location: interviewLocation,
           meetingLink: location?.includes('zoom') || location?.includes('meet') ? location : undefined

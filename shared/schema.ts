@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { pgTable, text, boolean, integer, timestamp, real, jsonb } from 'drizzle-orm/pg-core';
 import { createInsertSchema } from 'drizzle-zod';
 import { relations } from 'drizzle-orm';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from './interview-constants';
 
 // User and Authentication
 export const users = pgTable('users', {
@@ -442,7 +443,7 @@ export const interviews = pgTable('interviews', {
   interviewerId: text('interviewer_id'), // nullable when using custom interviewer
   customInterviewerName: text('custom_interviewer_name'), // for interviewers not in system
   scheduledDate: timestamp('scheduled_date').notNull(),
-  duration: integer('duration').notNull().default(60), // minutes
+  duration: integer('duration').notNull().default(DEFAULT_INTERVIEW_DURATION_MINUTES), // minutes
   type: text('type').$type<'PHONE' | 'VIDEO' | 'IN_PERSON' | 'TECHNICAL' | 'PANEL'>().notNull(),
   status: text('status').$type<'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'NO_SHOW'>().notNull().default('SCHEDULED'),
   location: text('location'), // for in-person interviews

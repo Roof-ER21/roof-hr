@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle, UserX, Loader2, RefreshCw } from 'lucide-react';
 import { MANAGER_ROLES, ADMIN_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
+import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { DialogFooter } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth';
 import { format, addDays, setHours, setMinutes, isBefore, isAfter, startOfDay, endOfDay } from 'date-fns';
@@ -54,7 +55,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState('09:00');
   const [interviewType, setInterviewType] = useState<'PHONE' | 'VIDEO' | 'IN_PERSON' | 'TECHNICAL' | 'PANEL'>('IN_PERSON');
-  const [duration, setDuration] = useState('60');
+  const [duration, setDuration] = useState(String(DEFAULT_INTERVIEW_DURATION_MINUTES));
   const [location, setLocation] = useState('');
   const [meetingLink, setMeetingLink] = useState('');
   const [notes, setNotes] = useState('');
@@ -469,7 +470,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     const interviewDate = new Date(interview.scheduledDate);
     setSelectedTime(`${interviewDate.getHours().toString().padStart(2, '0')}:${interviewDate.getMinutes().toString().padStart(2, '0')}`);
     setInterviewType(interview.type || 'IN_PERSON');
-    setDuration(String(interview.duration || 60));
+    setDuration(String(interview.duration || DEFAULT_INTERVIEW_DURATION_MINUTES));
     setLocation(interview.location || '');
     setMeetingLink(interview.meetingLink || '');
     setNotes(interview.notes || '');
