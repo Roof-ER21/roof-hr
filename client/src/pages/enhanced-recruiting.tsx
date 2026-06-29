@@ -1845,6 +1845,19 @@ export default function EnhancedRecruiting() {
     });
   };
 
+  // When the recruiter is actively narrowing the board — searching by name/phone/email, or
+  // filtering by position/sourcer/territory/referral/date — every remaining card is an
+  // intentional match. In that mode we never tuck matches behind the "Earlier" collapse:
+  // a search hit could otherwise be older than a week and stay hidden inside a collapsed
+  // bucket, which reads as "candidate not found" even though they're right there.
+  const isNarrowingActive =
+    searchTerm.trim() !== '' ||
+    filterPosition !== 'ALL' ||
+    filterSourcer !== 'ALL' ||
+    filterTerritory !== 'ALL' ||
+    filterReferral.trim() !== '' ||
+    filterDateType !== 'all';
+
   // Render a stage column's candidates grouped by recency (Today / This week / Earlier).
   // Cards are already sorted newest→oldest; the "Earlier" bucket collapses behind a toggle
   // so a long column reads as an ordered, contained list. The card itself is unchanged — we
@@ -1856,6 +1869,11 @@ export default function EnhancedRecruiting() {
     const list = candidatesByStatus[statusKey] || [];
     if (list.length === 0) {
       return <p className="text-xs text-gray-400 dark:text-gray-500 py-3 text-center">No candidates</p>;
+    }
+    // While narrowing, show every match in full (no recency collapse) so a search hit can
+    // never hide inside a collapsed "Earlier" bucket. Cards stay sorted newest→oldest.
+    if (isNarrowingActive) {
+      return <>{list.map(renderCard)}</>;
     }
     const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
     const startTodayMs = startToday.getTime();
