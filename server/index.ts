@@ -145,12 +145,12 @@ async function runMigrations() {
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS signature_ip TEXT`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS notified_managers TEXT[] DEFAULT '{}'::text[]`);
-    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN IF EXISTS notified_managers SET DEFAULT '{}'::text[]`);
+    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN notified_managers SET DEFAULT '{}'::text[]`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS field_values JSONB DEFAULT '{}'::jsonb`);
-    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN IF EXISTS field_values SET DEFAULT '{}'::jsonb`);
+    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN field_values SET DEFAULT '{}'::jsonb`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS sent_by TEXT`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS reminder_stages TEXT[] DEFAULT '{}'::text[]`);
-    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN IF EXISTS reminder_stages SET DEFAULT '{}'::text[]`);
+    await db.execute(sql`ALTER TABLE employee_contracts ALTER COLUMN reminder_stages SET DEFAULT '{}'::text[]`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT ''`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()`);
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()`);
