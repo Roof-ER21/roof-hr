@@ -10,6 +10,7 @@ import { setupVite, serveStatic, log } from "./vite";
 
 import { storage } from "./storage";
 import { testConnection, db } from "./db";
+import { applyPendingMigrations } from "./migrationRunner";
 import { sql } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { config, validateConfig } from './config';
@@ -322,8 +323,10 @@ app.use((req, res, next) => {
   }
   logger.info('Database connection established successfully');
 
-  // Run database migrations
+  // Run database migrations: legacy inline DDL first, then the tracked
+  // file-based chain in migrations/ (see server/migrationRunner.ts)
   await runMigrations();
+  await applyPendingMigrations();
 
   // Create admin user if not exists
   await createAdminUser();

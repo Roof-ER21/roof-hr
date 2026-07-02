@@ -19,7 +19,7 @@ const isNeonHost = parsedUrl.hostname.endsWith('neon.tech');
 const usePgDriver = process.env.USE_PG_DRIVER === 'true' || !isNeonHost;
 const driverLabel = usePgDriver ? 'pg' : 'neon-serverless';
 
-const pool = usePgDriver
+export const pool = usePgDriver
   ? new PgPool({
       connectionString: databaseUrl,
       ssl: ['localhost', '127.0.0.1'].includes(parsedUrl.hostname)
