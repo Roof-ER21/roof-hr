@@ -156,14 +156,16 @@ async function runMigrations() {
     await db.execute(sql`ALTER TABLE employee_contracts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()`);
     logger.info('[Migration] ✅ employee_contracts columns aligned');
 
-    // One-time migration: Deactivate admin@theroofdocs.com (Jan 2026)
+    // One-time migration: Deactivate admin@theroofdocs.com (Jan 2026).
+    // The original statement referenced "isActive"/"updatedAt"/status — none
+    // exist on this schema (columns are snake_case, users has no status
+    // column), so it 42703-failed every boot and skipped the DDL below it.
     const deactivateResult = await db.execute(sql`
       UPDATE users
-      SET "isActive" = false,
-          status = 'INACTIVE',
-          "updatedAt" = NOW()
+      SET is_active = false,
+          updated_at = NOW()
       WHERE email = 'admin@theroofdocs.com'
-        AND "isActive" = true
+        AND is_active = true
     `);
     if (deactivateResult.rowCount && deactivateResult.rowCount > 0) {
       logger.info('[Migration] ✅ Deactivated admin@theroofdocs.com');
