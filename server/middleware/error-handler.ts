@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import { captureToGlitchTip } from '../utils/glitchtip';
 
 export interface AppError extends Error {
   statusCode: number;
@@ -82,6 +83,12 @@ export function errorHandler(error: Error, req: Request, res: Response, next: Ne
     userAgent: req.get('User-Agent'),
     timestamp: new Date().toISOString()
   });
+
+  // Report unexpected (5xx) errors; expected operational 4xx are noise
+  const reportStatus = error instanceof AppErrorClass ? error.statusCode : (error as any).statusCode || 500;
+  if (reportStatus >= 500 && !(error instanceof ZodError)) {
+    captureToGlitchTip({ endpoint: `${req.method} ${req.url}`, message: error.message, stack: error.stack });
+  }
 
   // Handle different error types
   if (error instanceof ZodError) {

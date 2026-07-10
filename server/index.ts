@@ -16,6 +16,7 @@ import bcrypt from 'bcrypt';
 import { config, validateConfig } from './config';
 import { rateLimit, sanitizeInput, configureCORS, securityLogger, clearRateLimit } from './middleware/security';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
+import { captureToGlitchTip } from './utils/glitchtip';
 import { requestLogger, logger } from './middleware/logger';
 import { contractPdfService } from './services/contractPdfService';
 
@@ -297,11 +298,13 @@ app.use((req, res, next) => {
   // Global error handlers
   process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception:', error);
+    captureToGlitchTip({ endpoint: 'process.uncaughtException', message: String(error?.message || error), stack: error?.stack, level: 'fatal' });
     process.exit(1);
   });
 
   process.on('unhandledRejection', (reason, promise) => {
     logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
+    captureToGlitchTip({ endpoint: 'process.unhandledRejection', message: String((reason as Error)?.message || reason), stack: (reason as Error)?.stack, level: 'fatal' });
     process.exit(1);
   });
 
