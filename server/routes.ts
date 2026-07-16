@@ -1865,6 +1865,19 @@ router.post('/api/users/send-welcome-emails', requireAuth, requireManager, async
   }
 });
 
+// Manually trigger the daily "who's out today" PTO digest (admin only).
+// force=true bypasses the once-per-day guard; still skips sending when nobody is out.
+router.post('/api/pto/daily-digest/run', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    const { sendDailyPTODigest } = await import('./jobs/pto-reminder-job');
+    const result = await sendDailyPTODigest(req.body?.force === true);
+    res.json(result);
+  } catch (error: any) {
+    console.error('[PTO Daily Digest] Manual run failed:', error);
+    res.status(500).json({ error: 'Failed to run daily digest', details: error.message });
+  }
+});
+
 // PTO routes
 router.get('/api/pto', requireAuth, async (req: any, res) => {
   try {

@@ -214,6 +214,14 @@ export const SENIOR_PTO_APPROVER_EMAILS = [
 // PTO reminder recipients - all 4 managers receive reminders
 export const PTO_REMINDER_RECIPIENTS = PTO_APPROVER_EMAILS;
 
+// Daily "who's out today" digest recipients (requested by Ford, July 2026)
+export const PTO_DAILY_DIGEST_RECIPIENTS = [
+  'ford.barsi@theroofdocs.com',
+  'greg.campbell@theroofdocs.com',
+  'oliver.brown@theroofdocs.com',
+  'reese.samala@theroofdocs.com'
+];
+
 /**
  * Get the appropriate PTO approvers for an employee
  * Ford/Reese requests go only to Oliver & Ahmed
