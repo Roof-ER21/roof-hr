@@ -317,6 +317,9 @@ router.get('/api/hr-agents/logs', requireAdmin, async (req, res) => {
     // Transform to match expected format
     const hrLogs = logs.map((log: any) => ({
       id: `${log.agentName}-${log.startTime}`.replace(/\s+/g, '-').toLowerCase(),
+      // agentId mirrors the id derivation in GET /api/hr-agents so the client can
+      // filter a selected agent's logs (agent.name -> kebab-case).
+      agentId: log.agentName.replace(/\s+/g, '-').toLowerCase(),
       agentName: log.agentName,
       status: log.status === 'completed' ? 'SUCCESS' : log.status === 'failed' ? 'FAILED' : 'RUNNING',
       message: log.result?.message || log.error || (log.status === 'completed' ? 'Agent executed successfully' : 'Agent execution failed'),

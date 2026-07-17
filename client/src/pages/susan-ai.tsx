@@ -12,9 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -28,10 +26,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import {
   Brain,
-  MessageCircle,
   Send,
-  Mic,
-  MicOff,
   Loader2,
   CheckCircle,
   AlertCircle,
@@ -46,9 +41,6 @@ import {
   Activity,
   Clock,
   Play,
-  Filter,
-  Download,
-  PieChart,
   Shield,
   AlertTriangle
 } from 'lucide-react';
@@ -82,9 +74,11 @@ interface Agent {
 interface AgentLog {
   id: string;
   agentId: string;
-  status: 'success' | 'error';
-  runDate: string;
-  error?: string;
+  agentName: string;
+  status: 'SUCCESS' | 'FAILED' | 'RUNNING';
+  message?: string;
+  details?: string;
+  createdAt: string;
 }
 
 interface Analytics {
@@ -92,6 +86,8 @@ interface Analytics {
   pendingPTO: number;
   openPositions: number;
   turnoverRate: number;
+  departmentDistribution?: Array<{ department: string; count: number }>;
+  recruitmentPipeline?: Array<{ status: string; count: number }>;
 }
 
 interface PendingConfirmation {
@@ -106,7 +102,6 @@ export default function SusanAI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [activeTab, setActiveTab] = useState('command-center');
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState('month');
@@ -134,9 +129,10 @@ export default function SusanAI() {
     }
   });
 
-  // Fetch agent logs
+  // Fetch agent logs (route lives at /api/hr-agents/logs — the default query fn
+  // uses the queryKey as the URL, so the key IS the endpoint).
   const { data: agentLogs = [] } = useQuery<AgentLog[]>({
-    queryKey: ['/api/agents/logs'],
+    queryKey: ['/api/hr-agents/logs'],
     enabled: isAdmin
   });
 
@@ -327,11 +323,6 @@ export default function SusanAI() {
     chatMutation.mutate({ message: input });
   };
 
-  const toggleListening = () => {
-    setIsListening(!isListening);
-    // Voice recognition would be implemented here
-  };
-
   // For non-admin users, show regular Susan AI
   if (!isAdminSusan) {
     return (
@@ -427,24 +418,14 @@ export default function SusanAI() {
                   className="flex-1 min-h-[60px] resize-none"
                   disabled={isTyping}
                 />
-                <div className="flex flex-col gap-2">
-                  <Button
-                    size="icon"
-                    onClick={toggleListening}
-                    variant={isListening ? "default" : "outline"}
-                    disabled={isTyping}
-                  >
-                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </Button>
-                  <Button
-                    size="icon"
-                    onClick={handleSend}
-                    disabled={!input.trim() || isTyping}
-                    className="bg-gradient-to-r from-orange-500 to-red-500"
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </div>
+                <Button
+                  size="icon"
+                  onClick={handleSend}
+                  disabled={!input.trim() || isTyping}
+                  className="bg-gradient-to-r from-orange-500 to-red-500 self-end"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
               </div>
             </div>
           </div>
@@ -611,24 +592,14 @@ export default function SusanAI() {
                     className="flex-1 min-h-[60px] resize-none"
                     disabled={isTyping}
                   />
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      size="icon"
-                      onClick={toggleListening}
-                      variant={isListening ? "default" : "outline"}
-                      disabled={isTyping}
-                    >
-                      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </Button>
-                    <Button
-                      size="icon"
-                      onClick={handleSend}
-                      disabled={!input.trim() || isTyping}
-                      className="bg-gradient-to-r from-orange-500 to-red-500"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  <Button
+                    size="icon"
+                    onClick={handleSend}
+                    disabled={!input.trim() || isTyping}
+                    className="bg-gradient-to-r from-orange-500 to-red-500 self-end"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -651,18 +622,6 @@ export default function SusanAI() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Agents Active</span>
                     <span className="font-medium">{agents.filter(a => a.isActive).length}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Response Time</span>
-                    <span className="text-sm text-green-600">~1.2s</span>
-                  </div>
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Memory Usage</span>
-                      <span>42%</span>
-                    </div>
-                    <Progress value={42} className="h-2" />
                   </div>
                 </CardContent>
               </Card>
@@ -802,25 +761,32 @@ export default function SusanAI() {
               {selectedAgent ? (
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-2">
-                    {agentLogs
-                      .filter(log => log.agentId === selectedAgent)
-                      .map((log) => (
+                    {(() => {
+                      const logs = agentLogs.filter(log => log.agentId === selectedAgent);
+                      if (logs.length === 0) {
+                        return <p className="text-sm text-gray-500">No runs recorded yet for this agent.</p>;
+                      }
+                      return logs.map((log) => (
                         <div key={log.id} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                           <div className="flex items-center justify-between mb-1">
-                            <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
-                              {log.status}
+                            <Badge variant={log.status === 'SUCCESS' ? 'default' : log.status === 'FAILED' ? 'destructive' : 'secondary'}>
+                              {log.status.toLowerCase()}
                             </Badge>
                             <span className="text-xs text-gray-500">
-                              {format(new Date(log.runDate), 'MMM d, h:mm a')}
+                              {format(new Date(log.createdAt), 'MMM d, h:mm a')}
                             </span>
                           </div>
-                          {log.error && (
-                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
-                              {log.error}
+                          {log.message && (
+                            <p className={cn(
+                              'text-sm mt-2',
+                              log.status === 'FAILED' ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'
+                            )}>
+                              {log.message}
                             </p>
                           )}
                         </div>
-                      ))}
+                      ));
+                    })()}
                   </div>
                 </ScrollArea>
               ) : (
@@ -857,8 +823,7 @@ export default function SusanAI() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">Active Employees</p>
-                      <p className="text-2xl font-bold">{analytics?.activeEmployees || 0}</p>
-                      <p className="text-xs text-green-600">+12% from last month</p>
+                      <p className="text-2xl font-bold">{analytics?.activeEmployees ?? 0}</p>
                     </div>
                     <Users className="w-8 h-8 text-gray-400" />
                   </div>
@@ -869,8 +834,10 @@ export default function SusanAI() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">Pending PTO</p>
-                      <p className="text-2xl font-bold">{analytics?.pendingPTO || 0}</p>
-                      <p className="text-xs text-yellow-600">Requires approval</p>
+                      <p className="text-2xl font-bold">{analytics?.pendingPTO ?? 0}</p>
+                      {(analytics?.pendingPTO ?? 0) > 0 && (
+                        <p className="text-xs text-yellow-600">Requires approval</p>
+                      )}
                     </div>
                     <Calendar className="w-8 h-8 text-gray-400" />
                   </div>
@@ -881,8 +848,7 @@ export default function SusanAI() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">Open Positions</p>
-                      <p className="text-2xl font-bold">{analytics?.openPositions || 0}</p>
-                      <p className="text-xs text-blue-600">3 urgent</p>
+                      <p className="text-2xl font-bold">{analytics?.openPositions ?? 0}</p>
                     </div>
                     <FileText className="w-8 h-8 text-gray-400" />
                   </div>
@@ -893,8 +859,8 @@ export default function SusanAI() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">Turnover Rate</p>
-                      <p className="text-2xl font-bold">{analytics?.turnoverRate || 0}%</p>
-                      <p className="text-xs text-red-600">-2% from last quarter</p>
+                      <p className="text-2xl font-bold">{analytics?.turnoverRate ?? 0}%</p>
+                      <p className="text-xs text-gray-500">This {analyticsTimeframe}</p>
                     </div>
                     <TrendingUp className="w-8 h-8 text-gray-400" />
                   </div>
@@ -902,44 +868,34 @@ export default function SusanAI() {
               </Card>
             </div>
 
-            {/* Detailed Analytics */}
+            {/* Detailed Analytics — real data from /api/susan-ai/analytics */}
             <div className="grid grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Department Distribution</CardTitle>
-                  <CardDescription>Employees by department</CardDescription>
+                  <CardDescription>Active employees by department</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Operations</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={45} className="w-24" />
-                        <span className="text-sm font-medium">45</span>
+                  {(() => {
+                    const dist = analytics?.departmentDistribution || [];
+                    if (dist.length === 0) {
+                      return <p className="text-sm text-gray-500">No department data yet.</p>;
+                    }
+                    const max = Math.max(...dist.map((d) => d.count), 1);
+                    return (
+                      <div className="space-y-4">
+                        {dist.map((d) => (
+                          <div key={d.department} className="flex items-center justify-between">
+                            <span className="text-sm">{d.department}</span>
+                            <div className="flex items-center gap-2">
+                              <Progress value={Math.round((d.count / max) * 100)} className="w-24" />
+                              <span className="text-sm font-medium w-8 text-right">{d.count}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Sales</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={30} className="w-24" />
-                        <span className="text-sm font-medium">30</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Customer Service</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={25} className="w-24" />
-                        <span className="text-sm font-medium">25</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Management</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={14} className="w-24" />
-                        <span className="text-sm font-medium">14</span>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
               <Card>
@@ -948,131 +904,32 @@ export default function SusanAI() {
                   <CardDescription>Candidates by stage</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Applied</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={100} className="w-24" />
-                        <span className="text-sm font-medium">28</span>
+                  {(() => {
+                    const pipeline = analytics?.recruitmentPipeline || [];
+                    const total = pipeline.reduce((s, p) => s + p.count, 0);
+                    if (total === 0) {
+                      return <p className="text-sm text-gray-500">No active candidates in the pipeline.</p>;
+                    }
+                    const label: Record<string, string> = {
+                      APPLIED: 'Applied', SCREENING: 'Screening', INTERVIEW: 'Interview', OFFER: 'Offer',
+                    };
+                    const max = Math.max(...pipeline.map((p) => p.count), 1);
+                    return (
+                      <div className="space-y-4">
+                        {pipeline.map((p) => (
+                          <div key={p.status} className="flex items-center justify-between">
+                            <span className="text-sm">{label[p.status] || p.status}</span>
+                            <div className="flex items-center gap-2">
+                              <Progress value={Math.round((p.count / max) * 100)} className="w-24" />
+                              <span className="text-sm font-medium w-8 text-right">{p.count}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Screening</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={60} className="w-24" />
-                        <span className="text-sm font-medium">17</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Interview</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={35} className="w-24" />
-                        <span className="text-sm font-medium">10</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Offer</span>
-                      <div className="flex items-center gap-2">
-                        <Progress value={10} className="w-24" />
-                        <span className="text-sm font-medium">3</span>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
-            </div>
-
-            {/* Territory & Performance Analytics */}
-            <div className="grid grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Territory Performance</CardTitle>
-                  <CardDescription>Sales by territory</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">North Region</span>
-                      <Badge variant="default">$2.4M</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">South Region</span>
-                      <Badge variant="secondary">$1.8M</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">East Region</span>
-                      <Badge variant="secondary">$1.5M</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">West Region</span>
-                      <Badge variant="outline">$900K</Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Document Status</CardTitle>
-                  <CardDescription>Compliance tracking</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Up to Date</span>
-                      <span className="text-sm text-green-600 font-medium">87%</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Expiring Soon</span>
-                      <span className="text-sm text-yellow-600 font-medium">8%</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Expired</span>
-                      <span className="text-sm text-red-600 font-medium">5%</span>
-                    </div>
-                    <Separator className="my-2" />
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Total Documents</span>
-                      <span className="text-sm font-medium">342</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* HR Agent Activity */}
-            <Card>
-              <CardHeader>
-                <CardTitle>HR Agent Activity</CardTitle>
-                <CardDescription>Automated task performance</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">94%</p>
-                    <p className="text-sm text-gray-600">Success Rate</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">1,247</p>
-                    <p className="text-sm text-gray-600">Tasks Completed</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-blue-600">42min</p>
-                    <p className="text-sm text-gray-600">Avg. Processing Time</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Export Actions */}
-            <div className="flex justify-end gap-3">
-              <Button variant="outline">
-                <Filter className="w-4 h-4 mr-2" />
-                Filter Data
-              </Button>
-              <Button>
-                <Download className="w-4 h-4 mr-2" />
-                Export Report
-              </Button>
             </div>
           </div>
         </TabsContent>
@@ -1081,50 +938,6 @@ export default function SusanAI() {
         {isSuperAdmin && (
           <TabsContent value="system" className="flex-1 p-6">
           <div className="max-w-4xl mx-auto space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Admin Susan AI Configuration</CardTitle>
-                <CardDescription>
-                  Configure Susan's behavior, integrations, and advanced settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Advanced AI Mode</Label>
-                      <p className="text-sm text-gray-600">Enable advanced reasoning and complex task execution</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Auto-Execute Agent Commands</Label>
-                      <p className="text-sm text-gray-600">Automatically execute agent commands without confirmation</p>
-                    </div>
-                    <Switch />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Real-time Analytics</Label>
-                      <p className="text-sm text-gray-600">Stream real-time data to Susan for instant insights</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Multi-Agent Coordination</Label>
-                      <p className="text-sm text-gray-600">Allow Susan to coordinate multiple agents simultaneously</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Example Commands */}
             <Card>
               <CardHeader>

@@ -277,8 +277,8 @@ function SuperAdminContent() {
   // Agent Control Mutations
   const toggleAgentMutation = useMutation({
     mutationFn: async ({ agentId, isActive }: { agentId: string; isActive: boolean }) => {
-      return await apiRequest(`/api/hr-agents/${agentId}`, {
-        method: 'PATCH',
+      return await apiRequest(`/api/agents/${agentId}/toggle`, {
+        method: 'POST',
         body: JSON.stringify({ isActive })
       });
     },
@@ -293,7 +293,7 @@ function SuperAdminContent() {
 
   const runAgentMutation = useMutation({
     mutationFn: async (agentId: string) => {
-      return await apiRequest(`/api/hr-agents/${agentId}/run`, {
+      return await apiRequest(`/api/agents/${agentId}/run`, {
         method: 'POST'
       });
     },

@@ -536,16 +536,46 @@ router.get('/analytics', async (req, res) => {
     const [totalEmployees] = await db.select({ count: count() })
       .from(users);
     
-    const turnoverRate = totalEmployees.count > 0 
+    const turnoverRate = totalEmployees.count > 0
       ? Math.round((inactiveInPeriod.count / totalEmployees.count) * 100)
       : 0;
-    
+
+    // Real department distribution (active employees grouped by department)
+    const departmentRows = await db.select({
+      department: users.department,
+      count: count(),
+    })
+      .from(users)
+      .where(eq(users.isActive, true))
+      .groupBy(users.department)
+      .orderBy(sql`count(*) DESC`);
+    const departmentDistribution = departmentRows
+      .filter((r) => r.department)
+      .map((r) => ({ department: r.department as string, count: Number(r.count) }));
+
+    // Real recruitment pipeline (candidates grouped by early-stage status)
+    const pipelineRows = await db.select({
+      status: candidates.status,
+      count: count(),
+    })
+      .from(candidates)
+      .where(sql`${candidates.status} IN ('APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER')`)
+      .groupBy(candidates.status);
+    const pipelineOrder = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER'];
+    const pipelineMap = new Map(pipelineRows.map((r) => [r.status, Number(r.count)]));
+    const recruitmentPipeline = pipelineOrder.map((status) => ({
+      status,
+      count: pipelineMap.get(status as any) || 0,
+    }));
+
     // Build response with real data
     const analytics = {
       activeEmployees: activeEmployeesResult?.count || 0,
       pendingPTO: pendingPTOResult?.count || 0,
       openPositions: openPositionsResult?.count || 0,
       turnoverRate: turnoverRate,
+      departmentDistribution,
+      recruitmentPipeline,
       timeframe: timeframe,
       lastUpdated: new Date().toISOString()
     };
