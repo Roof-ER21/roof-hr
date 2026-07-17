@@ -8,13 +8,14 @@ import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { isNotificationEnabled } from './services/notification-preferences';
 import { db } from './db';
-import { eq, and, ne, or, lte, gte, inArray, ilike } from 'drizzle-orm';
+import { eq, and, ne, or, lte, gte, inArray, ilike, desc } from 'drizzle-orm';
 import {
   loginSchema, registerSchema, insertPtoRequestSchema,
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
   insertEmployeeReviewSchema, insertTaskSchema, insertCompanySettingsSchema,
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   equipmentChecklists,
+  performanceTemplates, automatedReviews,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
@@ -918,6 +919,7 @@ router.get('/api/auth/me', requireAuth, async (req: any, res) => {
       employmentType: user.employmentType,
       department: user.department,
       position: user.position,
+      timezone: user.timezone,
       mustChangePassword: user.mustChangePassword,
     });
   } catch (error) {
@@ -955,6 +957,7 @@ router.get('/api/auth/validate', async (req, res) => {
       employmentType: user.employmentType,
       department: user.department,
       position: user.position,
+      timezone: user.timezone,
       mustChangePassword: user.mustChangePassword,
     });
   } catch (error) {
@@ -5233,6 +5236,58 @@ router.patch('/api/reviews/:id', requireAuth, async (req: any, res) => {
     res.json(review);
   } catch (error) {
     res.status(400).json({ error: 'Failed to update review' });
+  }
+});
+
+// Acknowledge a review — the reviewee confirms they've read their submitted
+// review. Only the review's own subject may acknowledge, and only once.
+router.patch('/api/reviews/:id/acknowledge', requireAuth, async (req: any, res) => {
+  try {
+    const existing = await storage.getEmployeeReviewById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+    if (existing.revieweeId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only acknowledge your own review' });
+    }
+    if (existing.status !== 'SUBMITTED') {
+      return res.status(400).json({ error: 'Only a submitted review can be acknowledged' });
+    }
+    const review = await storage.updateEmployeeReview(req.params.id, {
+      status: 'ACKNOWLEDGED',
+      acknowledgedAt: new Date(),
+    });
+    res.json(review);
+  } catch (error) {
+    res.status(400).json({ error: 'Failed to acknowledge review' });
+  }
+});
+
+// Performance review templates (Templates tab). Managers/admins see active templates.
+router.get('/api/performance-templates', requireAuth, requireManager, async (_req: any, res) => {
+  try {
+    const templates = await db.select()
+      .from(performanceTemplates)
+      .where(eq(performanceTemplates.isActive, true))
+      .orderBy(performanceTemplates.createdAt);
+    res.json(templates);
+  } catch (error) {
+    console.error('Error fetching performance templates:', error);
+    res.status(500).json({ error: 'Failed to fetch performance templates' });
+  }
+});
+
+// Automated (scheduled) reviews (Automation tab). Managers see all; the query
+// stays admin/manager-gated to match the client's enabled condition.
+router.get('/api/automated-reviews', requireAuth, requireManager, async (_req: any, res) => {
+  try {
+    const scheduled = await db.select()
+      .from(automatedReviews)
+      .orderBy(desc(automatedReviews.scheduledDate));
+    res.json(scheduled);
+  } catch (error) {
+    console.error('Error fetching automated reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch automated reviews' });
   }
 });
 

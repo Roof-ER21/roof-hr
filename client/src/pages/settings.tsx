@@ -90,9 +90,9 @@ function Settings() {
 
   // Fetch current user info for personal settings
   const { data: currentUser } = useQuery({
-    queryKey: ['/api/user'],
+    queryKey: ['/api/auth/me'],
     queryFn: async () => {
-      const response = await fetch('/api/user', {
+      const response = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -192,7 +192,7 @@ function Settings() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({
         title: 'Success',
         description: 'Your timezone has been updated successfully'

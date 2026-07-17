@@ -140,7 +140,9 @@ interface BulkEditItem {
 const formSchema = z.object({
   employeeId: z.string().min(1, 'Employee is required'),
   type: z.enum(['WORKERS_COMP', 'GENERAL_LIABILITY']),
-  documentUrl: z.string().min(1, 'Document URL is required'),
+  // The document itself is an uploaded file (selectedFile), not a URL field — the
+  // upload endpoint stores it and returns the real documentUrl. File presence is
+  // validated in onSubmit.
   issueDate: z.string().min(1, 'Issue date is required'),
   expirationDate: z.string().min(1, 'Expiration date is required'),
   notes: z.string().optional()
@@ -193,7 +195,6 @@ export default function CoiDocuments() {
     defaultValues: {
       employeeId: currentUser?.role === 'EMPLOYEE' ? currentUser.id : '',
       type: 'WORKERS_COMP',
-      documentUrl: '',
       issueDate: '',
       expirationDate: '',
       notes: ''
@@ -863,13 +864,11 @@ export default function CoiDocuments() {
       }
       
       setSelectedFile(file);
-      form.setValue('documentUrl', 'file-selected'); // Just a placeholder to pass validation
     }
   };
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
-    form.setValue('documentUrl', '');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
