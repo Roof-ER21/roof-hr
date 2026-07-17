@@ -4,10 +4,9 @@ import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { QrCode, Link, Eye, Calendar, TrendingUp, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { QrCode, Link as LinkIcon, Eye, Calendar, TrendingUp, Plus, Pencil, Trash2, ExternalLink, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
@@ -15,180 +14,206 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
+// sa21 is the source of truth; a rep QR code == a sa21 employee_profile. This page
+// mirrors it: managers see all reps read-only, a rep sees only their own row, and
+// the system owner (super admin) can create / edit / delete.
+const SUPER_ADMIN_EMAIL = 'ahmed.mahmoud@theroofdocs.com';
+const SA21_ADMIN_URL = 'https://sa21.theroofdocs.com';
+
 interface RepQRCode {
   id: string;
   repId: string;
+  slug: string;
   qrCodeUrl: string;
   landingPageUrl: string;
   totalScans: number;
   totalAppointments: number;
   conversionRate: number;
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  rep?: {
-    firstName: string;
-    lastName: string;
-    position: string;
-  };
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  imageUrl?: string | null;
+  rep?: { firstName: string; lastName: string; position: string };
 }
 
-const createQRCodeSchema = z.object({
-  repId: z.string(),
-  landingPageUrl: z.string().url('Must be a valid URL'),
+const profileSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Must be a valid email').or(z.literal('')).optional(),
+  phone_number: z.string().optional(),
+  title: z.string().optional(),
+  slug: z.string().optional(),
 });
-
-type CreateQRCodeForm = z.infer<typeof createQRCodeSchema>;
+type ProfileForm = z.infer<typeof profileSchema>;
 
 export default function QRCodes() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [selectedQRCode, setSelectedQRCode] = useState<string | null>(null);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
 
-  const { data: qrCodes = [], isLoading } = useQuery<RepQRCode[]>({
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<RepQRCode | null>(null);
+
+  const { data: qrCodes = [], isLoading, error } = useQuery<RepQRCode[]>({
     queryKey: ['/api/qr-codes'],
   });
 
-  const { data: users = [] } = useQuery<any[]>({
-    queryKey: ['/api/users'],
+  const createForm = useForm<ProfileForm>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: { name: '', email: '', phone_number: '', title: '', slug: '' },
+  });
+  const editForm = useForm<ProfileForm>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: { name: '', email: '', phone_number: '', title: '', slug: '' },
   });
 
-  const form = useForm<CreateQRCodeForm>({
-    resolver: zodResolver(createQRCodeSchema),
-    defaultValues: {
-      repId: '',
-      landingPageUrl: '',
-    },
-  });
+  const onError = (fallback: string) => (e: any) =>
+    toast({ title: 'Error', description: e?.message || fallback, variant: 'destructive' });
 
-  const createQRCodeMutation = useMutation({
-    mutationFn: async (data: CreateQRCodeForm) => {
-      // Generate QR code URL using a placeholder service (in production, use proper QR generation)
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.landingPageUrl)}`;
-      
-      const response = await apiRequest('POST', '/api/qr-codes', {
-        ...data,
-        qrCodeUrl,
-      });
-    },
+  const createMutation = useMutation({
+    mutationFn: (data: ProfileForm) => apiRequest('/api/qr-codes', 'POST', data),
     onSuccess: () => {
-      toast({
-        title: 'QR Code created',
-        description: 'The QR code has been created successfully.',
-      });
+      toast({ title: 'QR code created', description: 'The rep profile + QR code were created in Susan AI-21.' });
       queryClient.invalidateQueries({ queryKey: ['/api/qr-codes'] });
-      setIsCreateDialogOpen(false);
-      form.reset();
+      setIsCreateOpen(false);
+      createForm.reset();
     },
-    onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to create QR code. Please try again.',
-        variant: 'destructive',
-      });
-    },
+    onError: onError('Failed to create QR code.'),
   });
 
-  // Merge user data with QR code data
-  const enrichedQRCodes = qrCodes.map(qr => {
-    const userData = users.find((u: any) => u.id === qr.repId);
-    return {
-      ...qr,
-      rep: userData ? {
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        position: userData.position,
-      } : undefined,
-    };
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: ProfileForm }) => apiRequest(`/api/qr-codes/${id}`, 'PATCH', data),
+    onSuccess: () => {
+      toast({ title: 'QR code updated' });
+      queryClient.invalidateQueries({ queryKey: ['/api/qr-codes'] });
+      setEditing(null);
+    },
+    onError: onError('Failed to update QR code.'),
   });
 
-  const salesReps = users.filter((u: any) => 
-    u.role === 'EMPLOYEE' && (u.position?.toLowerCase().includes('sales') || u.department?.toLowerCase().includes('sales'))
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/qr-codes/${id}`, 'DELETE'),
+    onSuccess: () => {
+      toast({ title: 'QR code deleted' });
+      queryClient.invalidateQueries({ queryKey: ['/api/qr-codes'] });
+    },
+    onError: onError('Failed to delete QR code.'),
+  });
+
+  const openEdit = (qr: RepQRCode) => {
+    editForm.reset({
+      name: `${qr.rep?.firstName || ''} ${qr.rep?.lastName || ''}`.trim(),
+      email: qr.email || '',
+      phone_number: qr.phone || '',
+      title: qr.title || '',
+      slug: qr.slug || '',
+    });
+    setEditing(qr);
+  };
+
+  const totals = qrCodes.reduce(
+    (acc, qr) => ({
+      scans: acc.scans + qr.totalScans,
+      appointments: acc.appointments + qr.totalAppointments,
+      activeQRs: acc.activeQRs + (qr.isActive ? 1 : 0),
+    }),
+    { scans: 0, appointments: 0, activeQRs: 0 },
   );
-
-  const totalStats = enrichedQRCodes.reduce((acc, qr) => ({
-    scans: acc.scans + qr.totalScans,
-    appointments: acc.appointments + qr.totalAppointments,
-    activeQRs: acc.activeQRs + (qr.isActive ? 1 : 0),
-  }), { scans: 0, appointments: 0, activeQRs: 0 });
-
-  const avgConversionRate = enrichedQRCodes.length > 0
-    ? enrichedQRCodes.reduce((sum, qr) => sum + qr.conversionRate, 0) / enrichedQRCodes.length
+  const avgConversion = qrCodes.length > 0
+    ? qrCodes.reduce((s, qr) => s + qr.conversionRate, 0) / qrCodes.length
     : 0;
 
   if (isLoading) {
-    return <div className="flex justify-center items-center h-full">Loading...</div>;
+    return <div className="flex justify-center items-center h-full">Loading…</div>;
   }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <p className="font-medium">Couldn't reach the QR system (Susan AI-21).</p>
+        <p className="text-sm text-muted-foreground">{(error as Error)?.message || 'Please try again shortly.'}</p>
+      </div>
+    );
+  }
+
+  const profileFields = (form: typeof createForm) => (
+    <>
+      <FormField control={form.control} name="name" render={({ field }) => (
+        <FormItem>
+          <FormLabel>Rep name *</FormLabel>
+          <FormControl><Input {...field} placeholder="Ben Salgado" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      )} />
+      <FormField control={form.control} name="email" render={({ field }) => (
+        <FormItem>
+          <FormLabel>Email</FormLabel>
+          <FormControl><Input {...field} type="email" placeholder="ben@theroofdocs.com" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      )} />
+      <FormField control={form.control} name="phone_number" render={({ field }) => (
+        <FormItem>
+          <FormLabel>Phone</FormLabel>
+          <FormControl><Input {...field} placeholder="(703) 555-0100" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      )} />
+      <FormField control={form.control} name="title" render={({ field }) => (
+        <FormItem>
+          <FormLabel>Title</FormLabel>
+          <FormControl><Input {...field} placeholder="Sales Representative" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      )} />
+      <FormField control={form.control} name="slug" render={({ field }) => (
+        <FormItem>
+          <FormLabel>Landing-page slug (optional)</FormLabel>
+          <FormControl><Input {...field} placeholder="auto-generated from name" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      )} />
+    </>
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-start gap-4">
         <div>
           <h1 className="text-3xl font-bold">QR Code Management</h1>
-          <p className="text-muted-foreground">Track and manage sales rep QR codes</p>
+          <p className="text-muted-foreground">
+            {isSuperAdmin
+              ? 'Create and manage sales-rep QR codes — synced with Susan AI-21.'
+              : 'Rep QR code performance — scans, appointments, and conversion.'}
+          </p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create QR Code
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New QR Code</DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit((data) => createQRCodeMutation.mutate(data))} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="repId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Sales Representative</FormLabel>
-                      <FormControl>
-                        <select
-                          {...field}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                          <option value="">Select a rep</option>
-                          {salesReps.map((rep: any) => (
-                            <option key={rep.id} value={rep.id}>
-                              {rep.firstName} {rep.lastName} - {rep.position}
-                            </option>
-                          ))}
-                        </select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="landingPageUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Landing Page URL</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="https://example.com/rep-landing" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createQRCodeMutation.isPending}>
-                    {createQRCodeMutation.isPending ? 'Creating...' : 'Create QR Code'}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        {isSuperAdmin && (
+          <div className="flex items-center gap-2">
+            <a href={`${SA21_ADMIN_URL}/admin`} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline"><ExternalLink className="h-4 w-4 mr-2" />sa21 admin (photos/videos)</Button>
+            </a>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="h-4 w-4 mr-2" />Create QR Code</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Create rep QR code</DialogTitle></DialogHeader>
+                <Form {...createForm}>
+                  <form onSubmit={createForm.handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
+                    {profileFields(createForm)}
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+                      <Button type="submit" disabled={createMutation.isPending}>
+                        {createMutation.isPending ? 'Creating…' : 'Create QR Code'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
       </div>
 
       {/* Stats Overview */}
@@ -199,49 +224,38 @@ export default function QRCodes() {
             <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalStats.scans}</div>
-            <p className="text-xs text-muted-foreground">
-              All-time QR code scans
-            </p>
+            <div className="text-2xl font-bold">{totals.scans}</div>
+            <p className="text-xs text-muted-foreground">All-time QR code scans</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Appointments</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalStats.appointments}</div>
-            <p className="text-xs text-muted-foreground">
-              Booked through QR codes
-            </p>
+            <div className="text-2xl font-bold">{totals.appointments}</div>
+            <p className="text-xs text-muted-foreground">Leads captured via QR</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{avgConversionRate.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground">
-              Average scan to appointment
-            </p>
+            <div className="text-2xl font-bold">{avgConversion.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground">Average scan → appointment</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active QR Codes</CardTitle>
             <QrCode className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalStats.activeQRs}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently active codes
-            </p>
+            <div className="text-2xl font-bold">{totals.activeQRs}</div>
+            <p className="text-xs text-muted-foreground">Currently active codes</p>
           </CardContent>
         </Card>
       </div>
@@ -249,93 +263,85 @@ export default function QRCodes() {
       {/* QR Code List */}
       <Card>
         <CardHeader>
-          <CardTitle>QR Codes by Representative</CardTitle>
+          <CardTitle>{isSuperAdmin ? 'QR Codes by Representative' : qrCodes.length === 1 ? 'My QR Code' : 'QR Codes'}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {enrichedQRCodes.map((qr) => (
-              <div
-                key={qr.id}
-                className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
-                    <QrCode className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">
-                      {qr.rep?.firstName} {qr.rep?.lastName}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">{qr.rep?.position}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Link className="h-3 w-3 text-muted-foreground" />
-                      <a
-                        href={qr.landingPageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        {qr.landingPageUrl}
-                      </a>
+          {qrCodes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">No QR codes yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {qrCodes.map((qr) => (
+                <div key={qr.id} className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center shrink-0">
+                      <QrCode className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold truncate">{qr.rep?.firstName} {qr.rep?.lastName}</h3>
+                      <p className="text-sm text-muted-foreground truncate">{qr.rep?.position}</p>
+                      <div className="flex items-center gap-2 mt-1 min-w-0">
+                        <LinkIcon className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <a href={qr.landingPageUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
+                          {qr.landingPageUrl}
+                        </a>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-6">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">{qr.totalScans}</p>
-                    <p className="text-xs text-muted-foreground">Scans</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">{qr.totalAppointments}</p>
-                    <p className="text-xs text-muted-foreground">Appointments</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">{qr.conversionRate.toFixed(1)}%</p>
-                    <p className="text-xs text-muted-foreground">Conversion</p>
-                  </div>
-                  <Badge variant={qr.isActive ? 'default' : 'secondary'}>
-                    {qr.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        View QR
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>QR Code for {qr.rep?.firstName} {qr.rep?.lastName}</DialogTitle>
-                      </DialogHeader>
-                      <div className="flex flex-col items-center space-y-4">
-                        <img
-                          src={qr.qrCodeUrl}
-                          alt="QR Code"
-                          className="w-64 h-64 border rounded"
-                        />
-                        <p className="text-sm text-muted-foreground text-center">
-                          Scan this code to visit:<br />
-                          {qr.landingPageUrl}
-                        </p>
+                  <div className="flex items-center gap-6 shrink-0">
+                    <div className="text-center"><p className="text-2xl font-bold">{qr.totalScans}</p><p className="text-xs text-muted-foreground">Scans</p></div>
+                    <div className="text-center"><p className="text-2xl font-bold">{qr.totalAppointments}</p><p className="text-xs text-muted-foreground">Appts</p></div>
+                    <div className="text-center"><p className="text-2xl font-bold">{qr.conversionRate.toFixed(1)}%</p><p className="text-xs text-muted-foreground">Conv.</p></div>
+                    <Badge variant={qr.isActive ? 'default' : 'secondary'}>{qr.isActive ? 'Active' : 'Inactive'}</Badge>
+
+                    <Dialog>
+                      <DialogTrigger asChild><Button variant="outline" size="sm">View QR</Button></DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader><DialogTitle>QR Code — {qr.rep?.firstName} {qr.rep?.lastName}</DialogTitle></DialogHeader>
+                        <div className="flex flex-col items-center space-y-4">
+                          <img src={qr.qrCodeUrl} alt="QR Code" className="w-64 h-64 border rounded" />
+                          <p className="text-sm text-muted-foreground text-center">Scan to visit:<br />{qr.landingPageUrl}</p>
+                          <Button onClick={() => { const a = document.createElement('a'); a.href = qr.qrCodeUrl; a.download = `qr-${qr.slug || 'rep'}.png`; a.click(); }}>
+                            Download QR Code
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    {isSuperAdmin && (
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(qr)} title="Edit"><Pencil className="h-4 w-4" /></Button>
                         <Button
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = qr.qrCodeUrl;
-                            link.download = `qr-code-${qr.rep?.firstName}-${qr.rep?.lastName}.png`;
-                            link.click();
-                          }}
+                          variant="ghost" size="icon" title="Delete"
+                          onClick={() => { if (window.confirm(`Delete the QR profile for ${qr.rep?.firstName} ${qr.rep?.lastName}? This removes it in Susan AI-21.`)) deleteMutation.mutate(qr.id); }}
                         >
-                          Download QR Code
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Edit dialog (super admin only) */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit rep QR code</DialogTitle></DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit((d) => editing && updateMutation.mutate({ id: editing.id, data: d }))} className="space-y-4">
+              {profileFields(editForm)}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+                <Button type="submit" disabled={updateMutation.isPending}>{updateMutation.isPending ? 'Saving…' : 'Save changes'}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

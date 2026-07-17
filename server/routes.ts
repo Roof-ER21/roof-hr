@@ -5376,6 +5376,153 @@ router.delete('/api/tasks/:id', requireAuth, requireManager, async (req: any, re
   }
 });
 
+// ── Rep QR Codes — read-through to sa21 (Susan AI-21) ─────────────────────────
+// sa21 (sa21.theroofdocs.com) is the source of truth for rep QR codes: per-rep
+// landing pages (/profile/:slug), scan tracking (qr_scans) and leads
+// (profile_leads). Roof HR mirrors that here rather than running a second silo.
+// sa21 gates its QR endpoints by an `x-user-email` header checked against its
+// QR-manager roles, so Roof HR authenticates as a configured service identity
+// (defaults to the super admin, who is an sa21 admin). Writes are super-admin
+// only; managers get a read-only mirror; a rep sees only their own row.
+const SA21_BASE_URL = (process.env.SA21_BASE_URL || 'https://sa21.theroofdocs.com').replace(/\/$/, '');
+const SA21_SERVICE_EMAIL = process.env.SA21_QR_ADMIN_EMAIL || SUPER_ADMIN_EMAIL;
+const SA21_TIMEOUT_MS = Number(process.env.SA21_TIMEOUT_MS) || 15000;
+
+async function sa21Fetch(path: string, opts: { method?: string; body?: any } = {}): Promise<any> {
+  const resp = await fetch(`${SA21_BASE_URL}${path}`, {
+    method: opts.method || 'GET',
+    headers: {
+      'x-user-email': SA21_SERVICE_EMAIL,
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: AbortSignal.timeout(SA21_TIMEOUT_MS),
+  });
+  const text = await resp.text();
+  let json: any = {};
+  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
+  if (!resp.ok) {
+    const err: any = new Error(json?.error || `sa21 ${path} → ${resp.status}`);
+    err.status = resp.status;
+    throw err;
+  }
+  return json;
+}
+
+function sa21QrImage(url: string): string {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
+}
+
+// sa21 employee_profile → the RepQRCode shape the Roof HR page expects.
+function toRepQRCode(profile: any, metrics?: { scanCount: number; signupCount: number }): any {
+  const landingPageUrl = `${SA21_BASE_URL}/profile/${profile.slug}`;
+  const scans = metrics?.scanCount ?? 0;
+  const appts = metrics?.signupCount ?? 0;
+  const parts = String(profile.name || '').trim().split(/\s+/);
+  return {
+    id: profile.id || profile.slug,
+    repId: profile.id || profile.slug,
+    slug: profile.slug,
+    qrCodeUrl: sa21QrImage(landingPageUrl),
+    landingPageUrl,
+    totalScans: scans,
+    totalAppointments: appts,
+    conversionRate: scans > 0 ? Math.round((appts / scans) * 1000) / 10 : 0,
+    isActive: profile.is_active !== false,
+    email: profile.email || null,
+    phone: profile.phone_number || null,
+    title: profile.title || null,
+    imageUrl: profile.image_url || null,
+    createdAt: profile.created_at,
+    updatedAt: profile.updated_at,
+    rep: {
+      firstName: parts[0] || String(profile.name || ''),
+      lastName: parts.slice(1).join(' '),
+      position: profile.title || profile.role_type || '',
+    },
+  };
+}
+
+function isQrManager(user: any): boolean {
+  return user.email === SUPER_ADMIN_EMAIL
+    || (user.role && ADMIN_ROLES.includes(user.role))
+    || (user.role && MANAGER_ROLES.includes(user.role));
+}
+
+function requireSuperAdmin(req: any, res: any, next: any) {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (req.user.email !== SUPER_ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Only the system owner can manage QR codes.' });
+  }
+  next();
+}
+
+// GET — mirror. Managers/admins see all reps; an employee sees only their own
+// (matched by email). Metrics (scans/appointments) merged from sa21 analytics.
+router.get('/api/qr-codes', requireAuth, async (req: any, res) => {
+  try {
+    const [profilesResp, dashResp] = await Promise.all([
+      sa21Fetch('/api/profiles'),
+      sa21Fetch('/api/qr-analytics/dashboard').catch(() => ({ reps: [] })),
+    ]);
+    const profiles: any[] = Array.isArray(profilesResp) ? profilesResp : (profilesResp.profiles || []);
+    const metricsBySlug = new Map<string, { scanCount: number; signupCount: number }>();
+    for (const r of (dashResp.reps || [])) {
+      metricsBySlug.set(r.slug, { scanCount: r.scanCount || 0, signupCount: r.signupCount || 0 });
+    }
+    let rows = profiles.map((p) => toRepQRCode(p, metricsBySlug.get(p.slug)));
+    if (!isQrManager(req.user)) {
+      const myEmail = String(req.user.email || '').toLowerCase();
+      rows = rows.filter((r) => String(r.email || '').toLowerCase() === myEmail);
+    }
+    res.json(rows);
+  } catch (err: any) {
+    console.error('[qr-codes] list failed:', err?.message || err);
+    res.status(502).json({ error: 'Could not reach the QR system (sa21). Try again shortly.', code: 'SA21_UNREACHABLE' });
+  }
+});
+
+// POST — super admin only. Creates a rep profile in sa21 (which mints the slug +
+// landing page); the QR image is derived from the landing URL.
+router.post('/api/qr-codes', requireAuth, requireSuperAdmin, async (req: any, res) => {
+  try {
+    const { name, email, phone_number, title, slug, bio, role_type } = req.body || {};
+    if (!name) return res.status(400).json({ error: 'A rep name is required.' });
+    const created = await sa21Fetch('/api/profiles', {
+      method: 'POST',
+      body: { name, email, phone_number, title, slug, bio, role_type: role_type || 'sales_rep' },
+    });
+    const profile = created.profile || created;
+    res.json({ success: true, qrCode: toRepQRCode(profile) });
+  } catch (err: any) {
+    console.error('[qr-codes] create failed:', err?.message || err);
+    res.status(err?.status || 502).json({ error: err?.message || 'Failed to create QR profile' });
+  }
+});
+
+// PATCH — super admin only. Updates the rep profile in sa21.
+router.patch('/api/qr-codes/:id', requireAuth, requireSuperAdmin, async (req: any, res) => {
+  try {
+    const updated = await sa21Fetch(`/api/profiles/${req.params.id}`, { method: 'PUT', body: req.body || {} });
+    const profile = updated.profile || updated;
+    res.json({ success: true, qrCode: toRepQRCode(profile) });
+  } catch (err: any) {
+    console.error('[qr-codes] update failed:', err?.message || err);
+    res.status(err?.status || 502).json({ error: err?.message || 'Failed to update QR profile' });
+  }
+});
+
+// DELETE — super admin only.
+router.delete('/api/qr-codes/:id', requireAuth, requireSuperAdmin, async (req: any, res) => {
+  try {
+    await sa21Fetch(`/api/profiles/${req.params.id}`, { method: 'DELETE' });
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[qr-codes] delete failed:', err?.message || err);
+    res.status(err?.status || 502).json({ error: err?.message || 'Failed to delete QR profile' });
+  }
+});
+
 // Document routes
 router.get('/api/documents', requireAuth, async (req, res) => {
   try {

@@ -44,6 +44,7 @@ import {
   DoorOpen,
   ClipboardList,
   ListChecks,
+  QrCode,
   GitBranch,
   PanelLeftClose,
   PanelLeft
@@ -63,6 +64,8 @@ const navigation = [
   { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: [...ADMIN_ROLES, 'MANAGER'] },
   // Tasks: Everyone (API scopes — employees see their own, managers see all)
   { name: 'Tasks', href: '/tasks', icon: ListChecks, roles: ALL_ROLES },
+  // QR Codes: Everyone (API scopes — a rep sees only their own row)
+  { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: ALL_ROLES },
   {
     name: 'Susan AI',
     href: '/susan-ai',

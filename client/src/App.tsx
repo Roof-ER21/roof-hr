@@ -19,6 +19,7 @@ import Settings from '@/pages/settings';
 import Login from '@/pages/login';
 import ApiTest from '@/pages/api-test';
 import Tasks from '@/pages/tasks';
+import QRCodes from '@/pages/qr-codes';
 import { Tools } from '@/pages/Tools';
 import EmailTemplates from '@/pages/EmailTemplates';
 import WorkflowBuilder from '@/pages/WorkflowBuilder';
@@ -100,6 +101,9 @@ function AuthenticatedRoutes() {
 
         {/* Tasks: Everyone (API scopes — employees see their own, managers see all) */}
         <Route path="/tasks" element={<Tasks />} />
+
+        {/* QR Codes: Everyone (API scopes — a rep sees only their own row) */}
+        <Route path="/qr-codes" element={<QRCodes />} />
 
         {/* Recruiting: Everyone can access (SOURCER sees their assigned candidates) */}
         <Route path="/recruiting" element={<EnhancedRecruiting />} />
