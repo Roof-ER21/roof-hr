@@ -43,6 +43,7 @@ import {
   UserCircle,
   DoorOpen,
   ClipboardList,
+  ListChecks,
   GitBranch,
   PanelLeftClose,
   PanelLeft
@@ -60,6 +61,8 @@ const navigation = [
   { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ALL_ROLES },
   // Team Dashboard: Admins + Manager
   { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: [...ADMIN_ROLES, 'MANAGER'] },
+  // Tasks: Everyone (API scopes — employees see their own, managers see all)
+  { name: 'Tasks', href: '/tasks', icon: ListChecks, roles: ALL_ROLES },
   {
     name: 'Susan AI',
     href: '/susan-ai',

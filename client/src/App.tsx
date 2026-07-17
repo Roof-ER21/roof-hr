@@ -18,8 +18,7 @@ import ChangePassword from '@/pages/change-password';
 import Settings from '@/pages/settings';
 import Login from '@/pages/login';
 import ApiTest from '@/pages/api-test';
-// ResumeUploader is now integrated into EnhancedRecruiting page
-// import ResumeUploader from '@/pages/resume-uploader';
+import Tasks from '@/pages/tasks';
 import { Tools } from '@/pages/Tools';
 import EmailTemplates from '@/pages/EmailTemplates';
 import WorkflowBuilder from '@/pages/WorkflowBuilder';
@@ -30,7 +29,6 @@ import EmployeeAssignments from '@/pages/EmployeeAssignments';
 import Contracts from '@/pages/Contracts';
 import SusanAI from '@/pages/susan-ai';
 import SusanAIAdmin from '@/pages/susan-ai-admin';
-import GoogleIntegration from '@/pages/GoogleIntegration';
 import AttendanceDashboard from '@/pages/AttendanceDashboard';
 import AttendanceCheckIn from '@/pages/AttendanceCheckIn';
 import AttendanceAdminDashboard from '@/pages/AttendanceAdminDashboard';
@@ -44,7 +42,6 @@ import TeamDirectory from '@/pages/team-directory';
 import TeamDashboard from '@/pages/team-dashboard';
 import MeetingRooms from '@/pages/MeetingRooms';
 import OnboardingTemplates from '@/pages/OnboardingTemplates';
-import ScheduledReports from '@/pages/ScheduledReports';
 import OrgChartPage from '@/pages/OrgChartPage';
 import { SusanFloatingOrb } from '@/components/susan-ai/floating-orb';
 import { OnboardingTour } from '@/components/OnboardingTour';
@@ -100,6 +97,9 @@ function AuthenticatedRoutes() {
 
         {/* PTO: Everyone can access */}
         <Route path="/pto" element={<PTO />} />
+
+        {/* Tasks: Everyone (API scopes — employees see their own, managers see all) */}
+        <Route path="/tasks" element={<Tasks />} />
 
         {/* Recruiting: Everyone can access (SOURCER sees their assigned candidates) */}
         <Route path="/recruiting" element={<EnhancedRecruiting />} />

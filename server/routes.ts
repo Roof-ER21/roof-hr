@@ -5291,6 +5291,91 @@ router.get('/api/automated-reviews', requireAuth, requireManager, async (_req: a
   }
 });
 
+// ── Task management ───────────────────────────────────────────────────────────
+// Backs the Tasks page. Storage layer (createTask/getAllTasks/…) already existed;
+// these routes were the missing piece. Managers/admins see & manage all tasks;
+// employees see and update only tasks assigned to them.
+function isTaskManager(user: any): boolean {
+  return user.email === SUPER_ADMIN_EMAIL
+    || (user.role && ADMIN_ROLES.includes(user.role))
+    || (user.role && MANAGER_ROLES.includes(user.role));
+}
+
+router.get('/api/tasks', requireAuth, async (req: any, res) => {
+  try {
+    const list = isTaskManager(req.user)
+      ? await storage.getAllTasks()
+      : await storage.getTasksByAssignee(req.user.id);
+    res.json(list);
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
+router.post('/api/tasks', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.title || !b.assignedTo || !b.category) {
+      return res.status(400).json({ error: 'title, assignedTo, and category are required' });
+    }
+    const task = await storage.createTask({
+      title: b.title,
+      description: b.description || '',
+      assignedTo: b.assignedTo,
+      assignedBy: req.user.id,
+      priority: b.priority || 'MEDIUM',
+      status: b.status || 'TODO',
+      dueDate: b.dueDate ? new Date(b.dueDate) : undefined,
+      category: b.category,
+      tags: Array.isArray(b.tags) ? b.tags : [],
+      completedAt: undefined,
+    });
+    res.json(task);
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(400).json({ error: 'Failed to create task' });
+  }
+});
+
+router.patch('/api/tasks/:id', requireAuth, async (req: any, res) => {
+  try {
+    const existing = await storage.getTaskById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    // Assignee may update their own task (e.g. mark complete); managers may update any.
+    if (!isTaskManager(req.user) && existing.assignedTo !== req.user.id) {
+      return res.status(403).json({ error: 'You can only update tasks assigned to you' });
+    }
+    const b = req.body || {};
+    const patch: any = {};
+    for (const k of ['title', 'description', 'assignedTo', 'priority', 'status', 'category', 'tags']) {
+      if (b[k] !== undefined) patch[k] = b[k];
+    }
+    if (b.dueDate !== undefined) patch.dueDate = b.dueDate ? new Date(b.dueDate) : null;
+    if (b.completedAt !== undefined) patch.completedAt = b.completedAt ? new Date(b.completedAt) : null;
+    // Auto-stamp completedAt when moving to COMPLETED without an explicit value.
+    if (b.status === 'COMPLETED' && b.completedAt === undefined) patch.completedAt = new Date();
+    patch.updatedAt = new Date();
+    const task = await storage.updateTask(req.params.id, patch);
+    res.json(task);
+  } catch (error) {
+    console.error('Error updating task:', error);
+    res.status(400).json({ error: 'Failed to update task' });
+  }
+});
+
+router.delete('/api/tasks/:id', requireAuth, requireManager, async (req: any, res) => {
+  try {
+    await storage.deleteTask(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(400).json({ error: 'Failed to delete task' });
+  }
+});
+
 // Document routes
 router.get('/api/documents', requireAuth, async (req, res) => {
   try {
