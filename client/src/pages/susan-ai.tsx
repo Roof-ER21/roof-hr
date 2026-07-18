@@ -102,6 +102,9 @@ export default function SusanAI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  // Persisted conversation id (susan_chat_sessions). Threaded through /chat/session
+  // so the conversation is saved and Susan keeps prior context across turns/sessions.
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('command-center');
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState('month');
@@ -151,12 +154,16 @@ export default function SusanAI() {
   // Chat mutation
   const chatMutation = useMutation({
     mutationFn: async ({ message }: { message: string }) => {
-      return await apiRequest<any>('/api/susan-ai/chat', {
+      // /chat/session persists the conversation (susan_chat_sessions) and feeds
+      // prior messages back as context. Passing sessionId continues the same
+      // conversation; omitting it lets the server use/create the active session.
+      return await apiRequest<any>('/api/susan-ai/chat/session', {
         method: 'POST',
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message, sessionId: sessionId ?? undefined })
       });
     },
     onSuccess: (data) => {
+      if (data.sessionId) setSessionId(data.sessionId);
       // Check if this requires user confirmation
       if (data.requiresConfirmation) {
         setPendingConfirmation({

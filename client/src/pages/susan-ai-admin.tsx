@@ -180,6 +180,8 @@ function SuperAdminContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  // Persisted conversation id (susan_chat_sessions) — saves the admin chat + memory.
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [activeTab, setActiveTab] = useState('command-center');
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
@@ -226,28 +228,20 @@ function SuperAdminContent() {
     queryKey: ['/api/email-campaigns'],
   });
 
-  // Chat with Susan (Admin Mode)
+  // Chat with Susan (Admin Mode) — /chat/session persists the conversation and
+  // feeds prior messages back as context (Susan remembers). The old /chat call
+  // passed an inline `context` the server ignored (it only honors a provided
+  // context that carries userId+userRole), so nothing is lost by switching.
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const response = await apiRequest('/api/susan/chat', {
+      const response = await apiRequest<any>('/api/susan/chat/session', {
         method: 'POST',
-        body: JSON.stringify({
-          message,
-          mode: 'super-admin',
-          context: {
-            agents: agents.map(a => ({ id: a.id, name: a.agentName, isActive: a.isActive })),
-            analytics: analytics ? {
-              activeEmployees: analytics.activeEmployees,
-              pendingPTO: analytics.pendingPTO
-            } : null,
-            workflows: workflows.length,
-            campaigns: campaigns.length
-          }
-        })
+        body: JSON.stringify({ message, sessionId: sessionId ?? undefined })
       });
       return response;
     },
     onSuccess: (response: any) => {
+      if (response?.sessionId) setSessionId(response.sessionId);
       const assistantMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
