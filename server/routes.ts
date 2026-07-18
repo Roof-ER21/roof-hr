@@ -5303,9 +5303,15 @@ function isTaskManager(user: any): boolean {
 
 router.get('/api/tasks', requireAuth, async (req: any, res) => {
   try {
-    const list = isTaskManager(req.user)
+    let list = isTaskManager(req.user)
       ? await storage.getAllTasks()
       : await storage.getTasksByAssignee(req.user.id);
+    // Auto-generated onboarding checklist items live in their own feature
+    // (onboarding_instances) and only clutter this page. Hidden by default;
+    // set TASKS_SHOW_ONBOARDING=true to bring them back with no code change.
+    if (process.env.TASKS_SHOW_ONBOARDING !== 'true') {
+      list = list.filter((t: any) => t.category !== 'ONBOARDING');
+    }
     res.json(list);
   } catch (error) {
     console.error('Error fetching tasks:', error);
