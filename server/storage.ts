@@ -1178,11 +1178,11 @@ class DrizzleStorage implements IStorage {
   }
 
   async getAllTasks(): Promise<Task[]> {
-    return await db.select().from(tasks);
+    return await db.select().from(tasks).orderBy(desc(tasks.createdAt));
   }
 
   async getTasksByAssignee(assigneeId: string): Promise<Task[]> {
-    return await db.select().from(tasks).where(eq(tasks.assignedTo, assigneeId));
+    return await db.select().from(tasks).where(eq(tasks.assignedTo, assigneeId)).orderBy(desc(tasks.createdAt));
   }
 
   async updateTask(id: string, data: Partial<InsertTask>): Promise<Task> {

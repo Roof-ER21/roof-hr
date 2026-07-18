@@ -42,6 +42,7 @@ function Tasks() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const { toast } = useToast();
@@ -213,14 +214,22 @@ function Tasks() {
     return new Date(dueDate) < new Date() && true;
   };
 
+  // Distinct categories present in the current task set, for the category filter.
+  const categories = Array.from(new Set((tasks || []).map((t: any) => t.category).filter(Boolean))).sort();
+
   const filteredTasks = tasks?.filter((task: any) => {
     const statusMatch = filterStatus === 'all' || task.status === filterStatus;
     const priorityMatch = filterPriority === 'all' || task.priority === filterPriority;
-    const searchMatch = searchTerm === '' || 
-      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.category.toLowerCase().includes(searchTerm.toLowerCase());
-    return statusMatch && priorityMatch && searchMatch;
+    const categoryMatch = filterCategory === 'all' || task.category === filterCategory;
+    const q = searchTerm.toLowerCase();
+    const assignee = getUserById(task.assignedTo);
+    const assigneeName = assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.toLowerCase() : '';
+    const searchMatch = searchTerm === '' ||
+      task.title.toLowerCase().includes(q) ||
+      task.description?.toLowerCase().includes(q) ||
+      task.category.toLowerCase().includes(q) ||
+      assigneeName.includes(q);
+    return statusMatch && priorityMatch && categoryMatch && searchMatch;
   }) || [];
 
   const tasksByStatus = {
@@ -452,11 +461,24 @@ function Tasks() {
             <div className="flex items-center space-x-2">
               <Search className="w-4 h-4 text-secondary-500" />
               <Input
-                placeholder="Search tasks..."
+                placeholder="Search by task or assignee name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-64"
               />
+            </div>
+            <div>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
