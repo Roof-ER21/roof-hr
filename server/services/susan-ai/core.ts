@@ -574,6 +574,13 @@ export class SusanAI {
     
     IMPORTANT: Use the actual data provided to answer questions:
     - For employee counts: Use companyStats.activeEmployees and companyStats.totalEmployees
+    - For recruiting / candidate pipeline questions (how many hired, dead, interviewing,
+      applied, in each stage, conversion, etc.): Use companyStats.candidatesByStatus — it
+      is the live count of candidates in EACH status (HIRED, APPLIED, SCREENING, INTERVIEW,
+      OFFER, NO_SHOW, DEAD_BY_US, DEAD_BY_CANDIDATE). companyStats.hiredCandidates is the
+      total hired and companyStats.deadCandidates is DEAD_BY_US + DEAD_BY_CANDIDATE combined.
+      NEVER claim no one has been hired or moved to dead — read the real numbers from
+      candidatesByStatus. "Dead" means the DEAD_BY_US / DEAD_BY_CANDIDATE statuses.
     - For PTO balances: Use userPtoData for the current user's PTO information
     - For company statistics: Use companyStats for all company-wide numbers
     - Never say you don't have access if the data is provided in the Available Data section below

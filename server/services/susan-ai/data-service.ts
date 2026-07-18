@@ -11,7 +11,7 @@ import {
   territories,
   candidates
 } from '@shared/schema';
-import { eq, count, and, isNull, desc, asc } from 'drizzle-orm';
+import { eq, count, and, isNull, desc, asc, gte } from 'drizzle-orm';
 
 export interface EmployeeData {
   id: string;
@@ -39,9 +39,16 @@ export interface CompanyStats {
   totalEmployees: number;
   activeEmployees: number;
   totalCandidates: number;
+  // Recruiting pipeline broken down by candidate status, e.g.
+  // { HIRED: 132, APPLIED: 632, DEAD_BY_US: 1066, INTERVIEW: 24, ... }.
+  // Without this, Susan only had the total count and couldn't answer stage
+  // questions ("how many hired / in dead / interviewing").
+  candidatesByStatus: Record<string, number>;
+  hiredCandidates: number;   // convenience: candidatesByStatus.HIRED
+  deadCandidates: number;    // DEAD_BY_US + DEAD_BY_CANDIDATE
   pendingPtoRequests: number;
   totalTerritories: number;
-  recentHires: number; // Last 30 days
+  recentHires: number; // employees whose hire date is within the last 30 days
 }
 
 export class SusanDataService {
@@ -60,6 +67,17 @@ export class SusanDataService {
       const [candidateResult] = await db.select({ count: count() })
         .from(candidates);
 
+      // Candidate pipeline broken down by status (the recruiting funnel).
+      const statusRows = await db.select({ status: candidates.status, count: count() })
+        .from(candidates)
+        .groupBy(candidates.status);
+      const candidatesByStatus: Record<string, number> = {};
+      for (const r of statusRows) {
+        if (r.status) candidatesByStatus[r.status] = Number(r.count);
+      }
+      const hiredCandidates = candidatesByStatus['HIRED'] || 0;
+      const deadCandidates = (candidatesByStatus['DEAD_BY_US'] || 0) + (candidatesByStatus['DEAD_BY_CANDIDATE'] || 0);
+
       // Get pending PTO requests
       const [ptoResult] = await db.select({ count: count() })
         .from(ptoRequests)
@@ -70,25 +88,26 @@ export class SusanDataService {
         .from(territories)
         .where(eq(territories.isActive, true));
 
-      // Get recent hires (last 30 days)
+      // Recent hires — employees whose hire_date is within the last 30 days.
+      // hire_date is stored as a 'YYYY-MM-DD' text column, so a lexical >=
+      // comparison against the cutoff string is correct.
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const hireDate = thirtyDaysAgo.toISOString().split('T')[0];
-      
+      const hireCutoff = thirtyDaysAgo.toISOString().split('T')[0];
       const [recentHiresResult] = await db.select({ count: count() })
         .from(users)
-        .where(and(
-          eq(users.isActive, true),
-          // Note: This is a text comparison, may need adjustment based on date format
-        ));
+        .where(gte(users.hireDate, hireCutoff));
 
       return {
         totalEmployees: totalResult.count,
         activeEmployees: activeResult.count,
         totalCandidates: candidateResult.count,
+        candidatesByStatus,
+        hiredCandidates,
+        deadCandidates,
         pendingPtoRequests: ptoResult.count,
         totalTerritories: territoryResult.count,
-        recentHires: 0 // Will calculate this properly later
+        recentHires: recentHiresResult?.count || 0,
       };
     } catch (error) {
       console.error('[SUSAN-DATA] Error getting company stats:', error);
@@ -96,6 +115,9 @@ export class SusanDataService {
         totalEmployees: 0,
         activeEmployees: 0,
         totalCandidates: 0,
+        candidatesByStatus: {},
+        hiredCandidates: 0,
+        deadCandidates: 0,
         pendingPtoRequests: 0,
         totalTerritories: 0,
         recentHires: 0
