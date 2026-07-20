@@ -2948,6 +2948,14 @@ export const campaignScans = pgTable('campaign_scans', {
   userAgent: text('user_agent'),
 });
 
+// Single-row brand kit (id='default') — the stylist's saved house look.
+export const marketingBrand = pgTable('marketing_brand', {
+  id: text('id').primaryKey().default('default'),
+  tokens: jsonb('tokens').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export type MarketingCampaign = typeof marketingCampaigns.$inferSelect;
 export type InsertMarketingCampaign = typeof marketingCampaigns.$inferInsert;
 export type CampaignScan = typeof campaignScans.$inferSelect;

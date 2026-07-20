@@ -17,9 +17,10 @@ import {
   equipmentChecklists,
   performanceTemplates, automatedReviews,
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates,
-  marketingCampaigns, campaignScans
+  marketingCampaigns, campaignScans, marketingBrand
 } from '../shared/schema';
 import { brandedQrSvg, brandedQrDataUri } from './lib/brandedQr';
+import { DEFAULT_BRAND, sanitizeBrand, type BrandTokens } from '../shared/constants/brand';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import { ALL_HOLIDAYS } from '../shared/constants/holidays';
@@ -5417,12 +5418,10 @@ async function sa21Fetch(path: string, opts: { method?: string; body?: any } = {
   return json;
 }
 
-function sa21QrImage(url: string): string {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
-}
-
 // sa21 employee_profile → the RepQRCode shape the Roof HR page expects.
-function toRepQRCode(profile: any, metrics?: { scanCount: number; signupCount: number }): any {
+// QR rendered by our branded generator (was api.qrserver.com — external dep,
+// unbranded); same landing URL, now styled like the campaign QRs.
+function toRepQRCode(profile: any, brand: BrandTokens, metrics?: { scanCount: number; signupCount: number }): any {
   const landingPageUrl = `${SA21_BASE_URL}/profile/${profile.slug}`;
   const scans = metrics?.scanCount ?? 0;
   const appts = metrics?.signupCount ?? 0;
@@ -5431,7 +5430,7 @@ function toRepQRCode(profile: any, metrics?: { scanCount: number; signupCount: n
     id: profile.id || profile.slug,
     repId: profile.id || profile.slug,
     slug: profile.slug,
-    qrCodeUrl: sa21QrImage(landingPageUrl),
+    qrCodeUrl: brandedQrDataUri(landingPageUrl, { dark: brand.charcoal, accent: brand.red }),
     landingPageUrl,
     totalScans: scans,
     totalAppointments: appts,
@@ -5478,7 +5477,8 @@ router.get('/api/qr-codes', requireAuth, async (req: any, res) => {
     for (const r of (dashResp.reps || [])) {
       metricsBySlug.set(r.slug, { scanCount: r.scanCount || 0, signupCount: r.signupCount || 0 });
     }
-    let rows = profiles.map((p) => toRepQRCode(p, metricsBySlug.get(p.slug)));
+    const repBrand = await getBrandTokens();
+    let rows = profiles.map((p) => toRepQRCode(p, repBrand, metricsBySlug.get(p.slug)));
     if (!isQrManager(req.user)) {
       const myEmail = String(req.user.email || '').toLowerCase();
       rows = rows.filter((r) => String(r.email || '').toLowerCase() === myEmail);
@@ -5501,7 +5501,7 @@ router.post('/api/qr-codes', requireAuth, requireSuperAdmin, async (req: any, re
       body: { name, email, phone_number, title, slug, bio, role_type: role_type || 'sales_rep' },
     });
     const profile = created.profile || created;
-    res.json({ success: true, qrCode: toRepQRCode(profile) });
+    res.json({ success: true, qrCode: toRepQRCode(profile, await getBrandTokens()) });
   } catch (err: any) {
     console.error('[qr-codes] create failed:', err?.message || err);
     res.status(err?.status || 502).json({ error: err?.message || 'Failed to create QR profile' });
@@ -5513,7 +5513,7 @@ router.patch('/api/qr-codes/:id', requireAuth, requireSuperAdmin, async (req: an
   try {
     const updated = await sa21Fetch(`/api/profiles/${req.params.id}`, { method: 'PUT', body: req.body || {} });
     const profile = updated.profile || updated;
-    res.json({ success: true, qrCode: toRepQRCode(profile) });
+    res.json({ success: true, qrCode: toRepQRCode(profile, await getBrandTokens()) });
   } catch (err: any) {
     console.error('[qr-codes] update failed:', err?.message || err);
     res.status(err?.status || 502).json({ error: err?.message || 'Failed to update QR profile' });
@@ -5560,18 +5560,84 @@ function slugifyCampaignCode(input: string): string {
     .slice(0, 40) || 'campaign';
 }
 
-function decorateCampaign(c: any, counts?: { total: number; last30: number }) {
+// ---- Brand kit ("the stylist") — stored house look, applied to QRs + posters.
+let brandCache: { tokens: BrandTokens; at: number } | null = null;
+const BRAND_CACHE_MS = 60_000;
+
+async function getBrandTokens(): Promise<BrandTokens> {
+  if (brandCache && Date.now() - brandCache.at < BRAND_CACHE_MS) return brandCache.tokens;
+  let tokens = DEFAULT_BRAND;
+  try {
+    const [row] = await db.select().from(marketingBrand).where(eq(marketingBrand.id, 'default')).limit(1);
+    if (row?.tokens) tokens = sanitizeBrand(row.tokens);
+  } catch (err: any) {
+    console.error('[marketing] brand load failed, using defaults:', err?.message || err);
+  }
+  brandCache = { tokens, at: Date.now() };
+  return tokens;
+}
+
+function brandQrColors(brand: BrandTokens) {
+  return { dark: brand.charcoal, accent: brand.red };
+}
+
+function decorateCampaign(c: any, brand: BrandTokens, counts?: { total: number; last30: number }) {
   const shortUrl = `${PUBLIC_BASE_URL}/m/${c.code}`;
   return {
     ...c,
     shortUrl,
-    // Roof-ER branded QR (charcoal rounded modules + roofline/cross, EC-H), vector.
-    qrCodeUrl: brandedQrDataUri(shortUrl),
+    // Branded QR (rounded modules + roofline/cross, EC-H) in the saved brand colors.
+    qrCodeUrl: brandedQrDataUri(shortUrl, brandQrColors(brand)),
     qrSvgUrl: `${PUBLIC_BASE_URL}/api/marketing/campaigns/${c.id}/qr.svg`,
     totalScans: counts?.total ?? 0,
     scans30d: counts?.last30 ?? 0,
   };
 }
+
+// GET/PUT — the saved brand kit (manager-gated; PUT busts the cache).
+router.get('/api/marketing/brand', requireAuth, requireQrManager, async (_req: any, res) => {
+  try {
+    const [row] = await db.select().from(marketingBrand).where(eq(marketingBrand.id, 'default')).limit(1);
+    res.json({ tokens: await getBrandTokens(), isCustomized: !!row });
+  } catch (err: any) {
+    console.error('[marketing] brand get failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to load the brand kit.' });
+  }
+});
+
+router.put('/api/marketing/brand', requireAuth, requireQrManager, async (req: any, res) => {
+  try {
+    let tokens: BrandTokens;
+    try {
+      tokens = sanitizeBrand(req.body?.tokens);
+    } catch (e: any) {
+      return res.status(400).json({ error: e?.message || 'Invalid brand kit.' });
+    }
+    await db.insert(marketingBrand)
+      .values({ id: 'default', tokens, updatedBy: req.user?.email || null, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: marketingBrand.id,
+        set: { tokens, updatedBy: req.user?.email || null, updatedAt: new Date() },
+      });
+    brandCache = null;
+    res.json({ success: true, tokens });
+  } catch (err: any) {
+    console.error('[marketing] brand save failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to save the brand kit.' });
+  }
+});
+
+// DELETE — reset to the built-in Roof-ER defaults.
+router.delete('/api/marketing/brand', requireAuth, requireQrManager, async (_req: any, res) => {
+  try {
+    await db.delete(marketingBrand).where(eq(marketingBrand.id, 'default'));
+    brandCache = null;
+    res.json({ success: true, tokens: DEFAULT_BRAND });
+  } catch (err: any) {
+    console.error('[marketing] brand reset failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to reset the brand kit.' });
+  }
+});
 
 // GET — list campaigns with scan counts (managers/admins).
 router.get('/api/marketing/campaigns', requireAuth, requireQrManager, async (_req: any, res) => {
@@ -5586,7 +5652,8 @@ router.get('/api/marketing/campaigns', requireAuth, requireQrManager, async (_re
       .from(campaignScans)
       .groupBy(campaignScans.campaignId);
     const byId = new Map(counts.map((c) => [c.campaignId, { total: c.total, last30: c.last30 }]));
-    res.json(campaigns.map((c) => decorateCampaign(c, byId.get(c.id))));
+    const brand = await getBrandTokens();
+    res.json(campaigns.map((c) => decorateCampaign(c, brand, byId.get(c.id))));
   } catch (err: any) {
     console.error('[marketing] list campaigns failed:', err?.message || err);
     res.status(500).json({ error: 'Failed to load campaigns.' });
@@ -5598,7 +5665,7 @@ router.get('/api/marketing/campaigns/:id/qr.svg', requireAuth, requireQrManager,
   try {
     const [c] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, req.params.id)).limit(1);
     if (!c) return res.status(404).json({ error: 'Campaign not found.' });
-    const svg = brandedQrSvg(`${PUBLIC_BASE_URL}/m/${c.code}`);
+    const svg = brandedQrSvg(`${PUBLIC_BASE_URL}/m/${c.code}`, brandQrColors(await getBrandTokens()));
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Content-Disposition', `attachment; filename="roofer-qr-${c.code}.svg"`);
     res.send(svg);
@@ -5635,7 +5702,7 @@ router.post('/api/marketing/campaigns', requireAuth, requireQrManager, async (re
       utmCampaign: utmCampaign || null,
       createdBy: req.user.email || null,
     }).returning();
-    res.json({ success: true, campaign: decorateCampaign(created) });
+    res.json({ success: true, campaign: decorateCampaign(created, await getBrandTokens()) });
   } catch (err: any) {
     console.error('[marketing] create campaign failed:', err?.message || err);
     res.status(500).json({ error: 'Failed to create campaign.' });
@@ -5660,7 +5727,7 @@ router.patch('/api/marketing/campaigns/:id', requireAuth, requireQrManager, asyn
 
     const [updated] = await db.update(marketingCampaigns).set(patch).where(eq(marketingCampaigns.id, req.params.id)).returning();
     if (!updated) return res.status(404).json({ error: 'Campaign not found.' });
-    res.json({ success: true, campaign: decorateCampaign(updated) });
+    res.json({ success: true, campaign: decorateCampaign(updated, await getBrandTokens()) });
   } catch (err: any) {
     console.error('[marketing] update campaign failed:', err?.message || err);
     res.status(500).json({ error: 'Failed to update campaign.' });

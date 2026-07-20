@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { QrCode, Link as LinkIcon, Eye, Calendar, TrendingUp, Plus, Pencil, Trash2, ExternalLink, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { downloadQrSvg, downloadQrPng } from '@/lib/qr-download';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -299,11 +300,12 @@ export default function QRCodes() {
                       <DialogContent>
                         <DialogHeader><DialogTitle>QR Code — {qr.rep?.firstName} {qr.rep?.lastName}</DialogTitle></DialogHeader>
                         <div className="flex flex-col items-center space-y-4">
-                          <img src={qr.qrCodeUrl} alt="QR Code" className="w-64 h-64 border rounded" />
+                          <img src={qr.qrCodeUrl} alt="QR Code" className="w-64 h-64 border rounded bg-white p-2" />
                           <p className="text-sm text-muted-foreground text-center">Scan to visit:<br />{qr.landingPageUrl}</p>
-                          <Button onClick={() => { const a = document.createElement('a'); a.href = qr.qrCodeUrl; a.download = `qr-${qr.slug || 'rep'}.png`; a.click(); }}>
-                            Download QR Code
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => downloadQrSvg(qr.qrCodeUrl, `roofer-qr-${qr.slug || 'rep'}.svg`)}>Download SVG</Button>
+                            <Button onClick={() => downloadQrPng(qr.qrCodeUrl, `roofer-qr-${qr.slug || 'rep'}.png`)}>Download PNG</Button>
+                          </div>
                         </div>
                       </DialogContent>
                     </Dialog>

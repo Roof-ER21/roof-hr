@@ -5,33 +5,14 @@
 // Brand values flow through BrandTokens so the M3 "stylist" presets can restyle
 // every template (and the QR) from one object.
 import { fmt, fitFont, wrapText, balancedWrap, txt, txtLines, nestSvg, type Measure, type FontSpec } from './svg';
+import { DEFAULT_BRAND, type BrandTokens } from '@shared/constants/brand';
+
+export { DEFAULT_BRAND, type BrandTokens };
 
 export const POSTER_W = 1100;
 export const POSTER_H = 1700;
 /** 3× the artboard = 3300×5100 px = 11×17in at 300dpi (scales cleanly to letter). */
 export const EXPORT_SCALE = 3;
-
-export interface BrandTokens {
-  charcoal: string;
-  red: string;
-  cream: string;
-  phone: string;
-  email: string;
-  website: string;
-  servingAreas: string[];
-  chips: string[];
-}
-
-export const DEFAULT_BRAND: BrandTokens = {
-  charcoal: '#302f2f',
-  red: '#c80000',
-  cream: '#f2ede3',
-  phone: '703-239-3738',
-  email: 'info@theroofdocs.com',
-  website: 'theroofdocs.com',
-  servingAreas: ['NORTHERN VA', 'MARYLAND', 'RICHMOND'],
-  chips: ['ROOFING', 'SIDING', 'GUTTERS', 'STORM RESTORATION'],
-};
 
 export interface CopyField {
   key: string;

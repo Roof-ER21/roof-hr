@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { MANAGER_ROLES, SUPER_ADMIN_EMAIL } from '@shared/constants/roles';
-import { LayoutTemplate, Download, RotateCcw, Megaphone, ArrowRight } from 'lucide-react';
+import { LayoutTemplate, Download, RotateCcw, Megaphone, ArrowRight, Palette } from 'lucide-react';
 import { ensurePosterFonts, makeMeasure } from '@/lib/poster/fonts';
 import {
   POSTER_TEMPLATES, templateById, qrSvgFromDataUri, posterFileName,
-  DEFAULT_BRAND, type PosterTemplate,
+  DEFAULT_BRAND, type PosterTemplate, type BrandTokens,
 } from '@/lib/poster/templates';
 import { downloadPosterPng, downloadPosterSvg } from '@/lib/poster/raster';
 
@@ -28,6 +30,121 @@ interface Campaign {
 /** Strip the fixed width/height so the inline preview scales to its container. */
 function fluid(svg: string): string {
   return svg.replace(/(<svg[^>]*?) width="\d+" height="\d+"/, '$1 style="width:100%;height:auto;display:block"');
+}
+
+/** "The stylist" — save the house look once; it flows into every template + QR. */
+function BrandKitDialog({ brand, isCustomized }: { brand: BrandTokens; isCustomized: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(() => toForm(brand));
+
+  function toForm(b: BrandTokens) {
+    return {
+      charcoal: b.charcoal, red: b.red, cream: b.cream,
+      phone: b.phone, email: b.email, website: b.website,
+      servingAreas: b.servingAreas.join(', '),
+      chips: b.chips.join(', '),
+    };
+  }
+  function openDialog() { setForm(toForm(brand)); setOpen(true); }
+
+  const invalidate = () => {
+    // Campaign QR colors are rendered server-side from the kit — refresh them too.
+    queryClient.invalidateQueries({ queryKey: ['/api/marketing/brand'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/marketing/campaigns'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/qr-codes'] });
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: (tokens: any) => apiRequest('/api/marketing/brand', 'PUT', { tokens }),
+    onSuccess: () => { toast({ title: 'Brand kit saved', description: 'Applied to all templates and QR codes.' }); invalidate(); setOpen(false); },
+    onError: (e: any) => toast({ title: 'Not saved', description: e?.message || 'Failed to save the brand kit.', variant: 'destructive' }),
+  });
+  const resetMutation = useMutation({
+    mutationFn: () => apiRequest('/api/marketing/brand', 'DELETE'),
+    onSuccess: () => { toast({ title: 'Brand kit reset', description: 'Back to the Roof-ER defaults.' }); invalidate(); setOpen(false); },
+    onError: (e: any) => toast({ title: 'Reset failed', description: e?.message || 'Please try again.', variant: 'destructive' }),
+  });
+
+  function save() {
+    const csv = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
+    saveMutation.mutate({
+      charcoal: form.charcoal.trim(), red: form.red.trim(), cream: form.cream.trim(),
+      phone: form.phone.trim(), email: form.email.trim(), website: form.website.trim(),
+      servingAreas: csv(form.servingAreas), chips: csv(form.chips),
+    });
+  }
+
+  const colorField = (key: 'charcoal' | 'red' | 'cream', label: string, hint: string) => (
+    <div>
+      <label className="text-sm font-medium">{label}</label>
+      <div className="flex items-center gap-2 mt-1">
+        <input
+          type="color"
+          value={/^#[0-9a-fA-F]{6}$/.test(form[key]) ? form[key] : '#000000'}
+          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+          className="h-9 w-12 rounded border border-input bg-background p-1"
+          aria-label={`${label} color picker`}
+        />
+        <Input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="font-mono" />
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{hint}</p>
+    </div>
+  );
+
+  return (
+    <>
+      <Button variant="outline" onClick={openDialog}>
+        <Palette className="h-4 w-4 mr-2" /> Brand Kit{isCustomized && <Badge variant="secondary" className="ml-2">custom</Badge>}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Brand Kit</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Saved once, applied everywhere: poster templates, campaign QR codes, and rep QR codes.
+          </p>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {colorField('charcoal', 'Charcoal', 'Headlines + QR modules — keep it dark.')}
+              {colorField('red', 'Accent red', 'Callouts, highlights, QR cross.')}
+              {colorField('cream', 'Cream', 'Light poster background.')}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Phone</label>
+                <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Website</label>
+                <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Email</label>
+              <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Serving areas (comma-separated)</label>
+              <Input value={form.servingAreas} onChange={(e) => setForm({ ...form, servingAreas: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Service chips (comma-separated)</label>
+              <Input value={form.chips} onChange={(e) => setForm({ ...form, chips: e.target.value })} className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="ghost" onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending || !isCustomized}>
+              Reset to defaults
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button onClick={save} disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Saving…' : 'Save kit'}</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 export default function MarketingTemplates() {
@@ -52,6 +169,12 @@ export default function MarketingTemplates() {
     enabled: isManager,
   });
 
+  const { data: brandResp } = useQuery<{ tokens: BrandTokens; isCustomized: boolean }>({
+    queryKey: ['/api/marketing/brand'],
+    enabled: isManager,
+  });
+  const brand = brandResp?.tokens ?? DEFAULT_BRAND;
+
   const campaign = campaigns.find((c) => c.id === campaignId) || campaigns[0];
   const template = templateById(templateId) || POSTER_TEMPLATES[0];
   const measure = useMemo(() => (fontsReady ? makeMeasure() : null), [fontsReady]);
@@ -59,17 +182,17 @@ export default function MarketingTemplates() {
 
   const posterSvg = useMemo(() => {
     if (!measure || !qrSvg) return '';
-    return template.build({ copy, brand: DEFAULT_BRAND, qrSvg, measure, uid: 'main' });
-  }, [template, copy, qrSvg, measure]);
+    return template.build({ copy, brand, qrSvg, measure, uid: 'main' });
+  }, [template, copy, qrSvg, measure, brand]);
 
   const minis = useMemo(() => {
     if (!measure || !qrSvg) return {} as Record<string, string>;
     const m: Record<string, string> = {};
     for (const t of POSTER_TEMPLATES) {
-      m[t.id] = t.build({ copy: t.defaults, brand: DEFAULT_BRAND, qrSvg, measure, uid: `mini-${t.id}` });
+      m[t.id] = t.build({ copy: t.defaults, brand, qrSvg, measure, uid: `mini-${t.id}` });
     }
     return m;
-  }, [qrSvg, measure]);
+  }, [qrSvg, measure, brand]);
 
   if (!isManager) return <Navigate to="/qr-codes" replace />;
 
@@ -95,14 +218,17 @@ export default function MarketingTemplates() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-primary/15 p-3"><LayoutTemplate className="h-6 w-6 text-primary" /></div>
-        <div>
-          <h1 className="text-3xl font-bold">Poster Templates</h1>
-          <p className="text-muted-foreground">
-            Pick a template, drop in a campaign's tracked QR code, tweak the copy, and download print-ready art.
-          </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-primary/15 p-3"><LayoutTemplate className="h-6 w-6 text-primary" /></div>
+          <div>
+            <h1 className="text-3xl font-bold">Poster Templates</h1>
+            <p className="text-muted-foreground">
+              Pick a template, drop in a campaign's tracked QR code, tweak the copy, and download print-ready art.
+            </p>
+          </div>
         </div>
+        <BrandKitDialog brand={brand} isCustomized={!!brandResp?.isCustomized} />
       </div>
 
       {isLoading ? (
@@ -148,8 +274,10 @@ export default function MarketingTemplates() {
                 onClick={() => pickTemplate(t)}
                 className={`rounded-lg border-2 text-left overflow-hidden transition-colors ${t.id === template.id ? 'border-primary' : 'border-transparent hover:border-muted-foreground/30'}`}
               >
-                <div className="bg-muted/40 p-3">
-                  {minis[t.id] && <div dangerouslySetInnerHTML={{ __html: fluid(minis[t.id]) }} />}
+                {/* Poster previews are print proofs — always on a light "paper" backdrop,
+                    independent of app theme (dark mode made dark posters merge into the page). */}
+                <div className="bg-neutral-200 p-3">
+                  {minis[t.id] && <div className="shadow-md" dangerouslySetInnerHTML={{ __html: fluid(minis[t.id]) }} />}
                 </div>
                 <div className="p-3">
                   <p className="font-semibold text-sm">{t.name}</p>
@@ -212,7 +340,9 @@ export default function MarketingTemplates() {
               <CardHeader><CardTitle>Preview — {template.name}</CardTitle></CardHeader>
               <CardContent>
                 {posterSvg ? (
-                  <div className="mx-auto max-w-md shadow-lg rounded overflow-hidden border" dangerouslySetInnerHTML={{ __html: fluid(posterSvg) }} />
+                  <div className="rounded-lg bg-neutral-200 p-4 sm:p-6">
+                    <div className="mx-auto max-w-md shadow-xl" dangerouslySetInnerHTML={{ __html: fluid(posterSvg) }} />
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-10 text-center">Select a campaign to render the poster.</p>
                 )}
