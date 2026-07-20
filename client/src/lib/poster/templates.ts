@@ -46,6 +46,17 @@ const OSWALD = 'Oswald';
 const HANKEN = 'Hanken Grotesk';
 const CAVEAT = 'Caveat';
 
+/** Mix a hex color toward white — used for accent text on dark cards. */
+function lighten(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  if (Number.isNaN(n)) return hex;
+  const mix = (c: number) => Math.round(c + (255 - c) * amt);
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 // ---------- shared blocks ----------
 
 function openSvg(bodyFont: string): string {
@@ -195,7 +206,7 @@ function footerCard(
   const tx = qx + q + 30 + (x + w - 36 - (qx + q + 30)) / 2; // center of remaining width
   const maxTw = x + w - 36 - (qx + q + 30);
   const cy = o.y + o.h / 2;
-  const ctaColor = o.dark ? '#ff796c' : brand.red;
+  const ctaColor = o.dark ? lighten(brand.red, 0.42) : brand.red;
   const inkColor = o.dark ? WHITE : '#2c2c2e';
   const subColor = o.dark ? '#b9b7b4' : '#6f6d6a';
   const cta = fitFont(o.scanCta, { family: OSWALD, weight: 700, size: 28, ls: 1 }, maxTw, measure);
