@@ -48,6 +48,7 @@ import {
   GitBranch,
   LayoutGrid,
   Megaphone,
+  LayoutTemplate,
   PanelLeftClose,
   PanelLeft
 } from 'lucide-react';
@@ -87,6 +88,7 @@ const navigation = [
       { name: 'Overview', href: '/marketing', icon: BarChart, roles: [...ADMIN_ROLES, 'MANAGER'] },
       { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: NON_SOURCER_ROLES },
       { name: 'Campaigns', href: '/marketing/campaigns', icon: Megaphone, roles: [...ADMIN_ROLES, 'MANAGER'] },
+      { name: 'Templates', href: '/marketing/templates', icon: LayoutTemplate, roles: [...ADMIN_ROLES, 'MANAGER'] },
     ],
   },
   {

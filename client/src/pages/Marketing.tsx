@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { MANAGER_ROLES, SUPER_ADMIN_EMAIL } from '@shared/constants/roles';
 import {
   Megaphone, Eye, Calendar, TrendingUp, Users, QrCode,
-  ArrowRight, AlertCircle, Trophy,
+  ArrowRight, AlertCircle, Trophy, LayoutTemplate,
 } from 'lucide-react';
 
 // The Marketing hub reuses /api/qr-codes (sa21 = source of truth). Managers get
@@ -180,6 +180,16 @@ export default function Marketing() {
                       <p className="text-xs text-muted-foreground truncate">
                         {activeCampaigns} active · {campaignScans} scans — yard signs, print &amp; more
                       </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+                  </div>
+                </Link>
+                <Link to="/marketing/templates" className="block">
+                  <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                    <div className="rounded-md bg-primary/10 p-2"><LayoutTemplate className="h-5 w-5 text-primary" /></div>
+                    <div className="min-w-0">
+                      <p className="font-medium">Poster Templates</p>
+                      <p className="text-xs text-muted-foreground truncate">Print-ready posters with your campaign QR</p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
                   </div>
