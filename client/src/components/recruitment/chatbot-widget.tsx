@@ -111,7 +111,6 @@ export function ChatbotWidget({
         // If human handoff is required, show notification
         if (data.requiresHumanHandoff) {
           // In a real implementation, this would notify a recruiter
-          console.log('Human handoff required');
         }
       } else {
         throw new Error('Failed to get response');

@@ -59,9 +59,7 @@ function Login() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setError('');
-      console.log('Attempting login with:', data.email);
       await login(data.email, data.password);
-      console.log('Login successful, navigating to dashboard');
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
       console.error('Login failed:', err);

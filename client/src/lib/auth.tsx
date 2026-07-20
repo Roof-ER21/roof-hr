@@ -94,12 +94,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     
     try {
-      console.log('Sending login request to /api/auth/login');
       
       // First check if API is reachable
       try {
         const healthCheck = await fetch('/api/health');
-        console.log('Health check response:', healthCheck.status);
         if (!healthCheck.ok) {
           console.error('Health check failed, response:', await healthCheck.text());
         }
@@ -115,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
 
-      console.log('Login response status:', response.status);
 
       if (!response.ok) {
         const error = await response.json();
@@ -124,7 +121,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
-      console.log('Login successful, received user:', data.user);
       
       // Store token and user data
       localStorage.setItem('token', data.token);
@@ -301,9 +297,7 @@ export async function createDemoUsers() {
       });
       
       if (response.ok) {
-        console.log(`Demo user created: ${userData.email}`);
       } else {
-        console.log(`Demo user may already exist: ${userData.email}`);
       }
     } catch (error) {
       console.warn(`Failed to create demo user ${userData.email}:`, error);

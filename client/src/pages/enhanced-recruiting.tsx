@@ -510,7 +510,6 @@ function ResumeUploaderContent() {
 
   // Handle sourcer assignment completion (v2)
   const handleAssignmentComplete = async () => {
-    console.log('[Assignment v2] handleAssignmentComplete called', { selectedSourcer, pendingCandidate, referralName });
     if (!pendingCandidate) return;
 
     setIsAssigning(true);
@@ -527,7 +526,6 @@ function ResumeUploaderContent() {
       }
 
       if (Object.keys(updateData).length > 0) {
-        console.log('[Assignment] Updating candidate fields', updateData);
         const updateResponse = await fetch(`/api/candidates/${pendingCandidate.id}`, {
           method: 'PATCH',
           headers: {
@@ -545,7 +543,6 @@ function ResumeUploaderContent() {
 
       // Assign sourcer if selected
       if (selectedSourcer) {
-        console.log('[Assignment] Making API call to assign sourcer', { candidateId: pendingCandidate.id, hrMemberId: selectedSourcer });
         const response = await fetch(`/api/candidates/${pendingCandidate.id}/assign-sourcer`, {
           method: 'POST',
           headers: {
@@ -555,7 +552,6 @@ function ResumeUploaderContent() {
           credentials: 'include',
           body: JSON.stringify({ hrMemberId: selectedSourcer }),
         });
-        console.log('[Assignment] API response status:', response.status);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -1239,14 +1235,6 @@ export default function EnhancedRecruiting() {
   
   // Debug effect to monitor interview screening state changes
   useEffect(() => {
-    console.log('Interview screening state changed:', {
-      showInterviewScreening,
-      candidateForInterviewScreening: candidateForInterviewScreening ? {
-        candidateName: `${candidateForInterviewScreening.candidate.firstName} ${candidateForInterviewScreening.candidate.lastName}`,
-        currentStatus: candidateForInterviewScreening.candidate.status,
-        nextStatus: candidateForInterviewScreening.nextStatus
-      } : null
-    });
   }, [showInterviewScreening, candidateForInterviewScreening]);
   
   // Fetch available tools inventory
@@ -1368,32 +1356,18 @@ export default function EnhancedRecruiting() {
     const params = new URLSearchParams(location.search);
     const candidateId = params.get('candidateId');
     
-    console.log('Enhanced Recruiting - URL params check:', { 
-      candidateId, 
-      candidatesLength: candidates.length,
-      url: window.location.href,
-      search: location.search,
-      locationSearch: location.search,
-      pathname: location.pathname,
-      candidatesLoaded: candidates.length > 0,
-      firstCandidateId: candidates[0]?.id
-    });
     
     if (candidateId && candidates.length > 0) {
       const candidate = candidates.find(c => c.id === candidateId);
-      console.log('Enhanced Recruiting - Found candidate:', candidate);
       
       if (candidate) {
-        console.log('Enhanced Recruiting - Opening candidate details modal');
         setSelectedCandidate(candidate);
         setShowCandidateDetails(true);
         // Clear the URL parameter after handling it
         setTimeout(() => {
-          console.log('Enhanced Recruiting - Clearing URL params');
           window.history.replaceState({}, '', '/recruiting');
         }, 100);
       } else {
-        console.log('Enhanced Recruiting - Candidate not found with ID:', candidateId);
         toast({
           title: 'Candidate not found',
           description: `No candidate found with ID: ${candidateId}`,
@@ -1401,7 +1375,6 @@ export default function EnhancedRecruiting() {
         });
       }
     } else if (candidateId && candidates.length === 0) {
-      console.log('Enhanced Recruiting - Waiting for candidates to load, candidateId:', candidateId);
     }
   }, [location, candidates, toast]);
 
@@ -1619,7 +1592,6 @@ export default function EnhancedRecruiting() {
 
   const createNewHireMutation = useMutation({
     mutationFn: async (data: z.infer<typeof newHireFormSchema>) => {
-      console.log('📤 Submitting direct hire form:', data);
       const result = await apiRequest<{
         employee?: { name: string };
         firstName?: string;
@@ -1627,11 +1599,9 @@ export default function EnhancedRecruiting() {
         onboarding?: { emailSent?: boolean; toolsAssigned?: number; welcomePackageAssigned?: boolean };
         emailSent?: boolean;
       }>('/api/employees/direct-hire', 'POST', data);
-      console.log('✅ Direct hire response:', result);
       return result;
     },
     onSuccess: (data) => {
-      console.log('🎉 New hire created successfully:', data);
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
       queryClient.invalidateQueries({ queryKey: ['/api/users'] });
       queryClient.invalidateQueries({ queryKey: ['/api/employees'] });
@@ -1945,13 +1915,6 @@ export default function EnhancedRecruiting() {
     const newStatus = over.id;
     const currentCandidate = candidates.find(c => c.id === candidateId);
     
-    console.log('Drag-and-drop status change:', {
-      candidateId,
-      candidateName: currentCandidate ? `${currentCandidate.firstName} ${currentCandidate.lastName}` : 'Not found',
-      currentStatus: currentCandidate?.status,
-      newStatus,
-      shouldTriggerScreening: newStatus === 'INTERVIEW' && currentCandidate?.status !== 'INTERVIEW'
-    });
 
     if (!currentCandidate) return;
 
@@ -1968,7 +1931,6 @@ export default function EnhancedRecruiting() {
       }
 
       if (!skipScreening) {
-        console.log('Triggering interview screening for (drag):', currentCandidate.firstName, currentCandidate.lastName);
         // Store the candidate for interview screening
         setCandidateForInterviewScreening({
           candidate: currentCandidate,
@@ -1978,7 +1940,6 @@ export default function EnhancedRecruiting() {
         setShowInterviewScreening(true);
         return; // Don't proceed until screening is complete
       } else {
-        console.log('Skipping screening - candidate passed all requirements previously');
       }
     }
 
@@ -2444,13 +2405,6 @@ export default function EnhancedRecruiting() {
                           }}
                           onStatusChange={(candidateId, newStatus) => {
                             const currentCandidate = candidates.find(c => c.id === candidateId);
-                            console.log('Status change triggered (Kanban):', {
-                              candidateId,
-                              candidateName: currentCandidate ? `${currentCandidate.firstName} ${currentCandidate.lastName}` : 'Not found',
-                              currentStatus: currentCandidate?.status,
-                              newStatus,
-                              shouldTriggerScreening: newStatus === 'INTERVIEW' && currentCandidate?.status !== 'INTERVIEW'
-                            });
                             
                             if (!currentCandidate) return;
 
@@ -2466,7 +2420,6 @@ export default function EnhancedRecruiting() {
                               }
 
                               if (!skipScreening) {
-                                console.log('Triggering interview screening for:', currentCandidate.firstName, currentCandidate.lastName);
                                 setCandidateForInterviewScreening({
                                   candidate: currentCandidate,
                                   nextStatus: newStatus
@@ -2551,13 +2504,6 @@ export default function EnhancedRecruiting() {
                         }}
                         onStatusChange={(candidateId, newStatus) => {
                           const currentCandidate = candidates.find(c => c.id === candidateId);
-                          console.log('Status change triggered:', {
-                            candidateId,
-                            candidateName: currentCandidate ? `${currentCandidate.firstName} ${currentCandidate.lastName}` : 'Not found',
-                            currentStatus: currentCandidate?.status,
-                            newStatus,
-                            shouldTriggerScreening: newStatus === 'INTERVIEW' && currentCandidate?.status !== 'INTERVIEW'
-                          });
 
                           if (!currentCandidate) return;
 
@@ -2573,7 +2519,6 @@ export default function EnhancedRecruiting() {
                             }
 
                             if (!skipScreening) {
-                              console.log('Triggering interview screening for:', currentCandidate.firstName, currentCandidate.lastName);
                               setCandidateForInterviewScreening({
                                 candidate: currentCandidate,
                                 nextStatus: newStatus

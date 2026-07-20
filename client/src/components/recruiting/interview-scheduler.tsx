@@ -121,7 +121,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
         panelMembers.map(async (id) => {
           try {
             const data = await apiRequest(`/api/interview-availability/${id}`, 'GET');
-            console.log(`[Panel Availability] Fetched for ${id}:`, data);
             results[id] = data as Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
           } catch (error) {
             console.error(`[Panel Availability] Failed to fetch for ${id}:`, error);
@@ -129,7 +128,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
           }
         })
       );
-      console.log('[Panel Availability] All results:', results);
       return results;
     },
     enabled: panelMembers.length > 0 && isOpen,
@@ -148,14 +146,12 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     }
   >({
     mutationFn: async (data) => {
-      console.log('[CONFLICT CHECK] Calling API with:', data);
       return await apiRequest('/api/interviews/check-conflicts', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
     onSuccess: (data) => {
-      console.log('[CONFLICT CHECK] Success response:', data);
       setConflicts(data.conflicts || []);
       setWarnings(data.warnings || []);
       setSuggestedTimes(data.suggestedTimes?.map((t: string) => new Date(t)) || []);
@@ -213,7 +209,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
       conflictCheckTimeoutRef.current = setTimeout(() => {
         // Prevent duplicate calls if one is already in progress
         if (isCheckingRef.current) {
-          console.log('[CONFLICT CHECK] Skipping - check already in progress');
           return;
         }
 
@@ -221,7 +216,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
         const [hours, minutes] = selectedTime.split(':').map(Number);
         const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
 
-        console.log('[CONFLICT CHECK] Debounced check - Time selected:', selectedTime, '→ ISO:', scheduledDate.toISOString());
 
         checkConflictsMutation.mutate({
           candidateId,
@@ -812,11 +806,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                         }) || [];
 
                         // Debug logging for troubleshooting
-                        console.log('[InterviewScheduler] All users loaded:', interviewers?.length || 0);
-                        console.log('[InterviewScheduler] User roles in DB:', interviewers?.map(u => u.role));
-                        console.log('[InterviewScheduler] MANAGER_ROLES:', MANAGER_ROLES);
-                        console.log('[InterviewScheduler] ADMIN_ROLES:', ADMIN_ROLES);
-                        console.log('[InterviewScheduler] Eligible interviewers:', eligibleInterviewers.length);
 
                         return eligibleInterviewers.map((user: any) => (
                           <SelectItem key={user.id} value={user.id}>

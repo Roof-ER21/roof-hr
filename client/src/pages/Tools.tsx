@@ -291,9 +291,6 @@ export function Tools() {
   });
   
   // Debug logging
-  console.log('Tools data:', tools);
-  console.log('Tools loading:', toolsLoading);
-  console.log('Tools error:', toolsError);
 
   // Fetch assignments
   const { data: assignments = [], isLoading: assignmentsLoading, error: assignmentsError } = useQuery<Assignment[]>({

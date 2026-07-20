@@ -216,7 +216,6 @@ export default function Contracts() {
         throw new Error('Failed to fetch templates');
       }
       const data = await response.json();
-      console.log('Templates fetched:', data);
       return data;
     },
     enabled: isManager

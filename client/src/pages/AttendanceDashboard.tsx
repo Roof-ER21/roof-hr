@@ -102,7 +102,6 @@ export default function AttendanceDashboard() {
     });
 
     newSocket.on('connect', () => {
-      console.log('Connected to WebSocket');
     });
 
     setSocket(newSocket);

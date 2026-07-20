@@ -66,7 +66,6 @@ function AdminControlHubContent() {
       const res = await fetch('/api/hr-agents', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch agents');
       const data = await res.json();
-      console.log('[AdminControlHub] HR Agents data:', data);
       return data;
     },
     staleTime: 0, // Always consider data stale for immediate updates
@@ -98,7 +97,6 @@ function AdminControlHubContent() {
       return await apiRequest('PATCH', `/api/hr-agents/${id}`, data);
     },
     onSuccess: (data) => {
-      console.log('[UpdateAgent Success]', data);
       queryClient.invalidateQueries({ queryKey: ['/api/hr-agents'] });
       // Force immediate refetch
       refetchAgents();

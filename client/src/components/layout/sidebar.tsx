@@ -188,9 +188,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { data: assignmentData, isLoading: assignmentLoading, error: assignmentError } = useQuery<{ hasAssignments: boolean }>({
     queryKey: ['/api/user/has-candidate-assignments', user?.id],
     queryFn: async () => {
-      console.log('[Sidebar] Fetching has-candidate-assignments...');
       const result = await apiRequest('/api/user/has-candidate-assignments', 'GET');
-      console.log('[Sidebar] API result:', result);
       return result;
     },
     enabled: !!user && !isManager, // Only check for non-managers
@@ -201,7 +199,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const hasAssignedCandidates = assignmentData?.hasAssignments ?? false;
 
   // Debug logging for recruiting visibility
-  console.log('[Sidebar] User:', user?.email, 'Role:', user?.role, 'isManager:', isManager, 'assignmentData:', assignmentData, 'hasAssignedCandidates:', hasAssignedCandidates, 'loading:', assignmentLoading, 'error:', assignmentError);
 
   const toggleExpanded = (name: string) => {
     setExpandedItems(prev => 

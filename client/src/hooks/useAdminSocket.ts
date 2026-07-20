@@ -61,7 +61,6 @@ export function useAdminSocket(enabled: boolean = true) {
 
     socket.on('connect', () => {
       setIsConnected(true);
-      console.log('[AdminSocket] Connected:', socket.id);
 
       // Subscribe to admin events
       socket.emit('admin:subscribe');
@@ -69,7 +68,6 @@ export function useAdminSocket(enabled: boolean = true) {
 
     socket.on('disconnect', () => {
       setIsConnected(false);
-      console.log('[AdminSocket] Disconnected');
     });
 
     // Handle admin alerts

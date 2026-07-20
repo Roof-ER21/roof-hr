@@ -633,7 +633,6 @@ export function WorkflowBuilder() {
       <TabsContent value="templates" className="mt-4">
         <WorkflowTemplates onTemplateSelect={(template) => {
           // Handle template selection if needed
-          console.log('Template selected:', template);
         }} />
       </TabsContent>
     </Tabs>

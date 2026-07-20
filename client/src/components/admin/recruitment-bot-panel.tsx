@@ -73,11 +73,9 @@ export function RecruitmentBotPanel() {
   
   const handleViewCandidate = (candidateId: string) => {
     // Navigate to the recruiting page with the candidate selected
-    console.log('Navigating to candidate:', candidateId);
     if (candidateId) {
       // Use React Router navigation to preserve app state
       const targetUrl = `/recruiting?candidateId=${candidateId}`;
-      console.log('Navigating to URL:', targetUrl);
       navigate(targetUrl);
     } else {
       toast({
@@ -471,7 +469,6 @@ export function RecruitmentBotPanel() {
                 <Button 
                   onClick={() => {
                     const testCandidateId = '91c728ed-3205-4f39-9684-601cd8b3ee56';
-                    console.log('Testing navigation with candidate ID:', testCandidateId);
                     handleViewCandidate(testCandidateId);
                   }}
                   variant="outline"
