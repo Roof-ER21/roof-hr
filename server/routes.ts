@@ -8,7 +8,7 @@ import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { isNotificationEnabled } from './services/notification-preferences';
 import { db } from './db';
-import { eq, and, ne, or, lte, gte, inArray, ilike, desc } from 'drizzle-orm';
+import { eq, and, ne, or, lte, gte, inArray, ilike, desc, sql } from 'drizzle-orm';
 import {
   loginSchema, registerSchema, insertPtoRequestSchema,
   insertCandidateSchema, insertInterviewSchema, insertDocumentSchema,
@@ -16,7 +16,8 @@ import {
   toolInventory, toolAssignments, welcomePackBundles, bundleItems, bundleAssignments, bundleAssignmentItems,
   equipmentChecklists,
   performanceTemplates, automatedReviews,
-  ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates
+  ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates,
+  marketingCampaigns, campaignScans
 } from '../shared/schema';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
@@ -5526,6 +5527,164 @@ router.delete('/api/qr-codes/:id', requireAuth, requireSuperAdmin, async (req: a
   } catch (err: any) {
     console.error('[qr-codes] delete failed:', err?.message || err);
     res.status(err?.status || 502).json({ error: err?.message || 'Failed to delete QR profile' });
+  }
+});
+
+// ============================================================================
+// MARKETING CAMPAIGNS — non-rep QR codes (yard signs, print, truck wraps, etc.)
+// The public /m/:code redirect logs a scan and 302s to the destination with UTM
+// appended. Campaign data is Roof-HR-owned (no sa21 equivalent). Managers/admins
+// manage; the redirect itself is public (no auth).
+// ============================================================================
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://roofhr.up.railway.app').replace(/\/$/, '');
+const MARKETING_FALLBACK_URL = process.env.MARKETING_FALLBACK_URL || 'https://theroofdocs.com';
+
+function requireQrManager(req: any, res: any, next: any) {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (!isQrManager(req.user)) return res.status(403).json({ error: 'Marketing management is limited to managers and admins.' });
+  next();
+}
+
+function campaignIpHash(req: any): string {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = fwd || req.socket?.remoteAddress || '';
+  return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 32);
+}
+
+function slugifyCampaignCode(input: string): string {
+  return String(input || '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'campaign';
+}
+
+function decorateCampaign(c: any, counts?: { total: number; last30: number }) {
+  const shortUrl = `${PUBLIC_BASE_URL}/m/${c.code}`;
+  return {
+    ...c,
+    shortUrl,
+    qrCodeUrl: sa21QrImage(shortUrl),
+    totalScans: counts?.total ?? 0,
+    scans30d: counts?.last30 ?? 0,
+  };
+}
+
+// GET — list campaigns with scan counts (managers/admins).
+router.get('/api/marketing/campaigns', requireAuth, requireQrManager, async (_req: any, res) => {
+  try {
+    const campaigns = await db.select().from(marketingCampaigns).orderBy(desc(marketingCampaigns.createdAt));
+    const counts = await db
+      .select({
+        campaignId: campaignScans.campaignId,
+        total: sql<number>`count(*)::int`,
+        last30: sql<number>`count(*) filter (where ${campaignScans.scannedAt} > now() - interval '30 days')::int`,
+      })
+      .from(campaignScans)
+      .groupBy(campaignScans.campaignId);
+    const byId = new Map(counts.map((c) => [c.campaignId, { total: c.total, last30: c.last30 }]));
+    res.json(campaigns.map((c) => decorateCampaign(c, byId.get(c.id))));
+  } catch (err: any) {
+    console.error('[marketing] list campaigns failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to load campaigns.' });
+  }
+});
+
+// POST — create a campaign with a unique short code.
+router.post('/api/marketing/campaigns', requireAuth, requireQrManager, async (req: any, res) => {
+  try {
+    const { name, destinationUrl, channel, utmSource, utmMedium, utmCampaign, code } = req.body || {};
+    if (!name || !destinationUrl) return res.status(400).json({ error: 'A name and destination URL are required.' });
+    try { new URL(destinationUrl); } catch { return res.status(400).json({ error: 'Destination URL must be a full valid URL (include https://).' }); }
+
+    // Ensure a unique code (slug from provided code or name, suffixed on collision).
+    const base = slugifyCampaignCode(code || name);
+    let finalCode = base;
+    for (let n = 2; ; n++) {
+      const existing = await db.select({ id: marketingCampaigns.id }).from(marketingCampaigns).where(eq(marketingCampaigns.code, finalCode)).limit(1);
+      if (existing.length === 0) break;
+      finalCode = `${base}-${n}`;
+    }
+
+    const [created] = await db.insert(marketingCampaigns).values({
+      id: uuidv4(),
+      code: finalCode,
+      name,
+      destinationUrl,
+      channel: channel || null,
+      utmSource: utmSource || null,
+      utmMedium: utmMedium || null,
+      utmCampaign: utmCampaign || null,
+      createdBy: req.user.email || null,
+    }).returning();
+    res.json({ success: true, campaign: decorateCampaign(created) });
+  } catch (err: any) {
+    console.error('[marketing] create campaign failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to create campaign.' });
+  }
+});
+
+// PATCH — update a campaign (managers/admins). Code is immutable (QR already printed).
+router.patch('/api/marketing/campaigns/:id', requireAuth, requireQrManager, async (req: any, res) => {
+  try {
+    const { name, destinationUrl, channel, utmSource, utmMedium, utmCampaign, isActive } = req.body || {};
+    if (destinationUrl !== undefined) {
+      try { new URL(destinationUrl); } catch { return res.status(400).json({ error: 'Destination URL must be a full valid URL (include https://).' }); }
+    }
+    const patch: any = { updatedAt: new Date() };
+    if (name !== undefined) patch.name = name;
+    if (destinationUrl !== undefined) patch.destinationUrl = destinationUrl;
+    if (channel !== undefined) patch.channel = channel || null;
+    if (utmSource !== undefined) patch.utmSource = utmSource || null;
+    if (utmMedium !== undefined) patch.utmMedium = utmMedium || null;
+    if (utmCampaign !== undefined) patch.utmCampaign = utmCampaign || null;
+    if (isActive !== undefined) patch.isActive = !!isActive;
+
+    const [updated] = await db.update(marketingCampaigns).set(patch).where(eq(marketingCampaigns.id, req.params.id)).returning();
+    if (!updated) return res.status(404).json({ error: 'Campaign not found.' });
+    res.json({ success: true, campaign: decorateCampaign(updated) });
+  } catch (err: any) {
+    console.error('[marketing] update campaign failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to update campaign.' });
+  }
+});
+
+// DELETE — remove a campaign (scans cascade).
+router.delete('/api/marketing/campaigns/:id', requireAuth, requireQrManager, async (req: any, res) => {
+  try {
+    await db.delete(marketingCampaigns).where(eq(marketingCampaigns.id, req.params.id));
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[marketing] delete campaign failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to delete campaign.' });
+  }
+});
+
+// PUBLIC redirect — /m/:code. Logs a scan (fire-and-forget) then 302s to the
+// destination with UTM appended. Unknown/inactive codes fall back to the company
+// site so a printed QR never dead-ends.
+router.get('/m/:code', async (req: any, res) => {
+  try {
+    const code = String(req.params.code || '').toLowerCase();
+    const [c] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.code, code)).limit(1);
+    if (!c || !c.isActive) return res.redirect(302, MARKETING_FALLBACK_URL);
+
+    // Never let logging block or break the redirect.
+    db.insert(campaignScans).values({
+      id: uuidv4(),
+      campaignId: c.id,
+      ipHash: campaignIpHash(req),
+      userAgent: String(req.headers['user-agent'] || '').slice(0, 300),
+    }).catch((e: any) => console.error('[marketing] scan log failed:', e?.message || e));
+
+    const url = new URL(c.destinationUrl);
+    if (!url.searchParams.has('utm_source')) url.searchParams.set('utm_source', c.utmSource || 'qr');
+    if (!url.searchParams.has('utm_medium')) url.searchParams.set('utm_medium', c.utmMedium || c.channel || 'offline');
+    if (!url.searchParams.has('utm_campaign')) url.searchParams.set('utm_campaign', c.utmCampaign || c.code);
+    res.redirect(302, url.toString());
+  } catch (err: any) {
+    console.error('[marketing] redirect failed:', err?.message || err);
+    res.redirect(302, MARKETING_FALLBACK_URL);
   }
 });
 

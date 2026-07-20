@@ -53,6 +53,13 @@ export default function Marketing() {
     enabled: isManager,
   });
 
+  const { data: campaigns = [] } = useQuery<Array<{ id: string; totalScans: number; isActive: boolean }>>({
+    queryKey: ['/api/marketing/campaigns'],
+    enabled: isManager,
+  });
+  const campaignScans = campaigns.reduce((s, c) => s + (c.totalScans || 0), 0);
+  const activeCampaigns = campaigns.filter((c) => c.isActive).length;
+
   const stats = useMemo(() => {
     const totals = qrCodes.reduce(
       (acc, qr) => ({
@@ -165,8 +172,20 @@ export default function Marketing() {
                     <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
                   </div>
                 </Link>
-                <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                  Leads captured here attribute through to CC24. More marketing channels are on the way.
+                <Link to="/marketing/campaigns" className="block">
+                  <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                    <div className="rounded-md bg-primary/10 p-2"><Megaphone className="h-5 w-5 text-primary" /></div>
+                    <div className="min-w-0">
+                      <p className="font-medium">Campaigns</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {activeCampaigns} active · {campaignScans} scans — yard signs, print &amp; more
+                      </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+                  </div>
+                </Link>
+                <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                  Leads captured here attribute through to CC24.
                 </div>
               </CardContent>
             </Card>

@@ -2921,3 +2921,34 @@ export type ReportExecution = typeof reportExecutions.$inferSelect;
 export type InsertReportExecution = typeof reportExecutions.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+// Marketing campaigns — non-rep QR codes (yard signs, print, truck wraps). The
+// public /m/:code redirect logs a scan and 302s to destinationUrl with UTM
+// appended. Rep QR codes stay read-through to Susan AI-21; these are Roof-HR-owned.
+export const marketingCampaigns = pgTable('marketing_campaigns', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  destinationUrl: text('destination_url').notNull(),
+  channel: text('channel'), // yard_sign | print | truck_wrap | business_card | other
+  utmSource: text('utm_source'),
+  utmMedium: text('utm_medium'),
+  utmCampaign: text('utm_campaign'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const campaignScans = pgTable('campaign_scans', {
+  id: text('id').primaryKey(),
+  campaignId: text('campaign_id').notNull(),
+  scannedAt: timestamp('scanned_at').notNull().defaultNow(),
+  ipHash: text('ip_hash'),
+  userAgent: text('user_agent'),
+});
+
+export type MarketingCampaign = typeof marketingCampaigns.$inferSelect;
+export type InsertMarketingCampaign = typeof marketingCampaigns.$inferInsert;
+export type CampaignScan = typeof campaignScans.$inferSelect;
+export type InsertCampaignScan = typeof campaignScans.$inferInsert;

@@ -86,6 +86,7 @@ const navigation = [
     children: [
       { name: 'Overview', href: '/marketing', icon: BarChart, roles: [...ADMIN_ROLES, 'MANAGER'] },
       { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: NON_SOURCER_ROLES },
+      { name: 'Campaigns', href: '/marketing/campaigns', icon: Megaphone, roles: [...ADMIN_ROLES, 'MANAGER'] },
     ],
   },
   {
