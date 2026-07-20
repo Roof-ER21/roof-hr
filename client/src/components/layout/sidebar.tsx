@@ -46,9 +46,14 @@ import {
   ListChecks,
   QrCode,
   GitBranch,
+  LayoutGrid,
+  Megaphone,
   PanelLeftClose,
   PanelLeft
 } from 'lucide-react';
+
+// Every role except SOURCER (recruiters don't get personal Tasks or QR pages).
+const NON_SOURCER_ROLES = ALL_ROLES.filter((r) => r !== 'SOURCER');
 
 // Navigation configuration with role-based access
 // ADMIN_ROLES: Full access (SYSTEM_ADMIN, HR_ADMIN, ADMIN, etc.)
@@ -58,14 +63,31 @@ import {
 const navigation = [
   // Dashboard: Admins + Manager only (no Employee, no Sourcer)
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [...ADMIN_ROLES, 'MANAGER'] },
-  // My Portal: Everyone
-  { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ALL_ROLES },
+  // Workspace: personal home — My Portal + Tasks (everyone; Tasks hidden from Sourcers)
+  {
+    name: 'Workspace',
+    href: '/my-portal',
+    icon: LayoutGrid,
+    roles: ALL_ROLES,
+    children: [
+      { name: 'My Portal', href: '/my-portal', icon: UserCircle, roles: ALL_ROLES },
+      // Tasks API scopes — employees see their own, managers see all
+      { name: 'Tasks', href: '/tasks', icon: ListChecks, roles: NON_SOURCER_ROLES },
+    ],
+  },
   // Team Dashboard: Admins + Manager
   { name: 'Team Dashboard', href: '/team-dashboard', icon: Users, roles: [...ADMIN_ROLES, 'MANAGER'] },
-  // Tasks: Everyone (API scopes — employees see their own, managers see all)
-  { name: 'Tasks', href: '/tasks', icon: ListChecks, roles: ALL_ROLES },
-  // QR Codes: Everyone (API scopes — a rep sees only their own row)
-  { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: ALL_ROLES },
+  // Marketing: rep QR performance (Overview = managers) + QR Codes (rep sees own row)
+  {
+    name: 'Marketing',
+    href: '/marketing',
+    icon: Megaphone,
+    roles: NON_SOURCER_ROLES,
+    children: [
+      { name: 'Overview', href: '/marketing', icon: BarChart, roles: [...ADMIN_ROLES, 'MANAGER'] },
+      { name: 'QR Codes', href: '/qr-codes', icon: QrCode, roles: NON_SOURCER_ROLES },
+    ],
+  },
   {
     name: 'Susan AI',
     href: '/susan-ai',
@@ -153,7 +175,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting', 'Facilities']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Workspace', 'Marketing', 'Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting', 'Facilities']);
 
   // Collapse state with localStorage persistence
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -246,7 +268,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 // SOURCER ROLE: Explicit whitelist of allowed pages
                 // Sourcers can ONLY see: My Portal, Susan AI, Recruiting, Time Off
                 if (user?.role === 'SOURCER') {
-                  const sourcerAllowedPages = ['My Portal', 'Susan AI', 'Recruiting', 'Time Off'];
+                  // Workspace parent carries My Portal for sourcers (Tasks child is role-gated out)
+                  const sourcerAllowedPages = ['Workspace', 'Susan AI', 'Recruiting', 'Time Off'];
                   return sourcerAllowedPages.includes(item.name);
                 }
 
