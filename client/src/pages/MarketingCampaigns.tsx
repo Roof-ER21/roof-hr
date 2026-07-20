@@ -38,6 +38,12 @@ const CHANNELS = [
   { value: 'business_card', label: 'Business Card' },
   { value: 'other', label: 'Other' },
 ];
+
+// Common Roof-ER destinations — one-click so campaigns never point at a dead URL.
+const DEST_PRESETS = [
+  { label: 'Free Inspection', url: 'https://www.theroofdocs.com/inspection/' },
+  { label: 'Storm / Roof Check', url: 'https://get.theroofdocs.com/roofcheck' },
+];
 const channelLabel = (v: string | null) => CHANNELS.find((c) => c.value === v)?.label || 'Other';
 
 const emptyForm = {
@@ -245,8 +251,16 @@ export default function MarketingCampaigns() {
             </div>
             <div>
               <label className="text-sm font-medium">Destination URL *</label>
-              <Input value={form.destinationUrl} onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })} placeholder="https://theroofdocs.com/free-inspection" />
-              <p className="text-xs text-muted-foreground mt-1">Where the QR sends people. UTM tags are added automatically.</p>
+              <div className="flex flex-wrap gap-2 my-2">
+                {DEST_PRESETS.map((p) => (
+                  <button key={p.url} type="button" onClick={() => setForm({ ...form, destinationUrl: p.url })}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${form.destinationUrl === p.url ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'}`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <Input value={form.destinationUrl} onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })} placeholder="https://www.theroofdocs.com/inspection/" />
+              <p className="text-xs text-muted-foreground mt-1">Pick a preset or paste any URL. UTM tags are added automatically.</p>
             </div>
             <div>
               <label className="text-sm font-medium">Channel</label>
