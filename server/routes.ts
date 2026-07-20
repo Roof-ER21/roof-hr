@@ -19,6 +19,7 @@ import {
   ptoRequests, users, companyPtoPolicy, departmentPtoSettings, ptoPolicies, candidates,
   marketingCampaigns, campaignScans
 } from '../shared/schema';
+import { brandedQrSvg, brandedQrDataUri } from './lib/brandedQr';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import { ALL_HOLIDAYS } from '../shared/constants/holidays';
@@ -5564,7 +5565,9 @@ function decorateCampaign(c: any, counts?: { total: number; last30: number }) {
   return {
     ...c,
     shortUrl,
-    qrCodeUrl: sa21QrImage(shortUrl),
+    // Roof-ER branded QR (charcoal rounded modules + roofline/cross, EC-H), vector.
+    qrCodeUrl: brandedQrDataUri(shortUrl),
+    qrSvgUrl: `${PUBLIC_BASE_URL}/api/marketing/campaigns/${c.id}/qr.svg`,
     totalScans: counts?.total ?? 0,
     scans30d: counts?.last30 ?? 0,
   };
@@ -5587,6 +5590,21 @@ router.get('/api/marketing/campaigns', requireAuth, requireQrManager, async (_re
   } catch (err: any) {
     console.error('[marketing] list campaigns failed:', err?.message || err);
     res.status(500).json({ error: 'Failed to load campaigns.' });
+  }
+});
+
+// GET — branded QR as a downloadable SVG file (print-vendor ready). Manager-gated.
+router.get('/api/marketing/campaigns/:id/qr.svg', requireAuth, requireQrManager, async (req: any, res) => {
+  try {
+    const [c] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, req.params.id)).limit(1);
+    if (!c) return res.status(404).json({ error: 'Campaign not found.' });
+    const svg = brandedQrSvg(`${PUBLIC_BASE_URL}/m/${c.code}`);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Content-Disposition', `attachment; filename="roofer-qr-${c.code}.svg"`);
+    res.send(svg);
+  } catch (err: any) {
+    console.error('[marketing] qr.svg failed:', err?.message || err);
+    res.status(500).json({ error: 'Failed to render QR.' });
   }
 });
 

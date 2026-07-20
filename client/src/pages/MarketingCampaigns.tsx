@@ -306,6 +306,21 @@ export default function MarketingCampaigns() {
   );
 }
 
+function downloadSvg(dataUri: string, filename: string) {
+  const a = document.createElement('a'); a.href = dataUri; a.download = filename; a.click();
+}
+function downloadPng(dataUri: string, filename: string, size = 1200) {
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = size; c.height = size;
+    const ctx = c.getContext('2d'); if (!ctx) return;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(img, 0, 0, size, size);
+    c.toBlob((b) => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = filename; a.click(); });
+  };
+  img.src = dataUri;
+}
+
 function QrDialog({ campaign }: { campaign: Campaign }) {
   const [open, setOpen] = useState(false);
   return (
@@ -314,11 +329,13 @@ function QrDialog({ campaign }: { campaign: Campaign }) {
       <DialogContent>
         <DialogHeader><DialogTitle>QR Code — {campaign.name}</DialogTitle></DialogHeader>
         <div className="flex flex-col items-center space-y-4">
-          <img src={campaign.qrCodeUrl} alt="Campaign QR code" className="w-64 h-64 border rounded" />
+          <img src={campaign.qrCodeUrl} alt="Campaign QR code" className="w-64 h-64 border rounded bg-white p-2" />
           <p className="text-sm text-muted-foreground text-center">Scan to visit:<br />{campaign.shortUrl}</p>
-          <Button onClick={() => { const a = document.createElement('a'); a.href = campaign.qrCodeUrl; a.download = `qr-${campaign.code}.png`; a.click(); }}>
-            Download QR Code
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => downloadSvg(campaign.qrCodeUrl, `roofer-qr-${campaign.code}.svg`)}>Download SVG</Button>
+            <Button onClick={() => downloadPng(campaign.qrCodeUrl, `roofer-qr-${campaign.code}.png`)}>Download PNG</Button>
+          </div>
+          <p className="text-xs text-muted-foreground text-center">SVG = best for print vendors (scales with no quality loss). PNG = for email, Canva, docs.</p>
         </div>
       </DialogContent>
     </Dialog>
