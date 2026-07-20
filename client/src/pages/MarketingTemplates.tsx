@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { MANAGER_ROLES, SUPER_ADMIN_EMAIL } from '@shared/constants/roles';
-import { LayoutTemplate, Download, RotateCcw, Megaphone, ArrowRight, Palette } from 'lucide-react';
+import { LayoutTemplate, Download, RotateCcw, Megaphone, ArrowRight, Palette, Sparkles } from 'lucide-react';
 import { ensurePosterFonts, makeMeasure } from '@/lib/poster/fonts';
 import {
   POSTER_TEMPLATES, templateById, qrSvgFromDataUri, posterFileName,
@@ -26,6 +26,18 @@ interface Campaign {
   shortUrl: string;
   qrCodeUrl: string;
 }
+
+interface AiVariant {
+  templateId: string;
+  angle: string;
+  copy: Record<string, string>;
+}
+
+const BRIEF_IDEAS = [
+  'Fall storm yard sign for Richmond',
+  'Grocery store poster for Fairfax families',
+  'Spring gutter checkup, friendly tone',
+];
 
 /** Strip the fixed width/height so the inline preview scales to its container. */
 function fluid(svg: string): string {
@@ -157,6 +169,8 @@ export default function MarketingTemplates() {
   const [campaignId, setCampaignId] = useState<string>('');
   const [copy, setCopy] = useState<Record<string, string>>(POSTER_TEMPLATES[0].defaults);
   const [busy, setBusy] = useState<'png' | 'svg' | null>(null);
+  const [brief, setBrief] = useState('');
+  const [aiVariants, setAiVariants] = useState<AiVariant[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -193,6 +207,31 @@ export default function MarketingTemplates() {
     }
     return m;
   }, [qrSvg, measure, brand]);
+
+  const aiPreviews = useMemo(() => {
+    if (!measure || !qrSvg) return [] as string[];
+    return aiVariants.map((v, i) => {
+      const t = templateById(v.templateId);
+      return t ? t.build({ copy: v.copy, brand, qrSvg, measure, uid: `ai-${i}` }) : '';
+    });
+  }, [aiVariants, qrSvg, measure, brand]);
+
+  const generateMutation = useMutation({
+    mutationFn: (b: string) => apiRequest('/api/marketing/ai-design', 'POST', { brief: b, variants: 3 }),
+    onSuccess: (resp: any) => {
+      setAiVariants(resp?.variants ?? []);
+      if (!resp?.variants?.length) toast({ title: 'No concepts', description: 'Try rewording the brief.', variant: 'destructive' });
+    },
+    onError: (e: any) => toast({ title: 'AI designer unavailable', description: e?.message || 'Try again shortly.', variant: 'destructive' }),
+  });
+
+  function applyVariant(v: AiVariant) {
+    const t = templateById(v.templateId);
+    if (!t) return;
+    setTemplateId(t.id);
+    setCopy({ ...t.defaults, ...v.copy });
+    toast({ title: `Loaded: ${v.angle}`, description: 'Tweak the copy below, then download.' });
+  }
 
   if (!isManager) return <Navigate to="/qr-codes" replace />;
 
@@ -262,6 +301,77 @@ export default function MarketingTemplates() {
                 ))}
               </select>
               {campaign && !campaign.isActive && <Badge variant="secondary">Paused — scans won't redirect</Badge>}
+            </CardContent>
+          </Card>
+
+          {/* AI designer */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Sparkles className="h-5 w-5 text-primary" /> AI Designer
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={brief}
+                  maxLength={300}
+                  placeholder='Describe the piece — e.g. "fall storm yard sign for Richmond"'
+                  onChange={(e) => setBrief(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && brief.trim().length >= 3 && !generateMutation.isPending) generateMutation.mutate(brief.trim()); }}
+                />
+                <Button
+                  onClick={() => generateMutation.mutate(brief.trim())}
+                  disabled={generateMutation.isPending || brief.trim().length < 3}
+                  className="shrink-0"
+                >
+                  {generateMutation.isPending ? 'Designing…' : 'Generate concepts'}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {BRIEF_IDEAS.map((idea) => (
+                  <button key={idea} type="button" onClick={() => setBrief(idea)}
+                    className="text-xs px-2.5 py-1 rounded-full border hover:bg-muted transition-colors">
+                    {idea}
+                  </button>
+                ))}
+              </div>
+
+              {generateMutation.isPending && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="rounded-lg bg-muted animate-pulse" style={{ aspectRatio: '1100/1700' }} />
+                  ))}
+                </div>
+              )}
+
+              {!generateMutation.isPending && aiVariants.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {aiVariants.map((v, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => applyVariant(v)}
+                      className="rounded-lg border-2 border-transparent hover:border-primary text-left overflow-hidden transition-colors"
+                      title="Load this concept into the editor"
+                    >
+                      <div className="bg-neutral-200 p-3">
+                        {aiPreviews[i] && <div className="shadow-md" dangerouslySetInnerHTML={{ __html: fluid(aiPreviews[i]) }} />}
+                      </div>
+                      <div className="p-3 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm truncate">{v.angle}</p>
+                          <p className="text-xs text-muted-foreground">{templateById(v.templateId)?.name}</p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0">Use</Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                The AI writes on-brand copy and picks a layout — the QR code, colors, and print files stay exact. Click a concept to load it into the editor.
+              </p>
             </CardContent>
           </Card>
 

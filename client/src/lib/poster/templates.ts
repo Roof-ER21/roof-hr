@@ -6,20 +6,14 @@
 // every template (and the QR) from one object.
 import { fmt, fitFont, wrapText, balancedWrap, txt, txtLines, nestSvg, type Measure, type FontSpec } from './svg';
 import { DEFAULT_BRAND, type BrandTokens } from '@shared/constants/brand';
+import { POSTER_SPECS, type PosterSpec, type CopyField } from '@shared/constants/poster-specs';
 
-export { DEFAULT_BRAND, type BrandTokens };
+export { DEFAULT_BRAND, type BrandTokens, type CopyField };
 
 export const POSTER_W = 1100;
 export const POSTER_H = 1700;
 /** 3× the artboard = 3300×5100 px = 11×17in at 300dpi (scales cleanly to letter). */
 export const EXPORT_SCALE = 3;
-
-export interface CopyField {
-  key: string;
-  label: string;
-  kind: 'line' | 'multiline';
-  maxLen: number;
-}
 
 export interface PosterContext {
   copy: Record<string, string>;
@@ -31,13 +25,8 @@ export interface PosterContext {
   uid: string;
 }
 
-export interface PosterTemplate {
-  id: string;
-  name: string;
-  description: string;
-  skin: 'dark' | 'cream';
-  fields: CopyField[];
-  defaults: Record<string, string>;
+/** A shared copy spec plus this module's SVG builder. */
+export interface PosterTemplate extends PosterSpec {
   build(ctx: PosterContext): string;
 }
 
@@ -242,33 +231,9 @@ function headline(
   return y2;
 }
 
-// ---------- templates ----------
+// ---------- templates (copy specs live in @shared/constants/poster-specs) ----------
 
-const SCAN_FIELD: CopyField = { key: 'scanCta', label: 'QR call-to-action', kind: 'line', maxLen: 40 };
-
-const stormDark: PosterTemplate = {
-  id: 'storm-dark',
-  name: 'Storm Alert (Dark)',
-  description: 'High-urgency dark poster for post-storm canvassing and in-store displays.',
-  skin: 'dark',
-  fields: [
-    { key: 'eyebrow', label: 'Eyebrow banner', kind: 'line', maxLen: 32 },
-    { key: 'headline1', label: 'Headline line 1 (white)', kind: 'line', maxLen: 18 },
-    { key: 'headline2', label: 'Headline line 2 (red)', kind: 'line', maxLen: 18 },
-    { key: 'subhead', label: 'Subhead', kind: 'line', maxLen: 80 },
-    { key: 'callout', label: 'Callout box', kind: 'multiline', maxLen: 220 },
-    SCAN_FIELD,
-  ],
-  defaults: {
-    eyebrow: 'STORM ALERT — ACT NOW',
-    headline1: 'HAIL HIT',
-    headline2: 'YOUR ROOF?',
-    subhead: 'NORTHERN VA & MD WERE JUST HAMMERED BY HAIL STORMS',
-    callout:
-      'Hail damage hides — and it worsens fast. Get a FREE roof checkup from the Roof Docs: a full inspection, photo documentation, and a clear diagnosis of what your roof needs.',
-    scanCta: 'SCAN FOR YOUR FREE INSPECTION',
-  },
-  build(ctx) {
+function buildStormDark(ctx: PosterContext): string {
     const { copy, brand, measure, uid } = ctx;
     const out: string[] = [openSvg(OSWALD)];
     darkBg(uid, out);
@@ -293,36 +258,10 @@ const stormDark: PosterTemplate = {
     servingBar(brand.servingAreas, 1608, 62, out);
     redEdges(brand.red, out);
     out.push('</svg>');
-    return out.join('');
-  },
-};
+  return out.join('');
+}
 
-const errandCream: PosterTemplate = {
-  id: 'errand-cream',
-  name: 'Errand List (Cream)',
-  description: 'Playful checklist poster for grocery stores, gas stations, and community boards.',
-  skin: 'cream',
-  fields: [
-    { key: 'eyebrow', label: 'Eyebrow banner', kind: 'line', maxLen: 40 },
-    { key: 'listTitle', label: 'List title (handwritten)', kind: 'line', maxLen: 24 },
-    { key: 'listItems', label: 'Checked-off items (one per line)', kind: 'multiline', maxLen: 80 },
-    { key: 'listAction', label: 'Circled unchecked item', kind: 'line', maxLen: 24 },
-    { key: 'headline1', label: 'Headline line 1 (charcoal)', kind: 'line', maxLen: 26 },
-    { key: 'headline2', label: 'Headline line 2 (red)', kind: 'line', maxLen: 26 },
-    { key: 'subhead', label: 'Subhead', kind: 'line', maxLen: 60 },
-    SCAN_FIELD,
-  ],
-  defaults: {
-    eyebrow: 'FREE ROOF CHECKUP — WHILE YOU SHOP',
-    listTitle: 'Saturday errands',
-    listItems: 'milk\neggs\npaper towels\ncoffee',
-    listAction: 'check the roof',
-    headline1: "IT'S BEEN ON THE LIST",
-    headline2: 'SINCE THE LAST STORM.',
-    subhead: 'CROSS IT OFF RIGHT NOW — THE CHECKUP IS FREE.',
-    scanCta: 'SCAN FOR YOUR FREE INSPECTION',
-  },
-  build(ctx) {
+function buildErrandCream(ctx: PosterContext): string {
     const { copy, brand, measure, uid } = ctx;
     const ink = brand.charcoal;
     const out: string[] = [openSvg(OSWALD)];
@@ -380,45 +319,10 @@ const errandCream: PosterTemplate = {
     servingBar(brand.servingAreas, 1648, 52, out);
     out.push(`<rect x="0" y="0" width="${POSTER_W}" height="10" fill="${brand.red}"/>`);
     out.push('</svg>');
-    return out.join('');
-  },
-};
+  return out.join('');
+}
 
-const neighborsDark: PosterTemplate = {
-  id: 'neighbors-dark',
-  name: 'Neighbors Called (Stats)',
-  description: 'Social-proof poster with a three-stat band — strong for neighborhoods mid-canvass.',
-  skin: 'dark',
-  fields: [
-    { key: 'eyebrow', label: 'Eyebrow banner', kind: 'line', maxLen: 28 },
-    { key: 'headline1', label: 'Headline line 1 (white)', kind: 'line', maxLen: 20 },
-    { key: 'headline2', label: 'Headline line 2 (red)', kind: 'line', maxLen: 20 },
-    { key: 'subhead', label: 'Subhead', kind: 'line', maxLen: 80 },
-    { key: 'stat1', label: 'Stat 1 — big word', kind: 'line', maxLen: 12 },
-    { key: 'stat1sub', label: 'Stat 1 — caption', kind: 'line', maxLen: 36 },
-    { key: 'stat2', label: 'Stat 2 — big word', kind: 'line', maxLen: 12 },
-    { key: 'stat2sub', label: 'Stat 2 — caption', kind: 'line', maxLen: 36 },
-    { key: 'stat3', label: 'Stat 3 — big word', kind: 'line', maxLen: 12 },
-    { key: 'stat3sub', label: 'Stat 3 — caption', kind: 'line', maxLen: 36 },
-    { key: 'callout', label: 'Callout box', kind: 'multiline', maxLen: 220 },
-    SCAN_FIELD,
-  ],
-  defaults: {
-    eyebrow: 'YOUR NEIGHBORHOOD',
-    headline1: 'YOUR NEIGHBORS',
-    headline2: 'ALREADY CALLED.',
-    subhead: 'HAIL STORMS HIT NORTHERN VA, MD & RICHMOND THIS SEASON',
-    stat1: 'HUNDREDS',
-    stat1sub: 'of local roofs inspected',
-    stat2: 'FREE',
-    stat2sub: 'inspection & documentation',
-    stat3: 'FAST',
-    stat3sub: 'local response',
-    callout:
-      'If the houses around you took hail, yours probably did too. The Roof Docs give you a straight answer — a free checkup, photos of what we find, and zero obligation.',
-    scanCta: 'SCAN FOR YOUR FREE INSPECTION',
-  },
-  build(ctx) {
+function buildNeighborsDark(ctx: PosterContext): string {
     const { copy, brand, measure, uid } = ctx;
     const out: string[] = [openSvg(OSWALD)];
     darkBg(uid, out);
@@ -465,11 +369,20 @@ const neighborsDark: PosterTemplate = {
     servingBar(brand.servingAreas, 1612, 58, out);
     redEdges(brand.red, out);
     out.push('</svg>');
-    return out.join('');
-  },
+  return out.join('');
+}
+
+const BUILDERS: Record<string, (ctx: PosterContext) => string> = {
+  'storm-dark': buildStormDark,
+  'errand-cream': buildErrandCream,
+  'neighbors-dark': buildNeighborsDark,
 };
 
-export const POSTER_TEMPLATES: PosterTemplate[] = [stormDark, errandCream, neighborsDark];
+export const POSTER_TEMPLATES: PosterTemplate[] = POSTER_SPECS.map((spec) => {
+  const build = BUILDERS[spec.id];
+  if (!build) throw new Error(`poster spec ${spec.id} has no builder`);
+  return { ...spec, build };
+});
 
 export function templateById(id: string): PosterTemplate | undefined {
   return POSTER_TEMPLATES.find((t) => t.id === id);

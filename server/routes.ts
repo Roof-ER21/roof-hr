@@ -21,6 +21,8 @@ import {
 } from '../shared/schema';
 import { brandedQrSvg, brandedQrDataUri } from './lib/brandedQr';
 import { DEFAULT_BRAND, sanitizeBrand, type BrandTokens } from '../shared/constants/brand';
+import { POSTER_SPECS, posterSpecById, sanitizePosterCopy } from '../shared/constants/poster-specs';
+import { llmRouter } from './services/llm/router';
 import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import { ALL_HOLIDAYS } from '../shared/constants/holidays';
@@ -5636,6 +5638,93 @@ router.delete('/api/marketing/brand', requireAuth, requireQrManager, async (_req
   } catch (err: any) {
     console.error('[marketing] brand reset failed:', err?.message || err);
     res.status(500).json({ error: 'Failed to reset the brand kit.' });
+  }
+});
+
+// ---- AI designer (M4): brief → poster variants. The LLM only ever produces
+// COPY + a template choice; rendering, QR, and brand colors stay deterministic,
+// and every field is passed through sanitizePosterCopy (lengths, casing,
+// unknown-template rejection) before it reaches a client.
+
+function aiDesignPrompt(brief: string, brand: BrandTokens, count: number): string {
+  const templates = POSTER_SPECS.map((s) => {
+    const fields = s.fields
+      .map((f) => `    - ${f.key} (${f.kind}, max ${f.maxLen} chars): ${f.label}. Example: ${JSON.stringify(s.defaults[f.key] ?? '')}`)
+      .join('\n');
+    return `- id "${s.id}" — ${s.name}. ${s.description}\n  Use when: ${s.aiHint}\n  Fields:\n${fields}`;
+  }).join('\n');
+
+  return `You are the print designer for Roof-ER "The Roof Docs", a roofing company (roof inspections, siding, gutters, storm restoration). You write poster copy in the house voice: punchy, confident, plain-spoken, a little wry when the layout calls for it; never cheesy, never salesy-shouty, no exclamation marks, no emoji, no em-dash abuse.
+
+Brand facts you may reference: phone ${brand.phone}, website ${brand.website}, serving ${brand.servingAreas.join(', ')}. Services: ${brand.chips.join(', ')}. The QR code on every poster leads to a free inspection booking — the scanCta labels it.
+
+Available poster templates:
+${templates}
+
+The marketing brief: ${JSON.stringify(brief)}
+
+Produce ${count} distinct poster concept${count > 1 ? 's' : ''} for this brief. Vary the angle (urgency, humor, social proof) and prefer different templates when more than one fits; if the brief clearly demands one template, reusing it with genuinely different copy is fine.
+
+Rules:
+- Fill EVERY field of the chosen template. Respect each field's max length STRICTLY.
+- Headline lines are display type: short, ALL CAPS, and the two lines must read as one sentence split for impact (line 2 carries the punch).
+- "multiline" fields: listItems = one short item per line (newline-separated, 3-4 items); callout = 1-3 plain sentences.
+- Localize to the brief (place names, season, storm type) when given.
+- angle: 2-5 words naming the concept's approach.
+
+Respond with ONLY this JSON object, no markdown fences:
+{"variants": [{"templateId": "...", "angle": "...", "copy": {"field": "value", ...}}, ...]}`;
+}
+
+router.post('/api/marketing/ai-design', requireAuth, requireQrManager, async (req: any, res) => {
+  try {
+    const brief = String(req.body?.brief ?? '').trim();
+    if (brief.length < 3 || brief.length > 300) {
+      return res.status(400).json({ error: 'Describe the piece in 3–300 characters.' });
+    }
+    const count = Math.min(3, Math.max(1, Number(req.body?.variants) || 3));
+    const brand = await getBrandTokens();
+    const llmContext = {
+      taskType: 'generation' as const,
+      priority: 'medium' as const,
+      requiresPrivacy: false,
+      expectedResponseTime: 'fast' as const,
+    };
+
+    const parseVariants = (data: any) => {
+      const list = Array.isArray(data?.variants) ? data.variants : [];
+      const variants = [];
+      for (const v of list.slice(0, count)) {
+        const spec = posterSpecById(String(v?.templateId ?? ''));
+        if (!spec) continue; // hallucinated template — drop, never guess
+        variants.push({
+          templateId: spec.id,
+          angle: String(v?.angle ?? '').slice(0, 60) || spec.name,
+          copy: sanitizePosterCopy(spec, v?.copy),
+        });
+      }
+      return variants;
+    };
+
+    const prompt = aiDesignPrompt(brief, brand, count);
+    let result = await llmRouter.generateJSON(prompt, llmContext);
+    let variants = parseVariants(result.data);
+    if (variants.length === 0) {
+      // One corrective retry — most common failure is a wrapper or bad ids.
+      result = await llmRouter.generateJSON(
+        `${prompt}\n\nYour previous answer was invalid. Return the exact JSON shape with templateId values from: ${POSTER_SPECS.map((s) => s.id).join(', ')}.`,
+        llmContext,
+      );
+      variants = parseVariants(result.data);
+    }
+    if (variants.length === 0) {
+      return res.status(502).json({ error: 'The AI designer returned nothing usable. Try rewording the brief.' });
+    }
+    console.log(`[marketing] ai-design: ${variants.length} variant(s) via ${result.provider} for "${brief.slice(0, 60)}"`);
+    res.json({ variants, provider: result.provider });
+  } catch (err: any) {
+    console.error('[marketing] ai-design failed:', err?.message || err);
+    res.status(502).json({ error: 'AI generation is unavailable right now. Try again shortly.' });
   }
 });
 
