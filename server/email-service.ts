@@ -718,16 +718,9 @@ class EmailService {
           </div>
       ` : '';
 
-    const hrPortalHtml = temporaryPassword ? `
-          <div style="background-color: #fef3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-            <h3 style="margin-top: 0; color: #856404;">🔐 HR Portal Login</h3>
-            <p style="font-size: 15px; margin-bottom: 10px;">Access the HR system to view your employee information and documents:</p>
-            <p style="font-size: 15px; margin: 5px 0;"><strong>URL:</strong> <a href="https://roofhr.up.railway.app/login" style="color: #1155cc;">https://roofhr.up.railway.app/login</a></p>
-            <p style="font-size: 15px; margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
-            <p style="font-size: 15px; margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${temporaryPassword}</code></p>
-            <p style="font-size: 13px; color: #856404; margin-top: 10px;">⚠️ Please log in and change your password on first access.</p>
-          </div>
-          ` : '';
+    // HR Portal Login box removed from the new-hire welcome email (2026-07-20, per Ahmed).
+    // New hires no longer receive HR portal credentials in this email.
+    const hrPortalHtml = '';
 
     if (welcomeEmailType === 'retail') {
       return `
@@ -806,8 +799,8 @@ class EmailService {
             - <a href="https://apps.apple.com/us/app/google-docs-sync-edit-share/id842842640" style="color: #1155cc;">Google Docs</a><br>
             - <a href="https://apps.apple.com/us/app/google-voice/id318698524" style="color: #1155cc;">Google Voice</a><br>
             - <a href="https://apps.apple.com/us/app/groupme/id392796698" style="color: #1155cc;">GroupMe</a><br>
-            - <a href="https://apps.apple.com/us/app/hover-property-measurements/id579942561" style="color: #1155cc;">Hover</a> (do not sign in)<br>
-            - <a href="https://apps.apple.com/us/app/hailtrace-hail-maps/id1070690498" style="color: #1155cc;">HailTrace</a>
+            - <a href="https://hover.to/onboarding/welcome" style="color: #1155cc;">Hover</a><br>
+            - <a href="https://maps.interactivehailmaps.com/Account/SignIn" style="color: #1155cc;">Hail Recon</a>
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #cc0000;"><strong>IMPORTANT:</strong></p>
