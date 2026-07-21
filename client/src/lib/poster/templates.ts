@@ -48,8 +48,8 @@ function lighten(hex: string, amt: number): string {
 
 // ---------- shared blocks ----------
 
-function openSvg(bodyFont: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${POSTER_W} ${POSTER_H}" width="${POSTER_W}" height="${POSTER_H}" font-family="${bodyFont}">`;
+function openSvg(bodyFont: string, w = POSTER_W, h = POSTER_H): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="${bodyFont}">`;
 }
 
 /** Dark storm background: charcoal gradient, soft top glow, faint rain streaks. */
@@ -372,10 +372,65 @@ function buildNeighborsDark(ctx: PosterContext): string {
   return out.join('');
 }
 
+// Yard sign — its own artboard (1200×1600 units = 18×24in; must match the spec's
+// width/height). Drive-by rules: a handful of huge words, giant QR, huge phone.
+function buildYardsign(ctx: PosterContext): string {
+  const { copy, brand, measure, uid } = ctx;
+  const W = 1200;
+  const H = 1600;
+  const cx = W / 2;
+  const out: string[] = [openSvg(OSWALD, W, H)];
+
+  out.push(
+    `<defs><linearGradient id="${uid}-ybg" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="#232326"/><stop offset="0.6" stop-color="#161618"/><stop offset="1" stop-color="#0d0d0f"/>` +
+      `</linearGradient></defs>`,
+  );
+  out.push(`<rect width="${W}" height="${H}" fill="url(#${uid}-ybg)"/>`);
+
+  // Compact logo.
+  out.push(roofMark(cx, 44, 84, WHITE, brand.red));
+  out.push(txt({ x: cx, y: 178, text: 'ROOFER', family: OSWALD, weight: 700, size: 52, ls: 3, fill: WHITE }));
+  out.push(txt({ x: cx, y: 206, text: 'THE ROOF DOCS', family: OSWALD, weight: 500, size: 15, ls: 8, fill: WHITE }));
+
+  // Two-line drive-by headline.
+  const hBase: FontSpec = { family: OSWALD, weight: 700, size: 168, ls: 1 };
+  const h1 = fitFont(copy.headline1, hBase, W - 120, measure);
+  const h2 = fitFont(copy.headline2, hBase, W - 120, measure);
+  out.push(txt({ x: cx, y: 402, text: copy.headline1, ...h1, fill: WHITE }));
+  out.push(txt({ x: cx, y: 578, text: copy.headline2, ...h2, fill: brand.red }));
+  const subF = fitFont(copy.subhead, { family: OSWALD, weight: 600, size: 44, ls: 2 }, W - 140, measure);
+  out.push(txt({ x: cx, y: 652, text: copy.subhead, ...subF, fill: WHITE }));
+
+  // Giant QR on a white card with the CTA above it.
+  const cardW = 580;
+  const cardX = cx - cardW / 2;
+  out.push(`<rect x="${cardX}" y="696" width="${cardW}" height="612" rx="28" fill="${WHITE}"/>`);
+  const cta = fitFont(copy.scanCta, { family: OSWALD, weight: 700, size: 42, ls: 1 }, cardW - 80, measure);
+  out.push(txt({ x: cx, y: 768, text: copy.scanCta, ...cta, fill: brand.red }));
+  out.push(nestSvg(ctx.qrSvg, cx - 235, 800, 470));
+
+  // Phone, huge, white on charcoal — the drive-by fallback for non-scanners.
+  const phone = fitFont(brand.phone, { family: OSWALD, weight: 700, size: 104, ls: 3 }, W - 120, measure);
+  out.push(txt({ x: cx, y: 1420, text: brand.phone, ...phone, fill: WHITE }));
+  out.push(txt({ x: cx, y: 1470, text: brand.website, family: HANKEN, weight: 600, size: 34, fill: '#b9b7b4' }));
+
+  // Serving strip + red edges.
+  out.push(`<rect x="0" y="1502" width="${W}" height="62" fill="#242427"/>`);
+  const label = ['SERVING ' + brand.servingAreas[0], ...brand.servingAreas.slice(1)].join('   •   ');
+  const servF = fitFont(label, { family: OSWALD, weight: 500, size: 19, ls: 5 }, W - 100, measure);
+  out.push(txt({ x: cx, y: 1540, text: label, ...servF, fill: WHITE }));
+  out.push(`<rect x="0" y="0" width="${W}" height="14" fill="${brand.red}"/>`);
+  out.push(`<rect x="0" y="${H - 14}" width="${W}" height="14" fill="${brand.red}"/>`);
+  out.push('</svg>');
+  return out.join('');
+}
+
 const BUILDERS: Record<string, (ctx: PosterContext) => string> = {
   'storm-dark': buildStormDark,
   'errand-cream': buildErrandCream,
   'neighbors-dark': buildNeighborsDark,
+  'yardsign-bold': buildYardsign,
 };
 
 export const POSTER_TEMPLATES: PosterTemplate[] = POSTER_SPECS.map((spec) => {

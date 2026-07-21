@@ -18,6 +18,13 @@ export interface PosterSpec {
   skin: 'dark' | 'cream';
   /** When a designer would reach for this layout — guidance for the AI. */
   aiHint: string;
+  /** Artboard size in SVG units. Omitted = the default 1100×1700 poster. */
+  width?: number;
+  height?: number;
+  /** Multiplier from artboard units to export pixels (300dpi print size). */
+  exportScale?: number;
+  /** Human print size, e.g. "11×17 in". */
+  sizeLabel?: string;
   fields: CopyField[];
   defaults: Record<string, string>;
 }
@@ -110,6 +117,29 @@ export const POSTER_SPECS: PosterSpec[] = [
       callout:
         'If the houses around you took hail, yours probably did too. The Roof Docs give you a straight answer — a free checkup, photos of what we find, and zero obligation.',
       scanCta: 'SCAN FOR YOUR FREE INSPECTION',
+    },
+  },
+  {
+    id: 'yardsign-bold',
+    name: 'Yard Sign (18×24)',
+    description: 'Drive-by format: huge two-line message, giant QR, phone readable from the street.',
+    skin: 'dark',
+    aiHint: 'Yard signs and lawn placements read from a moving car — a handful of huge words, no paragraphs. Pick this whenever the brief says yard sign, lawn sign, or roadside.',
+    width: 1200,
+    height: 1600,
+    exportScale: 4.5,
+    sizeLabel: '18×24 in',
+    fields: [
+      { key: 'headline1', label: 'Headline line 1 (white)', kind: 'line', maxLen: 14 },
+      { key: 'headline2', label: 'Headline line 2 (red)', kind: 'line', maxLen: 14 },
+      { key: 'subhead', label: 'Subhead (one short line)', kind: 'line', maxLen: 44 },
+      { key: 'scanCta', label: 'QR call-to-action', kind: 'line', maxLen: 32 },
+    ],
+    defaults: {
+      headline1: 'HAIL DAMAGE?',
+      headline2: 'FREE CHECKUP.',
+      subhead: 'LOCAL ROOF DOCS • FAST SCHEDULING',
+      scanCta: 'SCAN OR CALL TODAY',
     },
   },
 ];

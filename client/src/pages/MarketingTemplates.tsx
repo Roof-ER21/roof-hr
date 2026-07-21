@@ -245,7 +245,7 @@ export default function MarketingTemplates() {
     setBusy(kind);
     try {
       const name = posterFileName(template.id, campaign.code, kind);
-      if (kind === 'png') await downloadPosterPng(posterSvg, name);
+      if (kind === 'png') await downloadPosterPng(posterSvg, name, template.exportScale ?? undefined);
       else await downloadPosterSvg(posterSvg, name);
       toast({ title: 'Download started', description: name });
     } catch (e: any) {
@@ -376,7 +376,7 @@ export default function MarketingTemplates() {
           </Card>
 
           {/* Template picker */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {POSTER_TEMPLATES.map((t) => (
               <button
                 key={t.id}
@@ -392,6 +392,7 @@ export default function MarketingTemplates() {
                 <div className="p-3">
                   <p className="font-semibold text-sm">{t.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
+                  <Badge variant="outline" className="mt-1.5 text-[10px]">{t.sizeLabel ?? '11×17 in'}</Badge>
                 </div>
               </button>
             ))}
@@ -438,8 +439,8 @@ export default function MarketingTemplates() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    PNG = 3300×5100 (11×17in at 300dpi; scales cleanly to letter). SVG = vector for print vendors.
-                    Always scan-test a printed proof before mass production.
+                    PNG = {(template.width ?? 1100) * (template.exportScale ?? 3)}×{(template.height ?? 1700) * (template.exportScale ?? 3)} ({template.sizeLabel ?? '11×17 in'} at 300dpi).
+                    SVG = vector for print vendors. Always scan-test a printed proof before mass production.
                   </p>
                 </div>
               </CardContent>

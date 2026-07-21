@@ -25,6 +25,12 @@ export async function downloadPosterSvg(posterSvg: string, filename: string): Pr
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+/** Artboard size from the SVG root — templates carry their own dimensions. */
+function svgDims(svg: string): { w: number; h: number } {
+  const m = svg.match(/<svg[^>]*? width="(\d+)" height="(\d+)"/);
+  return m ? { w: Number(m[1]), h: Number(m[2]) } : { w: POSTER_W, h: POSTER_H };
+}
+
 export async function posterPngBlob(posterSvg: string, scale = EXPORT_SCALE): Promise<Blob> {
   const svg = await selfContainedSvg(posterSvg);
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
@@ -32,9 +38,10 @@ export async function posterPngBlob(posterSvg: string, scale = EXPORT_SCALE): Pr
     const img = new Image();
     img.src = url;
     await img.decode();
+    const { w, h } = svgDims(posterSvg);
     const canvas = document.createElement('canvas');
-    canvas.width = POSTER_W * scale;
-    canvas.height = POSTER_H * scale;
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('canvas 2d context unavailable');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -46,8 +53,8 @@ export async function posterPngBlob(posterSvg: string, scale = EXPORT_SCALE): Pr
   }
 }
 
-export async function downloadPosterPng(posterSvg: string, filename: string): Promise<void> {
-  const blob = await posterPngBlob(posterSvg);
+export async function downloadPosterPng(posterSvg: string, filename: string, scale = EXPORT_SCALE): Promise<void> {
+  const blob = await posterPngBlob(posterSvg, scale);
   const url = URL.createObjectURL(blob);
   triggerDownload(url, filename);
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
