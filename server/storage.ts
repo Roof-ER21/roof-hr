@@ -125,6 +125,7 @@ export interface IStorage {
   createSession(data: InsertSession): Promise<Session>;
   getSessionByToken(token: string): Promise<Session | null>;
   deleteSession(id: string): Promise<void>;
+  deleteSessionsByUserId(userId: string): Promise<void>;
   deleteExpiredSessions(): Promise<void>;
   updateSessionExpiry(id: string, expiresAt: Date): Promise<void>;
 
@@ -554,6 +555,8 @@ class DrizzleStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
+    // sessions.userId has no FK cascade — revoke first or they orphan
+    await db.delete(sessions).where(eq(sessions.userId, id));
     await db.delete(users).where(eq(users.id, id));
   }
 
@@ -580,6 +583,10 @@ class DrizzleStorage implements IStorage {
 
   async deleteSession(id: string): Promise<void> {
     await db.delete(sessions).where(eq(sessions.id, id));
+  }
+
+  async deleteSessionsByUserId(userId: string): Promise<void> {
+    await db.delete(sessions).where(eq(sessions.userId, userId));
   }
 
   async deleteExpiredSessions(): Promise<void> {

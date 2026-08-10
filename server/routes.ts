@@ -823,6 +823,11 @@ router.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
+    // Archived/terminated employees keep their record but must not sign in
+    if (user.isActive === false) {
+      return res.status(403).json({ error: 'Account is deactivated' });
+    }
+
     const token = generateSessionToken();
     await storage.createSession({
       userId: user.id,
@@ -1521,6 +1526,7 @@ router.patch('/api/users/:id/archive', requireAuth, requireManager, async (req, 
     }
 
     const user = await storage.updateUser(userId, { isActive: false });
+    await storage.deleteSessionsByUserId(userId);
     const { passwordHash, ...safeUser } = user;
 
     res.json({ success: true, message: 'Employee archived successfully', user: safeUser });

@@ -40,6 +40,15 @@ export async function requireAuth(req: any, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Deactivated (archived/terminated) users must not keep an authenticated
+    // session — without this, an existing token would sliding-renew forever.
+    if (user.isActive === false) {
+      console.log('[Auth] Rejecting session for inactive user:', user.email);
+      storage.deleteSessionsByUserId(user.id).catch((err: any) =>
+        console.warn('[Auth] Session cleanup for inactive user failed:', err?.message));
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+
     console.log('[Auth] User authenticated:', user.email);
     req.user = user;
 
