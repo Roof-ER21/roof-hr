@@ -18,6 +18,7 @@ import { rateLimit, sanitizeInput, configureCORS, securityLogger, clearRateLimit
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { captureToGlitchTip } from './utils/glitchtip';
 import { requestLogger, logger } from './middleware/logger';
+import { auditTrail } from './middleware/audit';
 import { contractPdfService } from './services/contractPdfService';
 
 async function createAdminUser() {
@@ -293,6 +294,9 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// Blanket audit trail for authenticated mutating /api requests (system_audit_logs)
+app.use(auditTrail);
 
 (async () => {
   // Global error handlers

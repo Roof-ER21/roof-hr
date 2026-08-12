@@ -73,6 +73,7 @@ import scheduledReportsRoutes from './routes/scheduled-reports';
 import meetingRoomsRoutes from './routes/meeting-rooms';
 import meetingsRoutes from './routes/meetings';
 import { apiMetricsMiddleware } from './middleware/api-metrics';
+import { logAuthEvent } from './middleware/audit';
 import { googleDriveService } from './services/google-drive-service';
 import { googleCalendarService } from './services/google-calendar-service';
 import { serviceAccountAuth } from './services/service-account-auth';
@@ -809,6 +810,7 @@ router.post('/api/auth/login', async (req, res) => {
 
     const user = await storage.getUserByEmail(data.email);
     if (!user) {
+      logAuthEvent(req, 'LOGIN', { userEmail: data.email, success: false, reason: 'unknown_user' });
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
@@ -820,13 +822,17 @@ router.post('/api/auth/login', async (req, res) => {
 
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
     if (!isPasswordValid) {
+      logAuthEvent(req, 'LOGIN', { userId: user.id, userEmail: user.email, success: false, reason: 'bad_password' });
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
     // Archived/terminated employees keep their record but must not sign in
     if (user.isActive === false) {
+      logAuthEvent(req, 'LOGIN', { userId: user.id, userEmail: user.email, success: false, reason: 'deactivated' });
       return res.status(403).json({ error: 'Account is deactivated' });
     }
+
+    logAuthEvent(req, 'LOGIN', { userId: user.id, userEmail: user.email, success: true });
 
     const token = generateSessionToken();
     await storage.createSession({
@@ -868,6 +874,7 @@ router.post('/api/auth/logout', requireAuth, async (req: any, res) => {
     if (session) {
       await storage.deleteSession(session.id);
     }
+    logAuthEvent(req, 'LOGOUT', { userId: req.user.id, userEmail: req.user.email, success: true });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Logout failed' });
