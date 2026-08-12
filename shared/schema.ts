@@ -164,6 +164,9 @@ export const ptoRequests = pgTable('pto_requests', {
   hrCalendarEventId: text('hr_calendar_event_id'), // Google Calendar event ID for HR shared calendar
   isExempt: boolean('is_exempt').notNull().default(false), // Admin-only: exempt PTO doesn't count against balance
   createdByAdmin: text('created_by_admin'), // Track which admin created exempt PTO
+  // PTO triage agent (migration 0007) — recommendation-only verdict for approvers
+  agentTriage: jsonb('agent_triage'),
+  agentTriagedAt: timestamp('agent_triaged_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -2019,6 +2019,20 @@ function PTO() {
                             <span className="font-medium">{isCancelled ? 'Note' : 'Reason'}:</span> {request.reviewNotes}
                           </div>
                         )}
+                        {request.status === 'PENDING' && canApprovePto && (request as any).agentTriage && (
+                          <div
+                            className="text-xs mt-1"
+                            title={((request as any).agentTriage.signals || []).map((s: any) => s.detail).join('\n') || (request as any).agentTriage.summary}
+                          >
+                            {(request as any).agentTriage.recommendation === 'CLEAR_TO_APPROVE' ? (
+                              <span className="text-green-700 dark:text-green-400">✓ Agent: clear to approve</span>
+                            ) : (
+                              <span className="text-amber-700 dark:text-amber-300">
+                                ⚠ Agent: {((request as any).agentTriage.signals || []).map((s: any) => s.code.replace(/_/g, ' ')).join(', ') || 'needs review'}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {pendingAdminReview && (
                           <div className="text-xs text-amber-700 dark:text-amber-300 mt-1 flex items-center gap-2">
                             <span>Pending final admin review (within 48 hours).</span>

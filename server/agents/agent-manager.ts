@@ -11,6 +11,7 @@ import {
   OnboardingAgent 
 } from './hr-agents';
 import { CoiAlertAgent } from './coi-alert-agent';
+import { PtoTriageAgent } from './pto-triage-agent';
 
 const EASTERN_TIMEZONE = 'America/New_York';
 
@@ -96,7 +97,8 @@ export class AgentManager extends EventEmitter {
       new PerformanceReviewAgent(),
       new DocumentExpirationAgent(),
       new OnboardingAgent(),
-      new CoiAlertAgent()
+      new CoiAlertAgent(),
+      new PtoTriageAgent()
     ];
 
     for (const agent of agents) {

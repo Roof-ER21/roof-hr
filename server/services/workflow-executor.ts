@@ -4,6 +4,7 @@ import { googleCalendarService } from './google-calendar-service';
 import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import OpenAI from 'openai';
 import { logger } from '../utils/logger';
+import { triagePendingPtoRequests } from '../agents/pto-triage-agent';
 
 // Initialize services on first use
 let servicesInitialized = false;
@@ -152,6 +153,11 @@ export class WorkflowExecutor {
         logger.info('Creating task:', config);
         // Implement task creation logic
         break;
+      case 'TRIAGE_PTO': {
+        const stats = await triagePendingPtoRequests();
+        logger.info(`TRIAGE_PTO: ${stats.triaged} triaged (${stats.clear} clear, ${stats.needsHuman} need review)`);
+        break;
+      }
       default:
         logger.warn(`Unknown action type: ${step.actionType}`);
     }
