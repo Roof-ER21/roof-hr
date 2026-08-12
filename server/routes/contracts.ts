@@ -13,6 +13,13 @@ import {
   notifyRecipientOfRescindedContract
 } from '../services/contract-notification';
 import { contractPdfService } from '../services/contractPdfService';
+import {
+  sha256,
+  hashFileIfExists,
+  buildCertificate,
+  appendCertificatePage,
+  templatePath,
+} from '../services/esignCertificate';
 import { requireAuth, requireManager } from '../middleware/auth';
 import { lightpdfService } from '../services/lightpdf-service';
 
@@ -167,7 +174,7 @@ router.post('/api/contract-templates', requireAuth, requireManager, async (req: 
     const data = {
       ...parsedData,
       id: uuidv4(),
-      type: parsedData.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER' | 'RETAIL'
+      type: parsedData.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OFFER_LETTER' | 'OTHER' | 'RETAIL'
     };
 
     const template = await storage.createContractTemplate(data);
@@ -331,7 +338,7 @@ router.post('/api/contract-templates/upload',
       const template = await storage.createContractTemplate({
         id: uuidv4(),
         name,
-        type: type as 'CONTRACTOR' | 'OTHER' | 'EMPLOYMENT' | 'NDA' | 'RETAIL',
+        type: type as 'CONTRACTOR' | 'OTHER' | 'EMPLOYMENT' | 'NDA' | 'OFFER_LETTER' | 'RETAIL',
         territory: territory || null,
         content: `PDF Template: ${name}`,
         fileUrl: `/attached_assets/contract_templates/${fileName}`,
@@ -970,13 +977,16 @@ router.delete('/api/employee-contracts/:id', requireAuth, requireManager, async 
 router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) => {
   try {
     const user = req.user!;
-    const { signature, signatureAddress } = req.body;
+    const { signature, signatureAddress, consentToEsign } = req.body;
 
     if (!signature) {
       return res.status(400).json({ error: 'Signature required' });
     }
     if (!signatureAddress) {
       return res.status(400).json({ error: 'Mailing address required' });
+    }
+    if (consentToEsign !== true) {
+      return res.status(400).json({ error: 'You must consent to sign electronically before signing' });
     }
 
     const contract = await storage.getEmployeeContractById(req.params.id);
@@ -996,11 +1006,17 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
 
     // Capture IP address from request
     const signatureIp = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
+    const signatureUserAgent = req.get('user-agent')?.slice(0, 500);
     const signedDate = new Date();
+    const consentAt = signedDate;
 
     let signedFileUrl: string | null = null;
     let signedFileName: string | null = null;
     const sourceFileName = contract.fileName || (contract.fileUrl ? path.basename(contract.fileUrl) : null);
+
+    // Tamper-evidence: hash what is being signed BEFORE stamping
+    const contentSha256 = sha256(contract.content || '');
+    const sourcePdfSha256 = sourceFileName ? await hashFileIfExists(templatePath(sourceFileName)) : undefined;
 
     if (sourceFileName && await contractPdfService.templateExists(sourceFileName)) {
       try {
@@ -1025,12 +1041,40 @@ router.post('/api/employee-contracts/:id/sign', requireAuth, async (req, res) =>
       }
     }
 
+    // Certificate of completion: hash the stamped PDF, then append the audit page
+    const signedPdfSha256 = signedFileName ? await hashFileIfExists(templatePath(signedFileName)) : undefined;
+    const certificate = buildCertificate({
+      contractId: req.params.id,
+      contractTitle: contract.title,
+      signerName: contract.recipientName,
+      signerEmail: contract.recipientEmail,
+      recipientType: (contract.recipientType as 'EMPLOYEE' | 'CANDIDATE') || 'EMPLOYEE',
+      sentAt: contract.sentDate,
+      viewedAt: contract.viewedDate,
+      consentAt,
+      signedAt: signedDate,
+      contentSha256,
+      sourcePdfSha256,
+      signedPdfSha256,
+      signature,
+      ipAddress: signatureIp,
+      userAgent: signatureUserAgent,
+    });
+    if (signedFileName) {
+      await appendCertificatePage(signedFileName, certificate);
+    }
+
     const updatedContract = await storage.updateEmployeeContract(req.params.id, {
       status: 'SIGNED',
       signature,
       signatureAddress,
       signatureIp,
       signedDate,
+      consentToEsign: true,
+      consentAt,
+      signatureUserAgent,
+      documentHash: contentSha256,
+      esignCertificate: certificate,
       ...(signedFileUrl ? { fileUrl: signedFileUrl, fileName: signedFileName } : {})
     });
 
@@ -1224,13 +1268,16 @@ router.get('/api/public/contract/:token', async (req, res) => {
 router.post('/api/public/contract/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    const { signature, signatureAddress } = req.body;
+    const { signature, signatureAddress, consentToEsign } = req.body;
 
     if (!signature) {
       return res.status(400).json({ error: 'Signature is required' });
     }
     if (!signatureAddress || !signatureAddress.trim()) {
       return res.status(400).json({ error: 'Mailing address required' });
+    }
+    if (consentToEsign !== true) {
+      return res.status(400).json({ error: 'You must consent to sign electronically before signing' });
     }
 
     const contract = await storage.getEmployeeContractByToken(token);
@@ -1258,9 +1305,16 @@ router.post('/api/public/contract/:token', async (req, res) => {
 
     const signedDate = new Date();
     const signatureIp = req.ip || (req.headers['x-forwarded-for'] as string) || 'unknown';
+    const signatureUserAgent = req.get('user-agent')?.slice(0, 500);
+    const consentAt = signedDate;
+
+    // Tamper-evidence: hash what is being signed BEFORE stamping
+    const contentSha256 = sha256(contract.content || '');
+    const sourcePdfSha256 = contract.fileName ? await hashFileIfExists(templatePath(contract.fileName)) : undefined;
 
     // Apply signature to PDF if there's a file
     let updatedFileUrl = contract.fileUrl;
+    let appliedSignedFileName: string | null = null;
     if (contract.fileUrl && contract.fileName) {
       try {
         const signedFileName = `signed_${Date.now()}_${contract.fileName}`;
@@ -1277,10 +1331,34 @@ router.post('/api/public/contract/:token', async (req, res) => {
         );
 
         updatedFileUrl = `/attached_assets/contract_templates/${signedFileName}`;
+        appliedSignedFileName = signedFileName;
       } catch (pdfError) {
         console.error('Error applying signature to PDF:', pdfError);
         // Continue without PDF update - signature is still captured
       }
+    }
+
+    // Certificate of completion: hash the stamped PDF, then append the audit page
+    const signedPdfSha256 = appliedSignedFileName ? await hashFileIfExists(templatePath(appliedSignedFileName)) : undefined;
+    const certificate = buildCertificate({
+      contractId: contract.id,
+      contractTitle: contract.title,
+      signerName: contract.recipientName,
+      signerEmail: contract.recipientEmail,
+      recipientType: (contract.recipientType as 'EMPLOYEE' | 'CANDIDATE') || 'EMPLOYEE',
+      sentAt: contract.sentDate,
+      viewedAt: contract.viewedDate,
+      consentAt,
+      signedAt: signedDate,
+      contentSha256,
+      sourcePdfSha256,
+      signedPdfSha256,
+      signature,
+      ipAddress: signatureIp,
+      userAgent: signatureUserAgent,
+    });
+    if (appliedSignedFileName) {
+      await appendCertificatePage(appliedSignedFileName, certificate);
     }
 
     // Update contract with signature
@@ -1290,6 +1368,11 @@ router.post('/api/public/contract/:token', async (req, res) => {
       signatureAddress: signatureAddress || null,
       signatureIp,
       signedDate,
+      consentToEsign: true,
+      consentAt,
+      signatureUserAgent,
+      documentHash: contentSha256,
+      esignCertificate: certificate,
       fileUrl: updatedFileUrl
     });
 

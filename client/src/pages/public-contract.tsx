@@ -137,6 +137,7 @@ export default function PublicContractPage() {
   const [signature, setSignature] = useState<string | null>(null);
   const [signatureAddress, setSignatureAddress] = useState('');
   const [hasReviewed, setHasReviewed] = useState(false);
+  const [consentToEsign, setConsentToEsign] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [lightPdfUrl, setLightPdfUrl] = useState<string | null>(null);
 
@@ -157,7 +158,7 @@ export default function PublicContractPage() {
 
   // Submit mutation
   const submitMutation = useMutation({
-    mutationFn: async (formData: { signature: string; signatureAddress: string }) => {
+    mutationFn: async (formData: { signature: string; signatureAddress: string; consentToEsign: boolean }) => {
       const response = await fetch(`/api/public/contract/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,9 +215,19 @@ export default function PublicContractPage() {
       return;
     }
 
+    if (!consentToEsign) {
+      toast({
+        title: 'Consent Required',
+        description: 'Please consent to signing this document electronically.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     submitMutation.mutate({
       signature,
       signatureAddress,
+      consentToEsign,
     });
   };
 
@@ -413,6 +424,28 @@ export default function PublicContractPage() {
                 </div>
               </div>
 
+              {/* E-Sign Consent (ESIGN/UETA) */}
+              <div className="flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <Checkbox
+                  id="esign-consent"
+                  checked={consentToEsign}
+                  onCheckedChange={(checked) => setConsentToEsign(checked === true)}
+                />
+                <div>
+                  <label
+                    htmlFor="esign-consent"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    I consent to sign this document electronically
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    You agree to conduct this transaction by electronic means and that your electronic
+                    signature is legally binding, per the U.S. ESIGN Act and UETA. A certificate of
+                    completion documenting this consent will be attached to the signed document.
+                  </p>
+                </div>
+              </div>
+
               {/* Address Input (Multi-line) */}
               <div className="space-y-2">
                 <Label htmlFor="address">Your Address (required)</Label>
@@ -440,7 +473,7 @@ export default function PublicContractPage() {
                 <Button
                   type="submit"
                   size="lg"
-                  disabled={submitMutation.isPending || !signature || !hasReviewed}
+                  disabled={submitMutation.isPending || !signature || !hasReviewed || !consentToEsign}
                   className="min-w-[200px]"
                 >
                   {submitMutation.isPending ? (

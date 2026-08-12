@@ -256,7 +256,7 @@ export const insertEmployeeAssignmentSchema = createInsertSchema(employeeAssignm
 export const contractTemplates = pgTable('contract_templates', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  type: text('type').$type<'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER' | 'RETAIL'>().notNull(),
+  type: text('type').$type<'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OFFER_LETTER' | 'OTHER' | 'RETAIL'>().notNull(),
   territory: text('territory'), // Optional territory-specific template
   content: text('content').notNull(), // HTML or markdown content
   fileUrl: text('file_url'), // URL to PDF file attachment
@@ -297,6 +297,12 @@ export const employeeContracts = pgTable('employee_contracts', {
   signature: text('signature'), // Base64 encoded signature or signature URL
   signatureAddress: text('signature_address'),
   signatureIp: text('signature_ip'), // IP address when signed
+  // ESIGN/UETA audit-certificate fields (migration 0006)
+  consentToEsign: boolean('consent_to_esign'),
+  consentAt: timestamp('consent_at'),
+  signatureUserAgent: text('signature_user_agent'),
+  documentHash: text('document_hash'), // sha256 of contract content + source PDF at signing
+  esignCertificate: jsonb('esign_certificate'), // certificate-of-completion record
   rejectionReason: text('rejection_reason'),
   notifiedManagers: text('notified_managers').array(), // Track which managers have been notified
   fieldValues: jsonb('field_values'),

@@ -25,7 +25,7 @@ import type { User, ContractTemplate, EmployeeContract } from '@/../../shared/sc
 
 const templateFormSchema = z.object({
   name: z.string().min(1, 'Template name is required'),
-  type: z.enum(['EMPLOYMENT', 'NDA', 'CONTRACTOR', 'OTHER', 'RETAIL']),
+  type: z.enum(['EMPLOYMENT', 'NDA', 'CONTRACTOR', 'OFFER_LETTER', 'OTHER', 'RETAIL']),
   territory: z.string().optional(),
   content: z.string().min(1, 'Template content is required'),
   variables: z.array(z.string()).default([]),
@@ -390,7 +390,8 @@ export default function Contracts() {
     mutationFn: (data: { id: string; signature: string; signatureAddress: string; signatureDate: string }) =>
       apiRequest(`/api/employee-contracts/${data.id}/sign`, {
         method: 'POST',
-        body: JSON.stringify({ signature: data.signature, signatureAddress: data.signatureAddress, signatureDate: data.signatureDate }),
+        // agreeToSign is required-true by the form schema; it IS the e-sign consent
+        body: JSON.stringify({ signature: data.signature, signatureAddress: data.signatureAddress, signatureDate: data.signatureDate, consentToEsign: true }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/employee-contracts'] });
@@ -753,6 +754,7 @@ export default function Contracts() {
                                 <SelectItem value="EMPLOYMENT">Employment</SelectItem>
                                 <SelectItem value="NDA">NDA</SelectItem>
                                 <SelectItem value="CONTRACTOR">Contractor</SelectItem>
+                                <SelectItem value="OFFER_LETTER">Offer Letter</SelectItem>
                                 <SelectItem value="RETAIL">Retail</SelectItem>
                                 <SelectItem value="OTHER">Other</SelectItem>
                               </SelectContent>
@@ -1503,7 +1505,7 @@ export default function Contracts() {
                                 onClick={() => {
                                   // Pre-fill form with template data for editing
                                   templateForm.setValue('name', template.name);
-                                  templateForm.setValue('type', template.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OTHER' | 'RETAIL');
+                                  templateForm.setValue('type', template.type as 'EMPLOYMENT' | 'NDA' | 'CONTRACTOR' | 'OFFER_LETTER' | 'OTHER' | 'RETAIL');
                                   templateForm.setValue('territory', template.territory || '');
                                   templateForm.setValue('content', template.content);
                                   templateForm.setValue('variables', template.variables || []);
