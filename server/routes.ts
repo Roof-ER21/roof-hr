@@ -63,6 +63,7 @@ import employeePortalRoutes from './routes/employee-portal';
 import equipmentAgreementRoutes from './routes/equipment-agreements';
 import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
 import superAdminRoutes from './routes/super-admin';
+import ssoRoutes from './routes/sso';
 import emailPreferencesRoutes from './routes/email-preferences';
 import candidateImportLogsRoutes from './routes/candidate-import-logs';
 import aiEvaluationsRoutes from './routes/ai-evaluations';
@@ -6116,6 +6117,9 @@ export function registerRoutes(app: express.Application) {
 
   // Mount employee portal routes
   app.use(employeePortalRoutes);
+
+  // Mount OIDC SSO routes (dormant until SSO_OIDC_* env is configured)
+  app.use(ssoRoutes);
 
   // Mount equipment agreement routes
   app.use(equipmentAgreementRoutes);

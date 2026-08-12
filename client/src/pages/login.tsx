@@ -24,9 +24,18 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+const SSO_ERROR_MESSAGES: Record<string, string> = {
+  sso_failed: 'Google sign-in failed. Please try again or use your password.',
+  sso_domain: 'Only @theroofdocs.com Google accounts can sign in.',
+  sso_no_account: 'No Roof HR account exists for that Google email. Contact HR.',
+  sso_deactivated: 'This account has been deactivated.',
+};
+
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string>('');
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoCompleting, setSsoCompleting] = useState(false);
   const { login, isLoading, user, isInitialized } = useAuth();
   const navigate = useNavigate();
 
@@ -36,9 +45,43 @@ function Login() {
     const authError = urlParams.get('error');
 
     if (authError) {
-      setError('Authentication failed. Please try again.');
+      setError(SSO_ERROR_MESSAGES[authError] || 'Authentication failed. Please try again.');
       window.history.replaceState({}, '', window.location.pathname);
     }
+  }, []);
+
+  // Complete an SSO login: callback redirects here with #sso_token=<token>
+  useEffect(() => {
+    const match = window.location.hash.match(/sso_token=([^&]+)/);
+    if (!match) return;
+    const token = decodeURIComponent(match[1]);
+    window.history.replaceState({}, '', window.location.pathname);
+    setSsoCompleting(true);
+
+    (async () => {
+      try {
+        const response = await fetch('/api/auth/validate', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Session validation failed');
+        const validatedUser = await response.json();
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(validatedUser));
+        // Full reload so the auth context re-initializes from storage
+        window.location.replace('/dashboard');
+      } catch {
+        setSsoCompleting(false);
+        setError('Google sign-in failed. Please try again or use your password.');
+      }
+    })();
+  }, []);
+
+  // Show the Google button only when the server has SSO configured
+  useEffect(() => {
+    fetch('/api/auth/sso/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setSsoEnabled(!!data?.enabled))
+      .catch(() => {});
   }, []);
 
   // Redirect if already logged in
@@ -139,11 +182,33 @@ function Login() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading}
+                disabled={isLoading || ssoCompleting}
               >
                 {isLoading ? 'Signing In...' : 'Sign In'}
               </Button>
             </form>
+
+            {ssoEnabled && (
+              <div className="mt-4">
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-secondary-500">or</span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={ssoCompleting}
+                  onClick={() => { window.location.href = '/api/auth/sso/login'; }}
+                >
+                  {ssoCompleting ? 'Completing sign-in…' : 'Sign in with Google'}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
