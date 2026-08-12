@@ -23,7 +23,8 @@ import { brandedQrSvg, brandedQrDataUri } from './lib/brandedQr';
 import { DEFAULT_BRAND, sanitizeBrand, type BrandTokens } from '../shared/constants/brand';
 import { POSTER_SPECS, posterSpecById, sanitizePosterCopy } from '../shared/constants/poster-specs';
 import { llmRouter } from './services/llm/router';
-import { PTO_APPROVER_EMAILS, getPTOApproversForEmployee, getDepartmentApproverEntry, ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS, isCorePtoApprover } from '../shared/constants/roles';
+import { ADMIN_ROLES, MANAGER_ROLES, SUPER_ADMIN_EMAIL, isSourcer, isLeadSourcer, isExtendedSourcer, EXTENDED_SOURCER_EMAILS } from '../shared/constants/roles';
+import { getPTOApproversForEmployee, getDepartmentApproverEntry, isCorePtoApprover, getCorePtoApprovers } from './services/authzService';
 import { PTO_POLICY, getPtoAllocation } from '../shared/constants/pto-policy';
 import { ALL_HOLIDAYS } from '../shared/constants/holidays';
 import agentRoutes from './routes/agents';
@@ -64,6 +65,7 @@ import equipmentAgreementRoutes from './routes/equipment-agreements';
 import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
 import superAdminRoutes from './routes/super-admin';
 import ssoRoutes from './routes/sso';
+import authzRoutes from './routes/authz';
 import emailPreferencesRoutes from './routes/email-preferences';
 import candidateImportLogsRoutes from './routes/candidate-import-logs';
 import aiEvaluationsRoutes from './routes/ai-evaluations';
@@ -1947,7 +1949,7 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
 router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
   try {
     const currentUser = req.user!;
-    const isApprover = PTO_APPROVER_EMAILS.includes(currentUser.email?.toLowerCase() || '');
+    const isApprover = isCorePtoApprover(currentUser.email);
 
     const allPto = await storage.getAllPtoRequests().catch((err) => {
       console.error('[PTO Calendar] Failed to fetch PTO requests:', err.message);
@@ -2046,7 +2048,7 @@ router.get('/api/pto/calendar', requireAuth, async (req: any, res) => {
     if (req.body.employeeId && req.body.employeeId !== requestingUser.id) {
       // Check if requesting user is a manager or PTO approver
       const isManager = ADMIN_ROLES.includes(requestingUser.role) || MANAGER_ROLES.includes(requestingUser.role);
-      const isApprover = PTO_APPROVER_EMAILS.includes(requestingUser.email);
+      const isApprover = isCorePtoApprover(requestingUser.email);
 
       if (!isManager && !isApprover) {
         return res.status(403).json({
@@ -2596,7 +2598,7 @@ router.patch('/api/pto/:id/edit', requireAuth, async (req: any, res) => {
 
     const isOwner = currentRequest.employeeId === user.id;
     const isManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
-    const canApprove = PTO_APPROVER_EMAILS.includes(user.email);
+    const canApprove = isCorePtoApprover(user.email);
     if (!isOwner && !isManager) {
       return res.status(403).json({ error: 'You are not allowed to edit this PTO request' });
     }
@@ -2837,7 +2839,7 @@ router.post('/api/pto/:id/cancel', requireAuth, async (req: any, res) => {
     // Allow owner, managers, or PTO approvers to cancel
     const isOwner = currentRequest.employeeId === user.id;
     const isManager = ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role);
-    const isApprover = PTO_APPROVER_EMAILS.includes(user.email);
+    const isApprover = isCorePtoApprover(user.email);
 
     if (!isOwner && !isManager && !isApprover) {
       return res.status(403).json({ error: 'You can only cancel your own PTO request' });
@@ -3176,7 +3178,7 @@ router.patch('/api/pto/:id', requireAuth, async (req: any, res) => {
       try {
         const emailService = new EmailService();
         await emailService.initialize();
-        for (const approverEmail of PTO_APPROVER_EMAILS) {
+        for (const approverEmail of getCorePtoApprovers()) {
           const approver = await storage.getUserByEmail(approverEmail);
           if (approver) {
             const ptoEnabled = await isNotificationEnabled(approver.id, 'ptoNotifications');
@@ -6120,6 +6122,9 @@ export function registerRoutes(app: express.Application) {
 
   // Mount OIDC SSO routes (dormant until SSO_OIDC_* env is configured)
   app.use(ssoRoutes);
+
+  // Mount authorization-grant admin routes
+  app.use(authzRoutes);
 
   // Mount equipment agreement routes
   app.use(equipmentAgreementRoutes);

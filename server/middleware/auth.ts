@@ -11,9 +11,8 @@ import {
   isSystemAdmin,
   isAdmin,
   isManager,
-  canApprovePtoRequests,
-  PTO_APPROVER_EMAILS,
 } from '../../shared/constants/roles';
+import { canApprovePtoRequests } from '../services/authzService';
 
 export async function requireAuth(req: any, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace('Bearer ', '');

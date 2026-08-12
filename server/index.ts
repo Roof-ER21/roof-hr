@@ -335,6 +335,10 @@ app.use(auditTrail);
   // Run database migrations: legacy inline DDL first, then the tracked
   // file-based chain in migrations/ (see server/migrationRunner.ts)
   await runMigrations();
+
+  // Warm the authorization-grant cache (falls back to legacy constants until loaded)
+  const { initAuthz } = await import('./services/authzService');
+  initAuthz();
   await applyPendingMigrations();
 
   // Create admin user if not exists

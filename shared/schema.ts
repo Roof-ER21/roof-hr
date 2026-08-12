@@ -2519,6 +2519,23 @@ export const insertFeatureTogglesSchema = createInsertSchema(featureToggles).omi
   updatedAt: true,
 });
 
+// Authorization grants (migration 0008) — capability → principal, replaces
+// email-literal authority lists in shared/constants/roles.ts. AGENT principals
+// exist for explicit agent authority grants (never seeded, always deliberate).
+export const authzGrants = pgTable('authz_grants', {
+  id: text('id').primaryKey(),
+  capability: text('capability').notNull(),
+  principalType: text('principal_type').$type<'USER_EMAIL' | 'AGENT'>().notNull().default('USER_EMAIL'),
+  principal: text('principal').notNull(),
+  metadata: jsonb('metadata'),
+  enabled: boolean('enabled').notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type AuthzGrant = typeof authzGrants.$inferSelect;
+
 // System Audit Logs - Track all admin actions
 export const systemAuditLogs = pgTable('system_audit_logs', {
   id: text('id').primaryKey(),

@@ -2,7 +2,8 @@ import { db } from '../db';
 import { eq, and, inArray, gte } from 'drizzle-orm';
 import { ptoRequests, users, userEmailPreferences } from '../../shared/schema';
 import { EmailService } from '../email-service';
-import { MANAGER_ROLES, PTO_REMINDER_RECIPIENTS, PTO_DAILY_DIGEST_RECIPIENTS } from '../../shared/constants/roles';
+import { MANAGER_ROLES } from '../../shared/constants/roles';
+import { getPtoReminderRecipients, getPtoDailyDigestRecipients } from '../services/authzService';
 import { isNotificationEnabled } from '../services/notification-preferences';
 
 let isRunning = false;
@@ -161,7 +162,7 @@ export async function checkPTOReminders(): Promise<PTOReminderResult> {
     const emailToUserId = new Map(allUsers.map(u => [u.email.toLowerCase(), u.id]));
 
     const getRecipientsForDepartment = (department?: string, employeeEmail?: string): string[] => {
-      const recipients = new Set(PTO_REMINDER_RECIPIENTS.map((email) => email.toLowerCase()));
+      const recipients = new Set(getPtoReminderRecipients().map((email) => email.toLowerCase()));
       const key = department?.trim().toLowerCase();
       if (key && managersByDepartment.has(key)) {
         for (const email of managersByDepartment.get(key) || []) {
@@ -403,7 +404,7 @@ export async function sendDailyPTODigest(force = false): Promise<DailyDigestResu
     const emailToUserId = new Map(allUsers.map(u => [u.email.toLowerCase(), u.id]));
 
     let emailsSent = 0;
-    for (const recipientEmail of PTO_DAILY_DIGEST_RECIPIENTS) {
+    for (const recipientEmail of getPtoDailyDigestRecipients()) {
       try {
         const userId = emailToUserId.get(recipientEmail.toLowerCase());
         if (userId) {
