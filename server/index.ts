@@ -336,10 +336,12 @@ app.use(auditTrail);
   // file-based chain in migrations/ (see server/migrationRunner.ts)
   await runMigrations();
 
-  // Warm the authorization-grant cache (falls back to legacy constants until loaded)
+  await applyPendingMigrations();
+
+  // Warm the authorization-grant cache AFTER the file-based migrations that
+  // create authz_grants (falls back to legacy constants until loaded)
   const { initAuthz } = await import('./services/authzService');
   initAuthz();
-  await applyPendingMigrations();
 
   // Create admin user if not exists
   await createAdminUser();
