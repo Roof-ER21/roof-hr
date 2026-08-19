@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, ChevronLeft, Map, Sparkles } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -137,20 +137,13 @@ export function OnboardingTour() {
   const [currentStep, setCurrentStep] = useState(0);
   const [highlightedElement, setHighlightedElement] = useState<HTMLElement | null>(null);
   const navigate = useNavigate();
-  const [hasSeenTour, setHasSeenTour] = useState(false);
 
-  // Check if user has seen the tour
   useEffect(() => {
     const tourSeen = localStorage.getItem('onboarding-tour-completed');
     const tourDismissed = localStorage.getItem('onboarding-tour-dismissed');
-    
     if (!tourSeen && !tourDismissed) {
-      // Auto-start tour for new users
-      setTimeout(() => {
-        setIsActive(true);
-      }, 1500);
-    } else {
-      setHasSeenTour(true);
+      const timer = window.setTimeout(() => setIsActive(true), 1500);
+      return () => window.clearTimeout(timer);
     }
   }, []);
 
@@ -211,32 +204,12 @@ export function OnboardingTour() {
     localStorage.setItem('onboarding-tour-completed', 'true');
     setIsActive(false);
     setHighlightedElement(null);
-    setHasSeenTour(true);
-  };
-
-  const restartTour = () => {
-    setCurrentStep(0);
-    setIsActive(true);
-    localStorage.removeItem('onboarding-tour-dismissed');
   };
 
   const progress = ((currentStep + 1) / tourSteps.length) * 100;
   const step = tourSteps[currentStep];
 
   if (!isActive) {
-    // Show restart button for users who have seen the tour
-    if (hasSeenTour) {
-      return (
-        <button
-          onClick={restartTour}
-          className="fixed bottom-24 right-6 z-40 flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 border border-gray-200 dark:border-gray-700"
-          title="Restart Tour"
-        >
-          <Map className="h-4 w-4" />
-          <span className="text-sm font-medium">Tour Guide</span>
-        </button>
-      );
-    }
     return null;
   }
 
