@@ -66,6 +66,7 @@ import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
 import superAdminRoutes from './routes/super-admin';
 import ssoRoutes from './routes/sso';
 import authzRoutes from './routes/authz';
+import welcomeEmailRoutes from './routes/welcome-email';
 import emailPreferencesRoutes from './routes/email-preferences';
 import candidateImportLogsRoutes from './routes/candidate-import-logs';
 import aiEvaluationsRoutes from './routes/ai-evaluations';
@@ -6126,6 +6127,9 @@ export function registerRoutes(app: express.Application) {
   // Mount authorization-grant admin routes
   app.use(authzRoutes);
 
+  // Mount welcome-email content admin routes (attachments + editable body)
+  app.use(welcomeEmailRoutes);
+
   // Mount equipment agreement routes
   app.use(equipmentAgreementRoutes);
 
@@ -6360,7 +6364,7 @@ export function registerRoutes(app: express.Application) {
       const parsedStartDate = startDate ? new Date(startDate) : undefined;
 
       const emailService = new EmailService();
-      const { subject, html } = emailService.renderWelcomeEmailContent(
+      const { subject, html } = await emailService.renderWelcomeEmailContent(
         { firstName, lastName, email, position },
         'TRD2026!', // mirrors the real tempPassword used at hire time (routes.ts ~3880)
         {

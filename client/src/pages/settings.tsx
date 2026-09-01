@@ -21,7 +21,8 @@ import {
   User,
   Cloud,
   FileBarChart,
-  Bell
+  Bell,
+  MailPlus
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
@@ -33,6 +34,7 @@ import GoogleIntegration from './GoogleIntegration';
 import ScheduledReports from './ScheduledReports';
 import { AvailabilityManager } from '@/components/settings/availability-manager';
 import { EmailPreferences } from '@/components/settings/email-preferences';
+import WelcomeEmailManager from '@/components/admin/welcome-email-manager';
 
 const companySettingsSchema = z.object({
   companyName: z.string().min(1),
@@ -215,6 +217,11 @@ function Settings() {
     updateTimezoneMutation.mutate(selectedTimezone);
   };
 
+  // /settings?tab=welcome-email and friends: the app already redirects some
+  // routes here with a tab name, so honor it instead of always opening Personal.
+  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+  const [activeTab, setActiveTab] = useState(requestedTab || 'personal');
+
   if (isLoading) {
     return <div className="p-8">Loading settings...</div>;
   }
@@ -228,7 +235,7 @@ function Settings() {
         </p>
       </div>
 
-      <Tabs defaultValue="personal" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex flex-wrap">
           <TabsTrigger value="personal">
             <User className="w-4 h-4 mr-2" />
@@ -255,6 +262,10 @@ function Settings() {
               <TabsTrigger value="reports">
                 <FileBarChart className="w-4 h-4 mr-2" />
                 Reports
+              </TabsTrigger>
+              <TabsTrigger value="welcome-email">
+                <MailPlus className="w-4 h-4 mr-2" />
+                Welcome Email
               </TabsTrigger>
             </>
           )}
@@ -483,6 +494,10 @@ function Settings() {
 
             <TabsContent value="reports" className="space-y-6">
               <ScheduledReports embedded />
+            </TabsContent>
+
+            <TabsContent value="welcome-email" className="space-y-6">
+              <WelcomeEmailManager />
             </TabsContent>
           </>
         )}
