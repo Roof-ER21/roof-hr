@@ -1908,16 +1908,18 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
   try {
     let ptoRequests;
     // Use role groups to check for admin/manager access (includes TRUE_ADMIN, SYSTEM_ADMIN, HR_ADMIN, etc.)
-    // Core PTO approvers are named by email, not by role, so the role check alone
-    // could hand an approver only their own requests and leave them unable to see
-    // the ones they are supposed to act on.
-    const isAdminOrManager = ADMIN_ROLES.includes(req.user.role)
-      || MANAGER_ROLES.includes(req.user.role)
-      || isCorePtoApprover(req.user.email);
+    const isAdminOrManager = ADMIN_ROLES.includes(req.user.role) || MANAGER_ROLES.includes(req.user.role);
     const deptApprover = getDepartmentApproverEntry(req.user.email);
     const isDeptApprover = !!deptApprover && (!req.user.department || deptApprover.department.toLowerCase() === req.user.department.toLowerCase());
 
-    if (isAdminOrManager) {
+    // Core PTO approvers are named by email rather than by role, so the role check
+    // alone could hand an approver only their own requests and leave them unable to
+    // see what they are supposed to act on. Scoped deliberately: an approver who
+    // ALSO has a department entry (Greg, Production) keeps that narrower scope --
+    // being on the core list must not quietly widen them to company-wide.
+    const isCoreApproverWithoutDepartmentScope = isCorePtoApprover(req.user.email) && !deptApprover;
+
+    if (isAdminOrManager || isCoreApproverWithoutDepartmentScope) {
       ptoRequests = await storage.getAllPtoRequests().catch((err) => {
         console.error('[PTO] Failed to fetch all PTO requests:', err.message);
         return [];
