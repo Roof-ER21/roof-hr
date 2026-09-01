@@ -1908,7 +1908,12 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
   try {
     let ptoRequests;
     // Use role groups to check for admin/manager access (includes TRUE_ADMIN, SYSTEM_ADMIN, HR_ADMIN, etc.)
-    const isAdminOrManager = ADMIN_ROLES.includes(req.user.role) || MANAGER_ROLES.includes(req.user.role);
+    // Core PTO approvers are named by email, not by role, so the role check alone
+    // could hand an approver only their own requests and leave them unable to see
+    // the ones they are supposed to act on.
+    const isAdminOrManager = ADMIN_ROLES.includes(req.user.role)
+      || MANAGER_ROLES.includes(req.user.role)
+      || isCorePtoApprover(req.user.email);
     const deptApprover = getDepartmentApproverEntry(req.user.email);
     const isDeptApprover = !!deptApprover && (!req.user.department || deptApprover.department.toLowerCase() === req.user.department.toLowerCase());
 

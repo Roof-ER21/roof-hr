@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/lib/auth';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
-import { employeeGetsPto, ADMIN_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
+import { employeeGetsPto, ADMIN_ROLES, MANAGER_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
 import { PTO_POLICY } from '@shared/constants/pto-policy';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -61,6 +61,10 @@ function PTO() {
   const [addingDepartment, setAddingDepartment] = useState(false);
   // Denial dialog state
   const [denyingRequestId, setDenyingRequestId] = useState<string | null>(null);
+  // Cancelling someone else's request goes through a confirmation step; a
+  // manager now sees every row, and a misclick would end another person's
+  // approved time off.
+  const [cancellingRequest, setCancellingRequest] = useState<any | null>(null);
   const [denyNotes, setDenyNotes] = useState('');
   // Status filter for PTO requests
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DENIED'>('PENDING');
@@ -112,8 +116,14 @@ function PTO() {
   const isDepartmentApprover = !!deptApproverEntry;
   const showAnalytics = canApprovePto;
 
-  // Check if user is a manager/admin (to show full list vs personal list)
-  const isManager = user?.role && ['ADMIN', 'SYSTEM_ADMIN', 'SUPER_ADMIN', 'REGIONAL_MANAGER', 'MANAGER'].includes(user.role);
+  // Check if user is a manager/admin (to show full list vs personal list).
+  // Uses the same role groups the server uses in GET /api/pto and the cancel and
+  // edit handlers. The inline list this replaced had drifted: it invented
+  // SUPER_ADMIN and REGIONAL_MANAGER and left out HR_ADMIN, GENERAL_MANAGER and
+  // TERRITORY_MANAGER, so those roles were sent everyone's requests by the API
+  // and then shown no buttons to act on them.
+  const isManager = !!user?.role
+    && (ADMIN_ROLES.includes(user.role) || MANAGER_ROLES.includes(user.role));
   const tabsGridClass = isAdmin
     ? (showAnalytics ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4')
     : (showAnalytics ? 'grid-cols-2' : 'grid-cols-1');
@@ -604,7 +614,7 @@ function PTO() {
   });
 
   const cancelPTOMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id }: { id: string; employeeName?: string }) => {
       const response = await fetch(`/api/pto/${id}/cancel`, {
         method: 'POST',
         headers: {
@@ -618,11 +628,13 @@ function PTO() {
       }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/pto'] });
       toast({
         title: 'Cancelled',
-        description: 'Your PTO request has been cancelled.'
+        description: variables.employeeName
+          ? `${variables.employeeName}'s PTO request has been cancelled and the days returned to their balance.`
+          : 'Your PTO request has been cancelled.'
       });
     },
     onError: (error: any) => {
@@ -685,7 +697,19 @@ function PTO() {
   };
 
   const handleCancel = (id: string) => {
-    cancelPTOMutation.mutate(id);
+    cancelPTOMutation.mutate({ id });
+  };
+
+  const confirmCancelForEmployee = () => {
+    if (!cancellingRequest) return;
+    const employee = getUserById(cancellingRequest.employeeId);
+    cancelPTOMutation.mutate({
+      id: cancellingRequest.id,
+      employeeName: employee
+        ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'That employee'
+        : 'That employee',
+    });
+    setCancellingRequest(null);
   };
 
   const handleEditRequest = (request: any) => {
@@ -2084,11 +2108,23 @@ function PTO() {
                             </Button>
                           </div>
                         )}
-                        {isOwnRequest && ['PENDING', 'APPROVED'].includes(request.status) && (
+                        {/* Mirrors the server's own check in POST /api/pto/:id/cancel:
+                            owner, manager role, or a CORE approver. It used to be
+                            owner-only, so approvers had the permission and no button
+                            and had to ask someone else to do it for them.
+                            Deliberately isCoreApprover and not canApprovePto: the
+                            server does not let department approvers cancel, so
+                            canApprovePto would render a button that 403s. */}
+                        {['PENDING', 'APPROVED'].includes(request.status)
+                          && (isOwnRequest || isManager || isCoreApprover) && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleCancel(request.id)}
+                            onClick={() =>
+                              isOwnRequest
+                                ? handleCancel(request.id)
+                                : setCancellingRequest(request)
+                            }
                             disabled={cancelPTOMutation.isPending}
                           >
                             <X className="w-4 h-4 mr-1" />
@@ -3218,6 +3254,61 @@ function PTO() {
   </Tabs>
 
       {/* Denial Notes Dialog */}
+      <Dialog open={!!cancellingRequest} onOpenChange={(open) => !open && setCancellingRequest(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <X className="w-5 h-5 text-red-500" />
+              Cancel PTO Request
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {cancellingRequest && (() => {
+              const employee = getUserById(cancellingRequest.employeeId);
+              const name = employee
+                ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'this employee'
+                : 'this employee';
+              return (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Cancel {name}'s {cancellingRequest.type?.toLowerCase() || 'PTO'} request for{' '}
+                    <span className="font-medium">
+                      {cancellingRequest.startDate}
+                      {cancellingRequest.endDate && cancellingRequest.endDate !== cancellingRequest.startDate
+                        ? ` to ${cancellingRequest.endDate}`
+                        : ''}
+                    </span>
+                    ?
+                  </p>
+                  {cancellingRequest.status === 'APPROVED' && (
+                    <p className="text-sm text-muted-foreground">
+                      The {cancellingRequest.days} day{cancellingRequest.days === 1 ? '' : 's'} will be
+                      returned to their balance.
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    The request stays in the list marked CANCELLED, noted as cancelled by you.
+                  </p>
+                </>
+              );
+            })()}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCancellingRequest(null)}>
+                Keep it
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmCancelForEmployee}
+                disabled={cancelPTOMutation.isPending}
+              >
+                <X className="w-4 h-4 mr-1" />
+                {cancelPTOMutation.isPending ? 'Cancelling...' : 'Cancel Request'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!denyingRequestId} onOpenChange={(open) => !open && setDenyingRequestId(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
