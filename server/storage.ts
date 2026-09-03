@@ -1783,9 +1783,17 @@ class DrizzleStorage implements IStorage {
   }
   
   // Email Log Methods
+  // The caller's id WINS when it supplies one. `{ ...data, id }` put the fresh
+  // uuid after the spread, so it silently discarded the id the email service
+  // was holding; every later updateEmailLog(emailLogId, …) then addressed a
+  // row that did not exist. That is why 8,462 rows sat at PENDING from
+  // 2026-01-23 onward and sent_at was never once written in the whole history
+  // of the table — the mail was going out, the log just never heard about it.
   async createEmailLog(data: any): Promise<EmailLog> {
-    const id = uuidv4();
-    const [log] = await db.insert(emailLogs).values({ ...data, id }).returning();
+    const [log] = await db
+      .insert(emailLogs)
+      .values({ ...data, id: data?.id ?? uuidv4() })
+      .returning();
     return log;
   }
   
@@ -1798,6 +1806,15 @@ class DrizzleStorage implements IStorage {
       .set(data)
       .where(eq(emailLogs.id, id))
       .returning();
+    // An update that matched nothing is how this broke for seven months: the
+    // callers wrap this in try/catch, and a 0-row update throws nothing, so
+    // every SENT and FAILED write vanished without a sound. Say so.
+    if (!log) {
+      console.error(
+        `[EmailLog] update matched no row for id ${id} — the status was NOT recorded. ` +
+          `Treat email_logs as incomplete until this is fixed.`,
+      );
+    }
     return log;
   }
 
