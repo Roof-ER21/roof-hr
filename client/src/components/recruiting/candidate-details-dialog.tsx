@@ -23,6 +23,7 @@ import { DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { InterviewQuestionsDialog } from './interview-questions-dialog';
 import { MANAGER_ROLES, ADMIN_ROLES } from '@shared/constants/roles';
+import { getTerritoryStyle } from '@/lib/territory-style';
 
 interface CandidateNote {
   id: string;
@@ -665,22 +666,9 @@ export function CandidateDetailsDialog({
   const territory = candidate?.territory;
   const territoryName = territory?.name;
   const territoryRegion = territory?.region;
-  const territoryShort = territoryName?.includes('DMV')
-    ? 'DMV'
-    : territoryName?.includes('PA')
-    ? 'PA'
-    : territoryName?.includes('Richmond')
-    ? 'RA'
-    : territoryName;
-  const territoryBadgeClass = territoryName
-    ? territoryName.includes('DMV')
-      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-      : territoryName.includes('PA')
-        ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-        : territoryName.includes('Richmond')
-          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
-          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-    : '';
+  const territoryStyle = getTerritoryStyle(territoryName);
+  const territoryShort = territoryStyle.short || territoryName;
+  const territoryBadgeClass = territoryName ? territoryStyle.badgeClass : '';
 
   if (!candidate) return null;
 

@@ -1,5 +1,5 @@
 /**
- * Refresh contract templates for Richmond/DMV/PA and remove old templates.
+ * Refresh contract templates for Richmond/DMV/PHI/PITT and remove old templates.
  *
  * Run with:
  * DATABASE_URL="postgresql://postgres:...@hopper.proxy.rlwy.net:18847/railway" \
@@ -29,10 +29,17 @@ const SOURCE_TEMPLATES = [
     territoryMatch: 'dmv',
   },
   {
-    name: 'Contractor Agreement - PA',
+    name: 'Contractor Agreement - PHI',
     sourceFile: 'Roof Docs Contract - Combined with Commission Addendum.pdf',
     fileName: 'pa_contract_with_commission_addendum.pdf',
-    territoryMatch: 'pa',
+    territoryMatch: 'phi',
+  },
+  {
+    // Pittsburgh is Pennsylvania too, so it signs the same PA-law contract.
+    name: 'Contractor Agreement - PITT',
+    sourceFile: 'Roof Docs Contract - Combined with Commission Addendum.pdf',
+    fileName: 'pa_contract_with_commission_addendum.pdf',
+    territoryMatch: 'pitt',
   },
 ];
 
@@ -45,7 +52,7 @@ const TEMPLATE_VARIABLES = [
 
 async function refreshTemplates() {
   console.log('==============================================');
-  console.log('Refreshing contract templates (Richmond/DMV/PA)');
+  console.log('Refreshing contract templates (Richmond/DMV/PHI/PITT)');
   console.log('==============================================');
 
   await fs.mkdir(TEMPLATE_DIR, { recursive: true });

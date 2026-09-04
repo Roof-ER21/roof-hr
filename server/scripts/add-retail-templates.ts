@@ -166,7 +166,7 @@ export async function addRetailTemplates() {
 
     // Update PA templates
     const paTemplates = existingTemplates.filter(t =>
-      t.territory === 'PA' || t.name?.toLowerCase().includes('pa ')
+      t.territory === 'PA' || t.name?.toLowerCase().includes('pa ') || t.name?.toLowerCase().includes('phi') || t.name?.toLowerCase().includes('pitt')
     );
     for (const template of paTemplates) {
       await storage.updateContractTemplate(template.id, {

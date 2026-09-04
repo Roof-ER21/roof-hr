@@ -1058,7 +1058,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                         }}
                         className="rounded border-gray-300"
                       />
-                      <label htmlFor="loc-pa" className="text-sm font-medium">PA Office</label>
+                      <label htmlFor="loc-pa" className="text-sm font-medium">PHI Office</label>
                     </div>
 
                     <div className="flex items-center space-x-2">

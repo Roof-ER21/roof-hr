@@ -2,6 +2,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { getTerritoryStyle } from '@/lib/territory-style';
 import {
   Mail,
   Calendar,
@@ -192,18 +193,10 @@ export function DraggableCandidateCard({
           {/* Territory badge */}
           {candidate.territory && (
             <Badge
-              className={`text-[9px] px-1 py-0 flex-shrink-0 ${
-                candidate.territory.name.includes('DMV') ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
-                candidate.territory.name.includes('PA') ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
-                candidate.territory.name.includes('Richmond') ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' :
-                'bg-gray-100 text-gray-700 dark:bg-gray-800/40 dark:text-gray-300'
-              }`}
+              className={`text-[9px] px-1 py-0 flex-shrink-0 ${getTerritoryStyle(candidate.territory.name).badgeClass}`}
               title={`Territory: ${candidate.territory.name} (${candidate.territory.region})`}
             >
-              {candidate.territory.name.includes('DMV') ? 'DMV' :
-               candidate.territory.name.includes('PA') ? 'PA' :
-               candidate.territory.name.includes('Richmond') ? 'RA' :
-               candidate.territory.name}
+              {getTerritoryStyle(candidate.territory.name).short || candidate.territory.name}
             </Badge>
           )}
           {/* Sourcer color dot - gray if unassigned */}

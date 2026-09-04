@@ -54,6 +54,7 @@ import { useDropzone } from 'react-dropzone';
 import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
 import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
+import { getTerritoryStyle } from '@/lib/territory-style';
 
 // Droppable Column Component
 function DroppableColumn({ status, children, disabled = false }: { status: string; children: React.ReactNode; disabled?: boolean }) {
@@ -335,11 +336,6 @@ interface Territory {
   isActive: boolean;
 }
 
-const TERRITORY_COLORS: Record<string, { bg: string; text: string; short: string }> = {
-  'DMV Territory': { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', short: 'DMV' },
-  'PA Territory': { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-300', short: 'PA' },
-  'Richmond Territory': { bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-700 dark:text-purple-300', short: 'RA' },
-};
 
 // Resume Uploader Content Component
 function ResumeUploaderContent() {
@@ -1000,14 +996,13 @@ function ResumeUploaderContent() {
                 </SelectTrigger>
                 <SelectContent>
                   {territories?.map((territory) => {
-                    const colors = TERRITORY_COLORS[territory.name] || { bg: 'bg-gray-100', text: 'text-gray-700', short: territory.name };
-                    const colorHex = territory.name.includes('DMV') ? '#3B82F6' : territory.name.includes('PA') ? '#22C55E' : '#A855F7';
+                    const { short, hex: colorHex } = getTerritoryStyle(territory.name);
                     return (
                       <SelectItem key={territory.id} value={territory.id}>
                         <div className="flex items-center gap-2">
                           <span className="inline-block w-2 h-2 rounded-full"
                                 style={{ backgroundColor: colorHex }} />
-                          <span>{colors.short || territory.name}</span>
+                          <span>{short || territory.name}</span>
                           <span className="text-muted-foreground text-xs">({territory.region})</span>
                         </div>
                       </SelectItem>
@@ -2194,8 +2189,7 @@ export default function EnhancedRecruiting() {
                 <SelectContent>
                   <SelectItem value="ALL">All Territories</SelectItem>
                   {territories.map((territory) => {
-                    const colors = TERRITORY_COLORS[territory.name] || { bg: 'bg-gray-100', text: 'text-gray-700', short: territory.name };
-                    const colorHex = territory.name.includes('DMV') ? '#3B82F6' : territory.name.includes('PA') ? '#22C55E' : '#A855F7';
+                    const { short, hex: colorHex } = getTerritoryStyle(territory.name);
                     return (
                       <SelectItem key={territory.id} value={territory.id}>
                         <div className="flex items-center gap-2">
@@ -2203,7 +2197,7 @@ export default function EnhancedRecruiting() {
                             className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
                             style={{ backgroundColor: colorHex }}
                           />
-                          <span>{colors.short || territory.name}</span>
+                          <span>{short || territory.name}</span>
                           <span className="text-muted-foreground text-xs">({territory.region})</span>
                         </div>
                       </SelectItem>

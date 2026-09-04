@@ -17,7 +17,7 @@ import { Mail, Loader2, Users } from 'lucide-react';
 
 const OFFICE_LOCATIONS = {
   DMV: { label: 'DMV (Vienna, VA)', address: '8100 Boone Blvd, Vienna, VA 22182, Suite 400', meetPerson: 'Reese Samala' },
-  PA: { label: 'PA (Chesterbrook, PA)', address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
+  PA: { label: 'PHI (Chesterbrook, PA)', address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
   RICHMOND: { label: 'Richmond (Glen Allen, VA)', address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
 } as const;
 

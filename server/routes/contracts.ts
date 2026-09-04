@@ -1567,7 +1567,7 @@ router.post('/api/admin/contracts/add-retail-templates', requireAuth, async (req
 
     // Update PA templates
     const paTemplates = existingTemplates.filter(t =>
-      t.territory === 'PA' || (t.name?.toLowerCase().includes('pa ') || t.name?.toLowerCase().includes('pennsylvania'))
+      t.territory === 'PA' || (t.name?.toLowerCase().includes('pa ') || t.name?.toLowerCase().includes('phi') || t.name?.toLowerCase().includes('pitt') || t.name?.toLowerCase().includes('pennsylvania'))
     );
     for (const template of paTemplates) {
       await storage.updateContractTemplate(template.id, {

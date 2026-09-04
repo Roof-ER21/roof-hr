@@ -29,7 +29,7 @@ async function seedContractTemplates() {
       t.name?.toLowerCase().includes('richmond')
     );
     const paTerritory = allTerritories.find(t =>
-      t.name?.toLowerCase().includes('pa')
+      t.name?.toLowerCase().includes('phi') || t.name?.toLowerCase().includes('pa ')
     );
 
     console.log('\nMatched territories:');
@@ -137,7 +137,7 @@ Signature: _________________________________
       },
       {
         id: randomUUID(),
-        name: 'Employment Agreement - PA Territory',
+        name: 'Employment Agreement - PHI Territory',
         type: 'EMPLOYMENT' as const,
         territory: paTerritory?.id || null,
         content: employmentAgreementContent,
