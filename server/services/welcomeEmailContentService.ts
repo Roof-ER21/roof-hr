@@ -505,19 +505,19 @@ export async function restoreAttachmentVersion(
  * Tokens an editable body may use. Anything not in this list is left alone, so
  * a stray `{{...}}` in pasted content never silently becomes an empty string.
  */
-export const TEMPLATE_TOKENS: { token: string; description: string }[] = [
-  { token: 'firstName', description: "New hire's first name" },
-  { token: 'lastName', description: "New hire's last name" },
-  { token: 'fullName', description: 'First and last name' },
-  { token: 'position', description: 'Position they were hired for' },
-  { token: 'startDate', description: 'Start date, e.g. Monday, September 8th' },
-  { token: 'startTime', description: 'Report time, e.g. 10am' },
-  { token: 'officeAddress', description: 'Address of the office they report to' },
-  { token: 'meetPerson', description: 'Who they meet on day one' },
-  { token: 'temporaryPassword', description: 'Temporary HR portal password (usually unused)' },
-  { token: 'equipmentChecklist', description: 'Equipment checklist block, empty when turned off' },
-  { token: 'attachmentsBlock', description: 'Full "I have attached..." paragraph; disappears when nothing is attached' },
-  { token: 'attachmentList', description: 'Just the attachment names, one per line' },
+export const TEMPLATE_TOKENS: { token: string; label: string; description: string }[] = [
+  { token: 'firstName', label: 'First name', description: "New hire's first name" },
+  { token: 'lastName', label: 'Last name', description: "New hire's last name" },
+  { token: 'fullName', label: 'Full name', description: 'First and last name' },
+  { token: 'position', label: 'Position', description: 'Position they were hired for' },
+  { token: 'startDate', label: 'Start date', description: 'Start date, e.g. Monday, September 8th' },
+  { token: 'startTime', label: 'Start time', description: 'Report time, e.g. 10am' },
+  { token: 'officeAddress', label: 'Office address', description: 'Address of the office they report to' },
+  { token: 'meetPerson', label: 'Who they meet', description: 'Who they meet on day one' },
+  { token: 'temporaryPassword', label: 'Temporary password', description: 'Temporary HR portal password (usually unused)' },
+  { token: 'equipmentChecklist', label: 'Equipment checklist', description: 'Equipment checklist section, empty when turned off' },
+  { token: 'attachmentsBlock', label: 'Attached documents paragraph', description: 'The "I have attached..." paragraph; disappears when nothing is attached' },
+  { token: 'attachmentList', label: 'List of attachments', description: 'Just the attachment names, one per line' },
 ];
 
 export type TemplateVars = Record<string, string>;

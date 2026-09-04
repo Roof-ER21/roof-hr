@@ -44,8 +44,10 @@ import {
   Undo2,
   FileText,
   Info,
+  Sparkles,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+import TokenEditor from '@/components/admin/token-editor';
 
 // ---------------------------------------------------------------------------
 // Types + helpers
@@ -99,6 +101,7 @@ interface TemplateResponse {
 
 interface TokenDoc {
   token: string;
+  label: string;
   description: string;
 }
 
@@ -168,8 +171,8 @@ export default function WelcomeEmailManager() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Welcome Email</h2>
         <p className="text-sm text-muted-foreground">
-          What a new hire receives on day one. Changes take effect on the next welcome email sent —
-          no deploy needed.
+          The email every new hire receives, and the documents that come with it. Anything you
+          change here goes out with the next welcome email.
         </p>
       </div>
 
@@ -672,10 +675,10 @@ function BodyCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Email body</CardTitle>
+        <CardTitle>The email</CardTitle>
         <CardDescription>
-          Two versions go out depending on the hire: sales hires get the insurance email, retail
-          hires get the retail one. Edit either.
+          There are two versions: sales hires get the Insurance / Sales email, retail hires get
+          the Retail Division one. Pick a tab to edit that version.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -700,6 +703,7 @@ function BodyEditor({ variant }: { variant: Variant }) {
   const [subject, setSubject] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [instruction, setInstruction] = useState('');
   const [preview, setPreview] = useState<{ subject: string; html: string; attachmentLabels: string[] } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -737,7 +741,7 @@ function BodyEditor({ variant }: { variant: Variant }) {
     onSuccess: () => {
       invalidate();
       setDirty(false);
-      toast({ title: 'Saved', description: 'The next welcome email will use this version.' });
+      toast({ title: 'Saved', description: 'From now on, new hires get this version.' });
     },
     onError: (err: Error) => toast({ title: 'Could not save', description: err.message, variant: 'destructive' }),
   });
@@ -747,8 +751,8 @@ function BodyEditor({ variant }: { variant: Variant }) {
     onSuccess: () => {
       invalidate();
       toast({
-        title: 'Back to the built-in email',
-        description: 'Your edits are kept in history and can be restored.',
+        title: 'Back to the standard email',
+        description: 'Your edited version is kept in History if you want it back.',
       });
     },
     onError: (err: Error) => toast({ title: 'Could not switch back', description: err.message, variant: 'destructive' }),
@@ -761,7 +765,33 @@ function BodyEditor({ variant }: { variant: Variant }) {
         { method: 'POST', body: JSON.stringify({ variant, draftSubject: subject, draftBodyHtml: bodyHtml }) },
       ),
     onSuccess: (result) => setPreview(result),
-    onError: (err: Error) => toast({ title: 'Could not render preview', description: err.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Could not show the preview', description: err.message, variant: 'destructive' }),
+  });
+
+  // "Make the start time bold and add a line about parking" → the AI rewrites
+  // the draft; nothing is saved until the person presses Save.
+  const askForChange = useMutation({
+    mutationFn: () =>
+      apiRequest<{ subject: string; bodyHtml: string; droppedTokens: string[] }>(
+        `/api/welcome-email/templates/${variant}/ai-edit`,
+        { method: 'POST', body: JSON.stringify({ subject, bodyHtml, instruction }) },
+      ),
+    onSuccess: (result) => {
+      setSubject(result.subject);
+      setBodyHtml(result.bodyHtml);
+      setDirty(true);
+      setInstruction('');
+      const dropped = result.droppedTokens
+        .map((t) => tokens.find((k) => k.token === t)?.label ?? t)
+        .join(', ');
+      toast({
+        title: 'Change made',
+        description: dropped
+          ? `Check it over, then press Save. Note: the ${dropped} placeholder was removed.`
+          : 'Check it over, then press Save. Nothing is sent until you do.',
+      });
+    },
+    onError: (err: Error) => toast({ title: 'Could not make that change', description: err.message, variant: 'destructive' }),
   });
 
   const unknownTokens = useMemo(() => {
@@ -778,33 +808,67 @@ function BodyEditor({ variant }: { variant: Variant }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {data?.usingBuiltIn ? (
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            This email is still the version built into the app. What you see below is that text —
-            edit it and save to take it over.
+            This is the standard welcome email. Change anything below and press Save, and new
+            hires will get your version from then on.
           </AlertDescription>
         </Alert>
       ) : (
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            Edited version v{data?.saved?.version} is live, saved{' '}
+            Your edited version is in use, saved{' '}
             {data?.saved ? formatWhen(data.saved.updatedAt) : ''}
             {data?.saved?.updatedBy ? ` by ${data.saved.updatedBy}` : ''}.
           </AlertDescription>
         </Alert>
       )}
 
+      <div className="rounded-lg border bg-muted/30 p-4">
+        <Label htmlFor={`ask-${variant}`} className="flex items-center gap-2 text-base">
+          <Sparkles className="h-4 w-4 text-purple-600" />
+          Want something changed? Just say it.
+        </Label>
+        <p className="mb-2 mt-1 text-sm text-muted-foreground">
+          For example: &ldquo;Make the start time bold&rdquo;, &ldquo;Add a line saying parking is behind
+          the building&rdquo;, or &ldquo;Sound a bit warmer&rdquo;. The change appears below for you to
+          check before saving.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Textarea
+            id={`ask-${variant}`}
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            placeholder="Describe the change in your own words…"
+            rows={2}
+            className="bg-white"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && instruction.trim()) askForChange.mutate();
+            }}
+          />
+          <Button
+            onClick={() => askForChange.mutate()}
+            disabled={askForChange.isPending || !instruction.trim()}
+            className="sm:self-end"
+          >
+            {askForChange.isPending ? 'Working…' : 'Make the change'}
+          </Button>
+        </div>
+      </div>
+
       <div className="space-y-2">
-        <Label htmlFor={`subject-${variant}`}>Subject</Label>
-        <Input
+        <Label htmlFor={`subject-${variant}`}>Subject line</Label>
+        <TokenEditor
           id={`subject-${variant}`}
+          singleLine
           value={subject}
-          onChange={(e) => {
-            setSubject(e.target.value);
+          tokens={tokens}
+          onChange={(v) => {
+            setSubject(v);
             setDirty(true);
           }}
         />
@@ -812,51 +876,34 @@ function BodyEditor({ variant }: { variant: Variant }) {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor={`body-${variant}`}>Body (HTML)</Label>
+          <Label htmlFor={`body-${variant}`}>Email</Label>
           {dirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
         </div>
-        <Textarea
+        <p className="text-xs text-muted-foreground">
+          Click anywhere in the email and type. The blue tags fill in automatically for each new
+          hire &mdash; use &ldquo;Insert&rdquo; below the email to add one.
+        </p>
+        <TokenEditor
           id={`body-${variant}`}
           value={bodyHtml}
-          onChange={(e) => {
-            setBodyHtml(e.target.value);
+          tokens={tokens}
+          onChange={(v) => {
+            setBodyHtml(v);
             setDirty(true);
           }}
-          rows={22}
-          className="font-mono text-xs"
-          spellCheck={false}
         />
       </div>
 
       {unknownTokens.length > 0 && (
         <Alert variant="destructive">
           <AlertDescription>
-            Unknown placeholder{unknownTokens.length > 1 ? 's' : ''}:{' '}
-            {unknownTokens.map((t) => `{{${t}}}`).join(', ')}. These will be sent to the new hire
-            exactly as written.
+            {unknownTokens.length > 1 ? 'These red tags are' : 'This red tag is'} not something we
+            can fill in: {unknownTokens.map((t) => `{{${t}}}`).join(', ')}. The new hire would see
+            {unknownTokens.length > 1 ? ' them' : ' it'} exactly like that, so please remove
+            {unknownTokens.length > 1 ? ' them' : ' it'}.
           </AlertDescription>
         </Alert>
       )}
-
-      <div>
-        <p className="mb-2 text-sm font-medium">Placeholders you can use</p>
-        <div className="flex flex-wrap gap-2">
-          {tokens.map((t) => (
-            <button
-              key={t.token}
-              type="button"
-              title={t.description}
-              className="rounded border bg-muted/50 px-2 py-1 font-mono text-xs hover:bg-muted"
-              onClick={() => {
-                navigator.clipboard?.writeText(`{{${t.token}}}`);
-                toast({ title: `Copied {{${t.token}}}`, description: t.description });
-              }}
-            >
-              {`{{${t.token}}}`}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <Separator />
 
@@ -879,23 +926,23 @@ function BodyEditor({ variant }: { variant: Variant }) {
               setSubject(data.builtIn.subject);
               setBodyHtml(data.builtIn.bodyHtml);
               setDirty(true);
-              toast({ title: 'Loaded the built-in text', description: 'Nothing is saved until you press Save.' });
+              toast({ title: 'Standard email loaded', description: 'Nothing is saved until you press Save.' });
             }}
           >
-            Load built-in text
+            Start over from the standard email
           </Button>
         )}
         {!data?.usingBuiltIn && (
           <Button
             variant="ghost"
             onClick={() => {
-              if (window.confirm('Go back to the email built into the app? Your edits stay in history.')) {
+              if (window.confirm('Go back to the standard email? Your edited version stays in History.')) {
                 useBuiltIn.mutate();
               }
             }}
           >
             <Undo2 className="mr-1 h-4 w-4" />
-            Use the built-in email
+            Go back to the standard email
           </Button>
         )}
       </div>
@@ -905,7 +952,7 @@ function BodyEditor({ variant }: { variant: Variant }) {
           <DialogHeader>
             <DialogTitle>Preview</DialogTitle>
             <DialogDescription>
-              Rendered with sample details for a new hire named Alex Sample.
+              This is what a new hire named Alex Sample would receive.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

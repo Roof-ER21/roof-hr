@@ -21,9 +21,9 @@ import {
   User,
   Cloud,
   FileBarChart,
-  Bell,
-  MailPlus
+  Bell
 } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,7 +34,6 @@ import GoogleIntegration from './GoogleIntegration';
 import ScheduledReports from './ScheduledReports';
 import { AvailabilityManager } from '@/components/settings/availability-manager';
 import { EmailPreferences } from '@/components/settings/email-preferences';
-import WelcomeEmailManager from '@/components/admin/welcome-email-manager';
 
 const companySettingsSchema = z.object({
   companyName: z.string().min(1),
@@ -222,6 +221,11 @@ function Settings() {
   const requestedTab = new URLSearchParams(window.location.search).get('tab');
   const [activeTab, setActiveTab] = useState(requestedTab || 'personal');
 
+  // The welcome email moved to Recruiting → Email Templates (2026-09-04).
+  if (requestedTab === 'welcome-email') {
+    return <Navigate to="/email-templates" replace />;
+  }
+
   if (isLoading) {
     return <div className="p-8">Loading settings...</div>;
   }
@@ -262,10 +266,6 @@ function Settings() {
               <TabsTrigger value="reports">
                 <FileBarChart className="w-4 h-4 mr-2" />
                 Reports
-              </TabsTrigger>
-              <TabsTrigger value="welcome-email">
-                <MailPlus className="w-4 h-4 mr-2" />
-                Welcome Email
               </TabsTrigger>
             </>
           )}
@@ -494,10 +494,6 @@ function Settings() {
 
             <TabsContent value="reports" className="space-y-6">
               <ScheduledReports embedded />
-            </TabsContent>
-
-            <TabsContent value="welcome-email" className="space-y-6">
-              <WelcomeEmailManager />
             </TabsContent>
           </>
         )}

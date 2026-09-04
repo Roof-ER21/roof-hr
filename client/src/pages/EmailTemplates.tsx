@@ -32,6 +32,9 @@ import { toast } from '@/hooks/use-toast';
 import { Mail, Edit, Trash, Plus, Send, Eye, Copy } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ADMIN_ROLES } from '@shared/constants/roles';
+import WelcomeEmailManager from '@/components/admin/welcome-email-manager';
 
 interface EmailTemplate {
   id: string;
@@ -67,6 +70,12 @@ export default function EmailTemplates() {
   });
 
   const canEdit = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  // The welcome email API is admin-only, so only admins get that tab at all.
+  const canManageWelcomeEmail = !!user?.role && ADMIN_ROLES.includes(user.role);
+  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+  const [activeTab, setActiveTab] = useState(
+    requestedTab === 'templates' || !canManageWelcomeEmail ? 'templates' : 'welcome',
+  );
 
   // Fetch templates
   const { data: templates = [] } = useQuery<EmailTemplate[]>({
@@ -267,9 +276,9 @@ export default function EmailTemplates() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Email Templates</h1>
-          <p className="text-gray-600 mt-1">Manage and customize email templates</p>
+          <p className="text-gray-600 mt-1">The emails this system sends, ready to edit</p>
         </div>
-        {canEdit && (
+        {canEdit && activeTab === 'templates' && (
           <Button onClick={() => setIsCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Create Template
@@ -277,6 +286,21 @@ export default function EmailTemplates() {
         )}
       </div>
 
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        {canManageWelcomeEmail && (
+          <TabsList>
+            <TabsTrigger value="welcome">Welcome Email</TabsTrigger>
+            <TabsTrigger value="templates">Other Templates</TabsTrigger>
+          </TabsList>
+        )}
+
+        {canManageWelcomeEmail && (
+          <TabsContent value="welcome">
+            <WelcomeEmailManager />
+          </TabsContent>
+        )}
+
+        <TabsContent value="templates">
       <Card>
         <CardHeader>
           <CardTitle>Email Templates</CardTitle>
@@ -642,6 +666,8 @@ export default function EmailTemplates() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

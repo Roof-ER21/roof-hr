@@ -10,6 +10,8 @@ import multer from 'multer';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { EmailService, DEFAULT_WELCOME_SUBJECT_TEMPLATE } from '../email-service';
 import * as content from '../services/welcomeEmailContentService';
+import { llmRouter } from '../services/llm/router';
+import type { LLMTaskContext } from '../services/llm/types';
 
 const router = express.Router();
 
@@ -341,6 +343,72 @@ router.post(
  * Render the email exactly as a new hire would receive it, using whatever is
  * saved right now — or an unsaved draft posted from the editor.
  */
+/**
+ * Plain-English edits. HR staff describe the change ("make the start time
+ * bold", "add a line about parking"); the model returns a revised draft that
+ * the person still reviews and saves themselves. Nothing is written here.
+ */
+router.post('/api/welcome-email/templates/:variant/ai-edit', requireAuth, requireAdmin, async (req: any, res) => {
+  const variant = req.params.variant as content.WelcomeEmailVariant;
+  if (!content.WELCOME_EMAIL_VARIANTS.includes(variant)) {
+    return res.status(404).json({ error: 'Unknown email variant' });
+  }
+  const subject = typeof req.body?.subject === 'string' ? req.body.subject : '';
+  const bodyHtml = typeof req.body?.bodyHtml === 'string' ? req.body.bodyHtml : '';
+  const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
+  if (!instruction) return res.status(400).json({ error: 'Describe the change you want' });
+  if (instruction.length > 2000) return res.status(400).json({ error: 'Please keep the request under 2000 characters' });
+  if (!bodyHtml.trim()) return res.status(400).json({ error: 'There is no email text to change yet' });
+
+  const tokenList = content.TEMPLATE_TOKENS.map((t) => `{{${t.token}}} = ${t.description}`).join('\n');
+  const prompt = `You are editing the welcome email a roofing company (Roof-ER / The Roof Docs) sends to new hires.
+An HR administrator asked for this change:
+
+"""${instruction}"""
+
+Rules:
+- Make ONLY the change they asked for. Keep every other sentence, order, link, and inline style exactly as it is.
+- The body is HTML with inline styles. Return valid HTML that keeps that structure and those styles. Do not add <html>, <head>, or <body> tags, scripts, or external stylesheets.
+- Placeholders look like {{firstName}}. They are filled in per hire. Keep every placeholder that is already present unless the request clearly asks to remove it. Only ever use placeholders from this list:
+${tokenList}
+- Never invent facts (addresses, names, times). If the request needs a detail that is not given, leave a clearly bracketed spot like [parking details] for the person to fill in.
+- Keep the tone professional and warm.
+
+Current subject:
+${subject}
+
+Current body HTML:
+${bodyHtml}
+
+Return JSON only, in this exact shape:
+{"subject": "the subject line (unchanged unless asked)", "bodyHtml": "the full revised body HTML"}`;
+
+  const taskContext: LLMTaskContext = {
+    taskType: 'generation',
+    priority: 'medium',
+    requiresPrivacy: false,
+    expectedResponseTime: 'normal',
+  };
+
+  try {
+    const { data, provider } = await llmRouter.generateJSON(prompt, taskContext);
+    const nextSubject = typeof data?.subject === 'string' && data.subject.trim() ? data.subject : subject;
+    const nextBody = typeof data?.bodyHtml === 'string' && data.bodyHtml.trim() ? data.bodyHtml : '';
+    if (!nextBody) return res.status(502).json({ error: 'The assistant did not return an email. Try wording the request differently.' });
+
+    const tokensIn = (text: string) => new Set([...text.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]));
+    const before = tokensIn(`${subject}\n${bodyHtml}`);
+    const after = tokensIn(`${nextSubject}\n${nextBody}`);
+    const droppedTokens = [...before].filter((t) => !after.has(t));
+
+    console.log(`[WelcomeEmail AI] ${variant} edit via ${provider} by ${req.user?.email}: "${instruction.slice(0, 80)}"`);
+    res.json({ subject: nextSubject, bodyHtml: nextBody, droppedTokens });
+  } catch (error) {
+    console.error('[WelcomeEmail AI] edit failed:', error);
+    res.status(500).json({ error: 'The assistant is not available right now. You can still edit the email directly.' });
+  }
+});
+
 router.post('/api/welcome-email/preview', requireAuth, requireAdmin, async (req: any, res) => {
   try {
     const variant = parseVariant(req.body?.variant) || 'insurance';

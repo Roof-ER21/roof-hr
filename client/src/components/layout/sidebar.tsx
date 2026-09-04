@@ -50,7 +50,8 @@ import {
   Megaphone,
   LayoutTemplate,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  Mail,
 } from 'lucide-react';
 
 // Every role except SOURCER (recruiters don't get personal Tasks or QR pages).
@@ -109,7 +110,8 @@ const navigation = [
     roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'],
     children: [
       { name: 'Candidates', href: '/recruiting', icon: Briefcase, roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'] },
-      { name: 'Analytics', href: '/recruiting-analytics', icon: BarChart, roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'] }
+      { name: 'Analytics', href: '/recruiting-analytics', icon: BarChart, roles: [...ADMIN_ROLES, 'MANAGER', 'SOURCER'] },
+      { name: 'Email Templates', href: '/email-templates', icon: Mail, roles: [...ADMIN_ROLES, 'MANAGER'] }
     ]
   },
   {
