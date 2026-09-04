@@ -2986,3 +2986,74 @@ export type MarketingCampaign = typeof marketingCampaigns.$inferSelect;
 export type InsertMarketingCampaign = typeof marketingCampaigns.$inferInsert;
 export type CampaignScan = typeof campaignScans.$inferSelect;
 export type InsertCampaignScan = typeof campaignScans.$inferInsert;
+
+// ============================================================================
+// Welcome email content (migration 0009_welcome_email_content.sql)
+// ============================================================================
+// The new-hire welcome email's attachments and body, moved out of source and
+// off the container filesystem so admins can change them without a deploy.
+// PDF bytes live in Postgres because Railway's filesystem is ephemeral.
+
+export const welcomeEmailAttachments = pgTable('welcome_email_attachments', {
+  id: text('id').primaryKey(),
+  slot: text('slot'),                          // stable key for seeded docs; null for admin-added
+  label: text('label').notNull(),              // name shown in the email's attachment list
+  filename: text('filename').notNull(),        // filename the recipient sees
+  description: text('description'),
+  contentType: text('content_type').notNull().default('application/pdf'),
+  fileSize: integer('file_size').notNull(),
+  contentBase64: text('content_base64').notNull(),
+  checksum: text('checksum').notNull(),
+  version: integer('version').notNull().default(1),
+  enabled: boolean('enabled').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  updatedBy: text('updated_by'),
+  deletedAt: timestamp('deleted_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const welcomeEmailAttachmentVersions = pgTable('welcome_email_attachment_versions', {
+  id: text('id').primaryKey(),
+  attachmentId: text('attachment_id').notNull(),
+  version: integer('version').notNull(),
+  label: text('label').notNull(),
+  filename: text('filename').notNull(),
+  contentType: text('content_type').notNull(),
+  fileSize: integer('file_size').notNull(),
+  contentBase64: text('content_base64').notNull(),
+  checksum: text('checksum').notNull(),
+  changeLog: text('change_log'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const welcomeEmailTemplates = pgTable('welcome_email_templates', {
+  id: text('id').primaryKey(),
+  variant: text('variant').$type<'insurance' | 'retail'>().notNull(),
+  subject: text('subject').notNull(),
+  bodyHtml: text('body_html').notNull(),
+  enabled: boolean('enabled').notNull().default(true), // false => use the built-in email
+  version: integer('version').notNull().default(1),
+  updatedBy: text('updated_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const welcomeEmailTemplateVersions = pgTable('welcome_email_template_versions', {
+  id: text('id').primaryKey(),
+  templateId: text('template_id').notNull(),
+  variant: text('variant').notNull(),
+  version: integer('version').notNull(),
+  subject: text('subject').notNull(),
+  bodyHtml: text('body_html').notNull(),
+  changeLog: text('change_log'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export type WelcomeEmailAttachment = typeof welcomeEmailAttachments.$inferSelect;
+export type InsertWelcomeEmailAttachment = typeof welcomeEmailAttachments.$inferInsert;
+export type WelcomeEmailAttachmentVersion = typeof welcomeEmailAttachmentVersions.$inferSelect;
+export type WelcomeEmailTemplate = typeof welcomeEmailTemplates.$inferSelect;
+export type WelcomeEmailTemplateVersion = typeof welcomeEmailTemplateVersions.$inferSelect;

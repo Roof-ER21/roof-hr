@@ -66,6 +66,7 @@ import recruitingAnalyticsRoutes from './routes/recruiting-analytics';
 import superAdminRoutes from './routes/super-admin';
 import ssoRoutes from './routes/sso';
 import authzRoutes from './routes/authz';
+import welcomeEmailRoutes from './routes/welcome-email';
 import emailPreferencesRoutes from './routes/email-preferences';
 import candidateImportLogsRoutes from './routes/candidate-import-logs';
 import aiEvaluationsRoutes from './routes/ai-evaluations';
@@ -1911,7 +1912,14 @@ router.get('/api/pto', requireAuth, async (req: any, res) => {
     const deptApprover = getDepartmentApproverEntry(req.user.email);
     const isDeptApprover = !!deptApprover && (!req.user.department || deptApprover.department.toLowerCase() === req.user.department.toLowerCase());
 
-    if (isAdminOrManager) {
+    // Core PTO approvers are named by email rather than by role, so the role check
+    // alone could hand an approver only their own requests and leave them unable to
+    // see what they are supposed to act on. Scoped deliberately: an approver who
+    // ALSO has a department entry (Greg, Production) keeps that narrower scope --
+    // being on the core list must not quietly widen them to company-wide.
+    const isCoreApproverWithoutDepartmentScope = isCorePtoApprover(req.user.email) && !deptApprover;
+
+    if (isAdminOrManager || isCoreApproverWithoutDepartmentScope) {
       ptoRequests = await storage.getAllPtoRequests().catch((err) => {
         console.error('[PTO] Failed to fetch all PTO requests:', err.message);
         return [];
@@ -6126,6 +6134,9 @@ export function registerRoutes(app: express.Application) {
   // Mount authorization-grant admin routes
   app.use(authzRoutes);
 
+  // Mount welcome-email content admin routes (attachments + editable body)
+  app.use(welcomeEmailRoutes);
+
   // Mount equipment agreement routes
   app.use(equipmentAgreementRoutes);
 
@@ -6360,7 +6371,7 @@ export function registerRoutes(app: express.Application) {
       const parsedStartDate = startDate ? new Date(startDate) : undefined;
 
       const emailService = new EmailService();
-      const { subject, html } = emailService.renderWelcomeEmailContent(
+      const { subject, html } = await emailService.renderWelcomeEmailContent(
         { firstName, lastName, email, position },
         'TRD2026!', // mirrors the real tempPassword used at hire time (routes.ts ~3880)
         {

@@ -7,8 +7,13 @@ import { timezoneService } from './services/timezone-service';
 import { LEAD_SOURCER_EMAILS } from '../shared/constants/roles';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as welcomeEmailContent from './services/welcomeEmailContentService';
 
 const OAuth2 = google.auth.OAuth2;
+
+// Subject used when no admin-edited subject is saved. Written with the same
+// {{token}} syntax as an edited one so both go through one substitution path.
+export const DEFAULT_WELCOME_SUBJECT_TEMPLATE = 'Welcome to Roof-ER! Your Start Date is {{startDate}}';
 
 interface EmailAttachment {
   filename: string;
@@ -649,22 +654,19 @@ class EmailService {
     }
   }
 
-  private buildWelcomeEmailHtml(args: {
-    user: any;
-    temporaryPassword: string;
+  /**
+   * The equipment-checklist block. It is built at send time rather than stored
+   * with the body because it depends on the signing URL and the start date, and
+   * it reaches the body through the {{equipmentChecklist}} token.
+   */
+  private buildEquipmentChecklistHtml(args: {
+    include: boolean;
     formattedDate: string;
-    startTime: string;
-    selectedOffice: { address: string; meetPerson: string };
-    welcomeEmailType: 'insurance' | 'retail';
-    includeEquipmentChecklist: boolean;
     equipmentSigningUrl?: string;
   }): string {
-    const {
-      user, temporaryPassword, formattedDate, startTime,
-      selectedOffice, welcomeEmailType, includeEquipmentChecklist, equipmentSigningUrl,
-    } = args;
-
-    const equipmentChecklistHtml = includeEquipmentChecklist ? `
+    const { include, formattedDate, equipmentSigningUrl } = args;
+    if (!include) return '';
+    return `
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0284c7;">
             <h3 style="margin-top: 0; color: #0369a1;">Equipment Checklist</h3>
             <p>You will receive the following items on your first day:</p>
@@ -716,23 +718,29 @@ class EmailService {
             </p>
             `}
           </div>
-      ` : '';
+      `;
+  }
 
-    // HR Portal Login box removed from the new-hire welcome email (2026-07-20, per Ahmed).
-    // New hires no longer receive HR portal credentials in this email.
-    const hrPortalHtml = '';
-
+  /**
+   * The built-in welcome email body, written as a {{token}} template.
+   *
+   * Used whenever an admin has not saved an edited body under
+   * Settings > Welcome Email. Built-in and admin-edited bodies go through the
+   * same token substitution, so saving an untouched copy of this text renders
+   * exactly what the app sent before the editor existed.
+   */
+  buildWelcomeEmailTemplate(welcomeEmailType: 'insurance' | 'retail'): string {
     if (welcomeEmailType === 'retail') {
       return `
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello {{firstName}},</p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            We are so excited to have you join our <strong>Retail Division</strong> team with Roof ER. Your start date is <strong>${formattedDate} at ${startTime}</strong>.
+            We are so excited to have you join our <strong>Retail Division</strong> team with Roof ER. Your start date is <strong>{{startDate}} at {{startTime}}</strong>.
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>${selectedOffice.address}</strong>.
+            On this day, you'll meet with <strong>Bruno Nacipucha</strong> and the team at the office to begin your week Basic Training program. We are located at <strong>{{officeAddress}}</strong>.
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;"><strong>WHAT TO EXPECT:</strong></p>
@@ -758,7 +766,7 @@ class EmailService {
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            We look forward to welcoming you to the Roof ER Retail Division on <strong>${formattedDate}</strong>!
+            We look forward to welcoming you to the Roof ER Retail Division on <strong>{{startDate}}</strong>!
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
@@ -777,14 +785,14 @@ class EmailService {
 
     return `
         <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff;">
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello ${user.firstName},</p>
+          <p style="font-size: 15px; line-height: 1.7; color: #333;">Hello {{firstName}},</p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            We are so excited to have you join our <strong>Sales Team</strong> with Roof ER. Your start date is <strong>${formattedDate} at ${startTime}</strong>
+            We are so excited to have you join our <strong>Sales Team</strong> with Roof ER. Your start date is <strong>{{startDate}} at {{startTime}}</strong>
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            On this day, you'll meet with <strong>${selectedOffice.meetPerson}</strong> and the team at the office to receive your materials. We are located at <strong><em>${selectedOffice.address}</em></strong>
+            On this day, you'll meet with <strong>{{meetPerson}}</strong> and the team at the office to receive your materials. We are located at <strong><em>{{officeAddress}}</em></strong>
           </p>
 
           <p style="font-size: 15px; line-height: 1.7; color: #800080;">
@@ -815,19 +823,15 @@ class EmailService {
             <span style="color: #cc0000;"><strong>You MUST complete this fully before your first day in office.</strong></span>
           </p>
 
-          ${hrPortalHtml}
+          
 
           <p style="font-size: 15px; line-height: 1.7; color: #800080;">
             On your start date we will be taking your headshot, so please arrive looking groomed and professional. You will receive company apparel, so no particular dress code is required.
           </p>
 
-          <p style="font-size: 15px; line-height: 1.7; color: #333;">
-            Lastly, I have attached the following documents for your perusal:<br>
-            - Culture and Commitment<br>
-            - Training Manual
-          </p>
+          {{attachmentsBlock}}
 
-          ${equipmentChecklistHtml}
+          {{equipmentChecklist}}
 
           <p style="font-size: 15px; line-height: 1.7; color: #333;">Best,</p>
 
@@ -846,9 +850,14 @@ class EmailService {
       `;
   }
 
+
   // Pure render: builds subject + html from form data, no side effects.
   // Used by both sendWelcomeEmail (real send) and the /api/email/welcome-preview endpoint.
-  renderWelcomeEmailContent(
+  // Renders subject + html from form data. Reads the body an admin saved under
+  // Settings > Welcome Email, and falls back to the built-in template when
+  // nothing has been saved — so behavior is unchanged until someone edits it.
+  // Used by both sendWelcomeEmail (real send) and /api/email/welcome-preview.
+  async renderWelcomeEmailContent(
     user: any,
     temporaryPassword: string,
     options?: {
@@ -858,8 +867,11 @@ class EmailService {
       equipmentSigningUrl?: string;
       welcomeEmailType?: 'auto' | 'insurance' | 'retail';
       officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
+      // An unsaved draft from the admin editor: render it with real token values
+      // without saving it first.
+      templateOverride?: { subject?: string; bodyHtml?: string };
     }
-  ): { subject: string; html: string } {
+  ): Promise<{ subject: string; html: string; attachmentLabels: string[] }> {
     const officeLocations: Record<string, { address: string; meetPerson: string }> = {
       DMV: { address: '8100 Boone Blvd Suite 400, Vienna, VA 22182', meetPerson: 'Reese Samala' },
       PA: { address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
@@ -870,8 +882,6 @@ class EmailService {
 
     const startDate = options?.startDate || getUpcomingMonday();
     const formattedDate = formatStartDate(startDate);
-
-    const subject = `Welcome to Roof-ER! Your Start Date is ${formattedDate}`;
 
     const normalizeWelcomeEmailType = () => {
       if (options?.welcomeEmailType === 'insurance') return 'insurance';
@@ -887,18 +897,45 @@ class EmailService {
       ? options.startTime.trim()
       : (welcomeEmailType === 'retail' ? '12:00 PM' : '10am');
 
-    const html = this.buildWelcomeEmailHtml({
-      user,
-      temporaryPassword,
-      formattedDate,
-      startTime,
-      selectedOffice,
-      welcomeEmailType,
-      includeEquipmentChecklist: options?.includeEquipmentChecklist !== false,
-      equipmentSigningUrl: options?.equipmentSigningUrl,
-    });
+    // The attachment list in the body is generated from the attachments that are
+    // actually enabled, so adding or removing one in the admin screen can't leave
+    // the email promising a document it does not carry.
+    const attachments = await welcomeEmailContent.getEnabledAttachmentLabels();
 
-    return { subject, html };
+    const vars: welcomeEmailContent.TemplateVars = {
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      fullName: [user?.firstName, user?.lastName].filter(Boolean).join(' '),
+      position: user?.position || '',
+      startDate: formattedDate,
+      startTime,
+      officeAddress: selectedOffice.address,
+      meetPerson: selectedOffice.meetPerson,
+      temporaryPassword: temporaryPassword || '',
+      equipmentChecklist: this.buildEquipmentChecklistHtml({
+        include: options?.includeEquipmentChecklist !== false,
+        formattedDate,
+        equipmentSigningUrl: options?.equipmentSigningUrl,
+      }),
+      attachmentsBlock: welcomeEmailContent.renderAttachmentsBlock(attachments),
+      attachmentList: welcomeEmailContent.renderAttachmentList(attachments),
+    };
+
+    // A draft overrides only the half it supplies; the other half still comes
+    // from what is saved (or the built-in) so a subject-only preview keeps the
+    // saved body.
+    const override = options?.templateOverride;
+    const saved = await welcomeEmailContent.getActiveTemplate(welcomeEmailType);
+    const subjectTemplate =
+      override?.subject ?? saved?.subject ?? DEFAULT_WELCOME_SUBJECT_TEMPLATE;
+    const bodyTemplate =
+      override?.bodyHtml ?? saved?.bodyHtml ?? this.buildWelcomeEmailTemplate(welcomeEmailType);
+
+    return {
+      subject: welcomeEmailContent.applyTokens(subjectTemplate, vars),
+      html: welcomeEmailContent.applyTokens(bodyTemplate, vars),
+      attachmentLabels: attachments.map((a) => a.label),
+    };
   }
 
   async sendWelcomeEmail(
@@ -920,44 +957,26 @@ class EmailService {
     }
   ) {
     try {
-      const rendered = this.renderWelcomeEmailContent(user, temporaryPassword, options);
+      const rendered = await this.renderWelcomeEmailContent(user, temporaryPassword, options);
       const subject = options?.subjectOverride?.trim() || rendered.subject;
       const html = options?.htmlOverride?.trim() ? options.htmlOverride : rendered.html;
 
-      // Prepare attachments
-      const attachments: EmailAttachment[] = [];
+      // Attachments come from the welcome_email_attachments table so they can be
+      // swapped from Settings > Welcome Email without a deploy. The service falls
+      // back to the PDFs committed at public/documents/ if the database is
+      // unreachable, so a send never silently loses its attachments.
+      let attachments: EmailAttachment[] = [];
       if (options?.includeAttachments !== false) {
-        const templatesDir = path.resolve(process.cwd(), 'public', 'documents');
-        console.log('[Welcome Email] Documents directory:', templatesDir);
-        console.log('[Welcome Email] Current working directory:', process.cwd());
-
-        const culturePdfPath = path.join(templatesDir, 'Culture-and-Commitment.pdf');
-        const cultureExists = fs.existsSync(culturePdfPath);
-        console.log(`[Welcome Email] Culture PDF path: ${culturePdfPath}, exists: ${cultureExists}`);
-        if (cultureExists) {
-          attachments.push({
-            filename: 'Culture-and-Commitment.pdf',
-            path: culturePdfPath,
-            contentType: 'application/pdf'
-          });
-        } else {
-          console.warn('[Welcome Email] Culture and Commitment PDF not found!');
-        }
-
-        const trainingPdfPath = path.join(templatesDir, 'Training-Manual.pdf');
-        const trainingExists = fs.existsSync(trainingPdfPath);
-        console.log(`[Welcome Email] Training Manual path: ${trainingPdfPath}, exists: ${trainingExists}`);
-        if (trainingExists) {
-          attachments.push({
-            filename: 'Training-Manual.pdf',
-            path: trainingPdfPath,
-            contentType: 'application/pdf'
-          });
-        } else {
-          console.warn('[Welcome Email] Training Manual PDF not found!');
-        }
-
-        console.log(`[Welcome Email] Total attachments loaded: ${attachments.length}`);
+        const docs = await welcomeEmailContent.getMailAttachments();
+        attachments = docs.map((d) => ({
+          filename: d.filename,
+          content: d.content,
+          contentType: d.contentType,
+        }));
+        console.log(
+          `[Welcome Email] Attachments: ${attachments.length}` +
+            (attachments.length ? ` (${docs.map((d) => d.filename).join(', ')})` : ''),
+        );
       }
 
       // Add CC note if CC recipients are specified
