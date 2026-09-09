@@ -312,7 +312,11 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
         interviewId: ID('interview'),
         interviewerId: ID('interviewer user'),
         includeArchived: BOOL('true = include archived candidates (when view is "candidates").'),
-        status: ENUM('Filter candidates by status: APPLIED, SCREENING, INTERVIEW, OFFER, HIRED, DEAD_BY_US, DEAD_BY_CANDIDATE, NO_SHOW.', ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']),
+        status: STRING(
+          'Filter by stage or status as shown in UI: "Phone Screening", "Called", "Interview Scheduled", ' +
+          '"Decision Pending", "Hired", "Dead", or DB keys (APPLIED, SCREENING, INTERVIEW, OFFER, HIRED).',
+          { maxLength: 60 },
+        ),
         limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Max candidates to return (defaults to 50).' },
       },
     },
@@ -357,9 +361,38 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
             pick: (json: unknown) => {
               if (!Array.isArray(json)) return json;
               let list = json as any[];
+
+              const STAGE_TO_DB: Record<string, string[]> = {
+                'phone screening': ['SCREENING'],
+                'screening': ['SCREENING'],
+                'called': ['APPLIED'],
+                'applied': ['APPLIED'],
+                'interview scheduled': ['INTERVIEW'],
+                'interview': ['INTERVIEW'],
+                'decision pending': ['OFFER'],
+                'offer': ['OFFER'],
+                'hired': ['HIRED'],
+                'dead': ['DEAD', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW'],
+                'dead_by_us': ['DEAD_BY_US'],
+                'dead_by_candidate': ['DEAD_BY_CANDIDATE'],
+                'no_show': ['NO_SHOW'],
+              };
+
+              const DB_TO_STAGE: Record<string, string> = {
+                SCREENING: 'Phone Screening',
+                APPLIED: 'Called',
+                INTERVIEW: 'Interview Scheduled',
+                OFFER: 'Decision Pending',
+                HIRED: 'Hired',
+                DEAD_BY_US: 'Dead',
+                DEAD_BY_CANDIDATE: 'Dead',
+                NO_SHOW: 'Dead',
+              };
+
               if (args.status) {
-                const s = String(args.status).toUpperCase();
-                list = list.filter((c: any) => c.status?.toUpperCase() === s);
+                const s = String(args.status).trim().toLowerCase();
+                const dbStatuses = STAGE_TO_DB[s] || [s.toUpperCase()];
+                list = list.filter((c: any) => dbStatuses.includes(c.status?.toUpperCase()));
               }
               const limit = typeof args.limit === 'number' ? Math.min(Math.max(1, args.limit), 500) : 50;
               const totalMatching = list.length;
@@ -367,8 +400,8 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
                 id: c.id,
                 name: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
                 position: c.position,
-                status: c.status,
-                stage: c.stage,
+                stage: DB_TO_STAGE[c.status?.toUpperCase()] || c.stage || c.status,
+                rawStatus: c.status,
                 appliedDate: c.appliedDate,
                 email: c.email,
                 phone: c.phone,
