@@ -312,6 +312,8 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
         interviewId: ID('interview'),
         interviewerId: ID('interviewer user'),
         includeArchived: BOOL('true = include archived candidates (when view is "candidates").'),
+        status: ENUM('Filter candidates by status: APPLIED, SCREENING, INTERVIEW, OFFER, HIRED, DEAD_BY_US, DEAD_BY_CANDIDATE, NO_SHOW.', ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'DEAD_BY_US', 'DEAD_BY_CANDIDATE', 'NO_SHOW']),
+        limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Max candidates to return (defaults to 50).' },
       },
     },
     run: (ctx, args) => {
@@ -348,7 +350,34 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
         }
         case 'candidates':
         default:
-          return loopbackGet(ctx, { path: '/api/candidates', args, query: ['includeArchived'] });
+          return loopbackGet(ctx, {
+            path: '/api/candidates',
+            args,
+            query: ['includeArchived'],
+            pick: (json: unknown) => {
+              if (!Array.isArray(json)) return json;
+              let list = json as any[];
+              if (args.status) {
+                const s = String(args.status).toUpperCase();
+                list = list.filter((c: any) => c.status?.toUpperCase() === s);
+              }
+              const limit = typeof args.limit === 'number' ? Math.min(Math.max(1, args.limit), 500) : 50;
+              const totalMatching = list.length;
+              const sliced = list.slice(0, limit).map((c: any) => ({
+                id: c.id,
+                name: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+                position: c.position,
+                status: c.status,
+                stage: c.stage,
+                appliedDate: c.appliedDate,
+                email: c.email,
+                phone: c.phone,
+                territory: c.territory?.name,
+                sourcer: c.sourcer ? `${c.sourcer.firstName || ''} ${c.sourcer.lastName || ''}`.trim() : null,
+              }));
+              return { totalMatching, countReturned: sliced.length, candidates: sliced };
+            },
+          });
       }
     },
   },
