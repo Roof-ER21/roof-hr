@@ -6,7 +6,7 @@
  *     list shows hint only)
  *   - a real MCP client (SDK Client + StreamableHTTPClientTransport) connects
  *     to /mcp with it, lists only the scoped tools, calls `me` and
- *     `pto_requests` and gets the route's own JSON, and is refused in plain
+ *     `pto` and gets the route's own JSON, and is refused in plain
  *     words for an unknown argument and for an unscoped tool
  *   - the loopback SESSION (agent_scope 'mcp:read') reads but cannot POST —
  *     403 "Read-only agent token." — on a requireAuth route, on a route that
@@ -184,10 +184,10 @@ describe('/mcp — a real MCP client acting as the person', () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toContain('me');
-      expect(names).toContain('pto_requests');
-      expect(names).toContain('my_pto_balance');
-      expect(names).not.toContain('employees_list');
-      expect(names).not.toContain('hr_analytics');
+      expect(names).toContain('my_portal');
+      expect(names).toContain('pto');
+      expect(names).not.toContain('employees');
+      expect(names).not.toContain('analytics');
       // The kit hardens every schema: unknown arguments are refused.
       expect(tools.every((t) => (t.inputSchema as any).additionalProperties === false)).toBe(true);
     } finally {
@@ -195,7 +195,7 @@ describe('/mcp — a real MCP client acting as the person', () => {
     }
   });
 
-  it('`me` and `pto_requests` return exactly what the app itself returns for this person', async () => {
+  it('`me` and `pto` return exactly what the app itself returns for this person', async () => {
     const client = await connect(mintedToken);
     try {
       const me: any = await client.callTool({ name: 'me', arguments: {} });
@@ -207,7 +207,7 @@ describe('/mcp — a real MCP client acting as the person', () => {
       const direct = await api('GET', '/api/auth/me', undefined, ADMIN_TOKEN);
       expect(Object.keys(meJson).sort()).toEqual(Object.keys(direct.json).sort());
 
-      const pto: any = await client.callTool({ name: 'pto_requests', arguments: {} });
+      const pto: any = await client.callTool({ name: 'pto', arguments: {} });
       expect(pto.isError).toBeFalsy();
       const ptoJson = JSON.parse(firstText(pto));
       expect(Array.isArray(ptoJson)).toBe(true);
@@ -222,13 +222,13 @@ describe('/mcp — a real MCP client acting as the person', () => {
     const client = await connect(mintedToken);
     try {
       const bad: any = await client.callTool({
-        name: 'pto_employee_policy', arguments: { employeeId: ADMIN_ID, bogus: SECRET_VALUE },
+        name: 'pto', arguments: { employeeId: ADMIN_ID, bogus: SECRET_VALUE },
       });
       expect(bad.isError).toBe(true);
       expect(firstText(bad)).toBe('Unknown argument "bogus".');
       expect(firstText(bad)).not.toContain(SECRET_VALUE);
 
-      const unscoped: any = await client.callTool({ name: 'employees_list', arguments: {} });
+      const unscoped: any = await client.callTool({ name: 'employees', arguments: {} });
       expect(unscoped.isError).toBe(true);
       expect(firstText(unscoped)).toMatch(/no employees:read scope/);
     } finally {
@@ -249,8 +249,8 @@ describe('/mcp — a real MCP client acting as the person', () => {
     );
     const tools = rows.map((r: any) => r.tool);
     expect(tools).toContain('me');
-    expect(tools).toContain('pto_requests');
-    expect(tools).toContain('employees_list');
+    expect(tools).toContain('pto');
+    expect(tools).toContain('employees');
 
     const okMe = rows.find((r: any) => r.tool === 'me' && r.ok);
     expect(okMe.argument_keys).toEqual([]);
@@ -258,12 +258,12 @@ describe('/mcp — a real MCP client acting as the person', () => {
     expect(okMe.access).toBe('read');
     expect(okMe.user_id).toBe(ADMIN_ID);
 
-    const refused = rows.find((r: any) => r.tool === 'pto_employee_policy' && !r.ok);
+    const refused = rows.find((r: any) => r.tool === 'pto' && !r.ok);
     expect(refused.argument_keys.sort()).toEqual(['bogus', 'employeeId']);
     expect(JSON.stringify(rows)).not.toContain(SECRET_VALUE);
     expect(JSON.stringify(rows)).not.toContain(ADMIN_ID.slice(0, 8) + '"'); // the id VALUE is not in argument_keys
 
-    const unscoped = rows.find((r: any) => r.tool === 'employees_list');
+    const unscoped = rows.find((r: any) => r.tool === 'employees');
     expect(unscoped.ok).toBe(false);
     expect(unscoped.error).toMatch(/missing scope employees:read/);
   });

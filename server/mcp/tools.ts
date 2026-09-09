@@ -1,11 +1,12 @@
 /**
- * MCP tools — pass one, reads only.
+ * MCP tools — pass one, reads only. Consolidated to 12 cohesive tools across
+ * the 11 MCP areas (down from 59 micro-tools).
  *
- * Every tool wraps ONE of Roof HR's own GET routes over loopback (see
- * loopback.ts). The comment on each names the route file and handler it wraps
- * and the query params that route actually reads; nothing else is forwarded.
+ * Every tool wraps Roof HR's own GET routes over loopback (see loopback.ts).
+ * The tools dispatch based on arguments (e.g. view, id, report type) to call
+ * the exact underlying routes and forward only whitelisted query parameters.
  * What a tool returns is always the route's own answer for this person.
- * Descriptions are written for a model to act on.
+ * Descriptions are written for an LLM agent to accurately select and parameterize.
  */
 
 import type { Mcp21Tool } from '@omj21/mcp21';
@@ -23,50 +24,6 @@ const DATE = (description: string) => STRING(`${description} (ISO date, e.g. 202
 
 const badId = (what: string) => ({ isError: true, text: `The ${what} id is not a valid id.` });
 
-/** A read tool over a fixed path with an optional query whitelist. */
-function get(
-  name: string,
-  area: McpArea,
-  description: string,
-  path: string,
-  properties: Props = {},
-  query: readonly string[] = [],
-  required: string[] = [],
-): Mcp21Tool<Args> {
-  return {
-    name, area, description, access: 'read',
-    inputSchema: { type: 'object', properties, ...(required.length ? { required } : {}) },
-    run: (ctx, args) => loopbackGet(ctx, { path, args, query }),
-  };
-}
-
-/** A read tool whose path takes ONE id argument (`idArg`), plus an optional query whitelist. */
-function getById(
-  name: string,
-  area: McpArea,
-  description: string,
-  idArg: string,
-  what: string,
-  pathFor: (id: string) => string,
-  properties: Props = {},
-  query: readonly string[] = [],
-  extraRequired: string[] = [],
-): Mcp21Tool<Args> {
-  return {
-    name, area, description, access: 'read',
-    inputSchema: {
-      type: 'object',
-      properties: { [idArg]: ID(what), ...properties },
-      required: [idArg, ...extraRequired],
-    },
-    run: (ctx, args) => {
-      const id = segment(args[idArg]);
-      if (!id) return Promise.resolve(badId(what));
-      return loopbackGet(ctx, { path: pathFor(id), args, query });
-    },
-  };
-}
-
 const RANGE_PROPS: Props = {
   period: ENUM('Preset window: 7d, 30d, 90d, year or all. Omit for the route default.', ['7d', '30d', '90d', 'year', 'all']),
   startDate: DATE('Start of a custom window'),
@@ -76,297 +33,490 @@ const RANGE_PROPS: Props = {
 const RANGE_QUERY = ['period', 'startDate', 'endDate', 'assigneeId'] as const;
 
 export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
-  // ── me ──────────────────────────────────────────────────────────────────
-  // server/routes.ts → router.get('/api/auth/me') — no params
-  get('me', 'me',
-    'Who this token acts as: id, name, email, role, employment type, department, position and timezone. ' +
-    'Call this first to learn the person\'s own user id for other tools.',
-    '/api/auth/me'),
-  // server/routes/employee-portal.ts → router.get('/api/employee-portal/dashboard') — no params
-  get('my_dashboard', 'me',
-    'This person\'s portal dashboard in one call: PTO balance and pending requests, upcoming approved time off, ' +
-    'onboarding progress, pending documents and recent activity.',
-    '/api/employee-portal/dashboard'),
-  // server/routes/employee-portal.ts → router.get('/api/employee-portal/pto-balance') — no params
-  get('my_pto_balance', 'me',
-    'This person\'s PTO balance using the same policy hierarchy as the PTO page (individual, then department, then company): ' +
-    'vacation, sick and personal days allotted, used and remaining.',
-    '/api/employee-portal/pto-balance'),
-  // server/routes/employee-portal.ts → router.get('/api/employee-portal/my-pto') — no params
-  get('my_pto_requests', 'me',
-    'This person\'s own PTO requests, newest first, with type, dates, status and reason.',
-    '/api/employee-portal/my-pto'),
-  // server/routes/employee-portal.ts → router.get('/api/employee-portal/team') — no params
-  get('my_team', 'me',
-    'Active teammates in this person\'s department (name, position, email, phone) and their manager.',
-    '/api/employee-portal/team'),
-  // server/routes/employee-portal.ts → router.get('/api/employee-portal/upcoming-events') — no params
-  get('my_upcoming_events', 'me',
-    'This person\'s upcoming events: approved time off, scheduled interviews they are on, and meetings.',
-    '/api/employee-portal/upcoming-events'),
-  // server/routes/employee-portal.ts → router.get('/api/employee-portal/pending-items') — no params
-  get('my_pending_items', 'me',
-    'What is waiting on this person: pending PTO requests, unsigned contracts, unacknowledged documents and open onboarding steps.',
-    '/api/employee-portal/pending-items'),
-  // server/routes/onboarding-templates.ts → router.get('/api/employee-portal/onboarding') — no params
-  get('my_onboarding', 'me',
-    'This person\'s own onboarding: each workflow or instance with its template, steps and completion state.',
-    '/api/employee-portal/onboarding'),
-  // server/routes.ts → app.get('/api/notifications') — no params
-  get('my_notifications', 'me',
-    'This person\'s in-app notifications with read/unread state, newest first.',
-    '/api/notifications'),
-
-  // ── employees ───────────────────────────────────────────────────────────
-  // server/routes.ts → router.get('/api/users') — no params. Managers, admins and
-  // lead sourcers get full rows (email, department, hire date, phone…); everyone
-  // else gets name, role and position only. The route decides, not this tool.
-  get('employees_list', 'employees',
-    'The employee directory as this person\'s role sees it: id, name, role, department, position, employment type, ' +
-    'hire date, phone and active flag for managers; name, role and position for everyone else. Use the id with other tools.',
-    '/api/users'),
-  // server/routes.ts → router.get('/api/employees/:employeeId/notes') — own notes or manager/admin
-  getById('employee_notes', 'employees',
-    'Notes on an employee\'s record (managers and admins, or the person\'s own). Author, category, text and date.',
-    'employeeId', 'employee', (id) => `/api/employees/${id}/notes`),
-
-  // ── pto ─────────────────────────────────────────────────────────────────
-  // server/routes.ts → router.get('/api/pto') — no params. Admins, managers and
-  // core PTO approvers (authzService.canApprovePtoRequests) get everyone's
-  // requests; a department approver gets that department; everyone else their own.
-  get('pto_requests', 'pto',
-    'PTO requests this person can see (all of them for managers and PTO approvers, their department for a department ' +
-    'approver, otherwise only their own): employee, type, dates, days, status, reason, approver and timestamps.',
-    '/api/pto'),
-  // server/routes.ts → router.get('/api/pto/calendar') — no params
-  get('pto_calendar', 'pto',
-    'Company-wide APPROVED time off for the calendar: who is out and when (name and dates; approvers also see type and reason).',
-    '/api/pto/calendar'),
-  // server/routes/pto-policies.ts → router.get('/api/pto/company-policy') — no params
-  get('pto_company_policy', 'pto',
-    'The company PTO policy: default vacation, sick and personal days, accrual and carry-over rules.',
-    '/api/pto/company-policy'),
-  // server/routes/pto-policies.ts → router.get('/api/pto/department-settings') — no params
-  get('pto_department_settings', 'pto',
-    'Per-department PTO settings that override the company policy (days per type, exemptions).',
-    '/api/pto/department-settings'),
-  // server/routes/pto-policies.ts → router.get('/api/pto-policies') — requireManager, no params
-  get('pto_policies', 'pto',
-    'Every employee\'s individual PTO policy row: allotted and used days per type and the year (managers only; others get a refusal).',
-    '/api/pto-policies'),
-  // server/routes/pto-policies.ts → router.get('/api/pto-policies/employee/:employeeId') — own, or manager for anyone
-  getById('pto_employee_policy', 'pto',
-    'One employee\'s PTO policy and balance (own, or any employee for managers). Falls back to the department/company default when none is set.',
-    'employeeId', 'employee', (id) => `/api/pto-policies/employee/${id}`),
-
-  // ── attendance ──────────────────────────────────────────────────────────
-  // server/routes/attendance.ts → router.get('/sessions') (mounted at /api/attendance) — requireFacilitiesAccess
-  // reads: active ("true" = only active sessions)
-  get('attendance_sessions', 'attendance',
-    'Attendance (QR check-in) sessions: name, location, date, active flag and check-in URL. active=true for only the open ones.',
-    '/api/attendance/sessions',
-    { active: BOOL('true = only sessions that are currently open.') }, ['active']),
-  // server/routes/attendance.ts → router.get('/sessions/:id') — requireAuth
-  getById('attendance_session', 'attendance',
-    'One attendance session with every check-in (who, when, method).',
-    'id', 'attendance session', (id) => `/api/attendance/sessions/${id}`),
-  // server/routes/attendance.ts → router.get('/analytics') — requireFacilitiesAccess
-  // reads: from, to (dates on session createdAt), location
-  get('attendance_analytics', 'attendance',
-    'Attendance analytics: sessions, check-in totals and trends, optionally within a date window or for one location.',
-    '/api/attendance/analytics',
-    { from: DATE('Only sessions created on/after this date'), to: DATE('Only sessions created on/before this date'), location: STRING('Exact location name.', { maxLength: 200 }) },
-    ['from', 'to', 'location']),
-
-  // ── onboarding ──────────────────────────────────────────────────────────
-  // server/routes/onboarding-templates.ts → router.get('/api/onboarding-templates') — no params
-  get('onboarding_templates', 'onboarding',
-    'Onboarding templates: name, description, target role/department and their task list.',
-    '/api/onboarding-templates'),
-  // server/routes/onboarding-templates.ts → router.get('/api/onboarding-templates/:id')
-  getById('onboarding_template', 'onboarding',
-    'One onboarding template with its ordered tasks.',
-    'id', 'onboarding template', (id) => `/api/onboarding-templates/${id}`),
-  // server/routes/onboarding-templates.ts → router.get('/api/onboarding-instances')
-  // reads: employeeId, status
-  get('onboarding_instances', 'onboarding',
-    'Onboarding workflows in progress or done: employee, template, status, start and due dates. Filter by employeeId or status.',
-    '/api/onboarding-instances',
-    { employeeId: ID('employee'), status: STRING('Workflow status, e.g. NOT_STARTED, IN_PROGRESS, COMPLETED.', { maxLength: 40 }) },
-    ['employeeId', 'status']),
-  // server/routes/onboarding-templates.ts → router.get('/api/onboarding-instances/:id')
-  getById('onboarding_instance', 'onboarding',
-    'One onboarding workflow/instance with its progress summary.',
-    'id', 'onboarding instance', (id) => `/api/onboarding-instances/${id}`),
-  // server/routes/onboarding-templates.ts → router.get('/api/onboarding-instances/:id/steps')
-  getById('onboarding_instance_steps', 'onboarding',
-    'The steps of one onboarding workflow/instance with each step\'s status, assignee and completion date.',
-    'id', 'onboarding instance', (id) => `/api/onboarding-instances/${id}/steps`),
-
-  // ── documents ───────────────────────────────────────────────────────────
-  // server/routes.ts → router.get('/api/documents') — no params; admins see all,
-  // managers/employees see what their role may (visibility inside the route)
-  get('documents_list', 'documents',
-    'Company documents this person may see: title, category, visibility, version, file name and acknowledgement requirement. Metadata only, no file contents.',
-    '/api/documents'),
-  // server/routes/documents.ts → router.get('/:id') (mounted at /api/documents) — hasDocumentAccess by role
-  getById('document', 'documents',
-    'One company document\'s metadata (no file contents).',
-    'id', 'document', (id) => `/api/documents/${id}`),
-  // server/routes/contracts.ts → router.get('/api/contracts') — own; managers add direct reports and ones they created; admins all
-  get('contracts_list', 'documents',
-    'Employee contracts this person may see (own; managers also their direct reports\' and ones they sent; HR admins all): ' +
-    'recipient, title, status (DRAFT, SENT, VIEWED, SIGNED, REJECTED…), sent/viewed/signed dates. No document bytes.',
-    '/api/contracts'),
-  // server/routes/contracts.ts → router.get('/api/employee-contracts/:id') — own / creator / direct report / admin
-  getById('contract', 'documents',
-    'One employee contract\'s record: recipient, template, status, dates, field values and signature metadata (no PDF).',
-    'id', 'contract', (id) => `/api/employee-contracts/${id}`),
-  // server/routes/coi-documents.ts → router.get('/api/coi-documents') — requireManager, no params
-  get('coi_documents', 'documents',
-    'Certificates of insurance on file (managers): contractor, carrier, policy type, effective and expiry dates and computed status.',
-    '/api/coi-documents'),
-  // server/routes/coi-documents.ts → router.get('/api/coi-documents/employee/:employeeId') — own or manager
-  getById('coi_documents_for_employee', 'documents',
-    'Certificates of insurance for one employee/contractor (own, or anyone for managers).',
-    'employeeId', 'employee', (id) => `/api/coi-documents/employee/${id}`),
-  // server/routes/equipment-agreements.ts → router.get('/api/equipment-agreements') — req.user only
-  get('equipment_agreements', 'documents',
-    'Equipment agreements: employee, items issued, status (PENDING, SIGNED, RETURNED…), sent and signed dates.',
-    '/api/equipment-agreements'),
-  // server/routes/equipment-agreements.ts → router.get('/api/equipment-agreements/:id')
-  getById('equipment_agreement', 'documents',
-    'One equipment agreement with its items and signature metadata.',
-    'id', 'equipment agreement', (id) => `/api/equipment-agreements/${id}`),
-
-  // ── recruiting ──────────────────────────────────────────────────────────
-  // server/routes/job-postings.ts → router.get('/api/job-postings') — no params
-  get('job_postings', 'recruiting',
-    'Open and past job postings: title, department, location, status, description and Indeed publish state.',
-    '/api/job-postings'),
-  // server/routes/job-postings.ts → router.get('/api/job-postings/:id')
-  getById('job_posting', 'recruiting',
-    'One job posting in full: title, department, location, status, description and Indeed publish state.',
-    'id', 'job posting', (id) => `/api/job-postings/${id}`),
-  // server/routes.ts → router.get('/api/candidates') — reads: includeArchived ("true").
-  // Managers and lead sourcers see all; everyone else only candidates assigned to them.
-  get('candidates_list', 'recruiting',
-    'Candidates this person can see (all for managers and lead recruiters, otherwise only ones assigned to them): ' +
-    'name, contact, position, source, pipeline status, screening data, assignee and dates. includeArchived=true adds archived ones.',
-    '/api/candidates',
-    { includeArchived: BOOL('true = include archived candidates.') }, ['includeArchived']),
-  // server/routes.ts → router.get('/api/candidates/:candidateId/notes') — manager/lead sourcer, or assigned
-  getById('candidate_notes', 'recruiting',
-    'Recruiter notes on one candidate (managers, lead recruiters, or the assigned sourcer).',
-    'candidateId', 'candidate', (id) => `/api/candidates/${id}/notes`),
-  // server/routes/interviews.ts → router.get('/') (mounted at /api/interviews) — no params
-  get('interviews_list', 'recruiting',
-    'All interviews with candidate, interviewer, type, scheduled date/time, status, and isOverdue/daysOverdue for scheduled ones in the past.',
-    '/api/interviews'),
-  // server/routes/interviews.ts → router.get('/:id')
-  getById('interview', 'recruiting',
-    'One interview with candidate, interviewer, schedule, status, feedback and panel members.',
-    'id', 'interview', (id) => `/api/interviews/${id}`),
-  // server/routes/interviews.ts → router.get('/candidate/:candidateId')
-  getById('candidate_interviews', 'recruiting',
-    'Every interview for one candidate.',
-    'candidateId', 'candidate', (id) => `/api/interviews/candidate/${id}`),
-  // server/routes/interview-scheduling.ts → router.get('/interview-availability/:interviewerId') (mounted at /api)
-  getById('interviewer_availability', 'recruiting',
-    'An interviewer\'s availability slots (weekday, start/end time, timezone) used for interview scheduling.',
-    'interviewerId', 'interviewer (user)', (id) => `/api/interview-availability/${id}`),
-
-  // ── meetings ────────────────────────────────────────────────────────────
-  // server/routes/meetings.ts → router.get('/') (mounted at /api/meetings)
-  // reads: organizerId, roomId, type, startDate, endDate, attendeeId
-  get('meetings_list', 'meetings',
-    'Meetings with organizer and room. Filter by organizerId, roomId, type, a startDate/endDate window or attendeeId.',
-    '/api/meetings',
-    {
-      organizerId: ID('organizer (user)'), roomId: ID('meeting room'), type: STRING('Meeting type.', { maxLength: 40 }),
-      startDate: DATE('Only meetings starting on/after'), endDate: DATE('Only meetings ending on/before'), attendeeId: ID('attendee (user)'),
+  // ── me (2 tools) ────────────────────────────────────────────────────────
+  {
+    name: 'me',
+    area: 'me',
+    access: 'read',
+    description:
+      'Who this token acts as: id, name, email, role, employment type, department, position and timezone. ' +
+      'Call this first to learn the caller\'s own identity and user id for other tools.',
+    inputSchema: { type: 'object', properties: {} },
+    run: (ctx) => loopbackGet(ctx, { path: '/api/auth/me', args: {} }),
+  },
+  {
+    name: 'my_portal',
+    area: 'me',
+    access: 'read',
+    description:
+      'This person\'s employee portal: dashboard summary, PTO balance, own PTO requests, team roster, ' +
+      'upcoming events, pending actionable items, onboarding progress, or in-app notifications.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM(
+          'Portal section: "dashboard" (overview), "pto_balance", "pto_requests", "team", "upcoming_events", ' +
+          '"pending_items", "onboarding", or "notifications". Defaults to "dashboard".',
+          ['dashboard', 'pto_balance', 'pto_requests', 'team', 'upcoming_events', 'pending_items', 'onboarding', 'notifications'],
+        ),
+      },
     },
-    ['organizerId', 'roomId', 'type', 'startDate', 'endDate', 'attendeeId']),
-  // server/routes/meetings.ts → router.get('/my-meetings') — no params
-  get('my_meetings', 'meetings',
-    'Meetings this person organizes or is invited to, with their RSVP status.',
-    '/api/meetings/my-meetings'),
-  // server/routes/meetings.ts → router.get('/:id')
-  getById('meeting', 'meetings',
-    'One meeting with organizer, room, time window and attendees with their RSVP status.',
-    'id', 'meeting', (id) => `/api/meetings/${id}`),
-  // server/routes/meeting-rooms.ts → router.get('/') (mounted at /api/meeting-rooms) — reads: isActive, minCapacity
-  get('meeting_rooms', 'meetings',
-    'Meeting rooms: name, location, capacity, amenities and active flag. Filter with isActive and minCapacity.',
-    '/api/meeting-rooms',
-    { isActive: BOOL('true = only active rooms.'), minCapacity: { type: 'integer', minimum: 1, maximum: 10000, description: 'Minimum seats.' } },
-    ['isActive', 'minCapacity']),
-  // server/routes/meeting-rooms.ts → router.get('/:id/availability') — reads: startDate, endDate (both required)
-  getById('meeting_room_availability', 'meetings',
-    'Whether a room is free between startDate and endDate, with the meetings that conflict.',
-    'id', 'meeting room', (id) => `/api/meeting-rooms/${id}/availability`,
-    { startDate: STRING('Window start (ISO date-time).', { maxLength: 40 }), endDate: STRING('Window end (ISO date-time).', { maxLength: 40 }) },
-    ['startDate', 'endDate'], ['startDate', 'endDate']),
+    run: (ctx, args) => {
+      const view = args.view ?? 'dashboard';
+      switch (view) {
+        case 'pto_balance':
+          return loopbackGet(ctx, { path: '/api/employee-portal/pto-balance', args });
+        case 'pto_requests':
+          return loopbackGet(ctx, { path: '/api/employee-portal/my-pto', args });
+        case 'team':
+          return loopbackGet(ctx, { path: '/api/employee-portal/team', args });
+        case 'upcoming_events':
+          return loopbackGet(ctx, { path: '/api/employee-portal/upcoming-events', args });
+        case 'pending_items':
+          return loopbackGet(ctx, { path: '/api/employee-portal/pending-items', args });
+        case 'onboarding':
+          return loopbackGet(ctx, { path: '/api/employee-portal/onboarding', args });
+        case 'notifications':
+          return loopbackGet(ctx, { path: '/api/notifications', args });
+        case 'dashboard':
+        default:
+          return loopbackGet(ctx, { path: '/api/employee-portal/dashboard', args });
+      }
+    },
+  },
 
-  // ── territories ─────────────────────────────────────────────────────────
-  // server/routes/territories.ts → router.get('/api/territories') — no params
-  get('territories_list', 'territories',
-    'Sales territories: name, code, region, manager and active flag.',
-    '/api/territories'),
-  // server/routes/territories.ts → router.get('/api/territories/:id')
-  getById('territory', 'territories',
-    'One territory in full: name, code, region, manager and active flag.',
-    'id', 'territory', (id) => `/api/territories/${id}`),
+  // ── employees (1 tool) ──────────────────────────────────────────────────
+  {
+    name: 'employees',
+    area: 'employees',
+    access: 'read',
+    description:
+      'Employee directory and notes. Omit arguments for the full employee directory (id, name, role, department, ' +
+      'position, employment type, hire date, phone, active status). Or provide employeeId with view="notes" for HR notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        employeeId: ID('employee'),
+        view: ENUM('View to retrieve: "directory" (default, employee list) or "notes" (notes on record, requires employeeId).', ['directory', 'notes']),
+      },
+    },
+    run: (ctx, args) => {
+      if (args.view === 'notes') {
+        const id = segment(args.employeeId);
+        if (!id) return Promise.resolve(badId('employee'));
+        return loopbackGet(ctx, { path: `/api/employees/${id}/notes`, args });
+      }
+      return loopbackGet(ctx, { path: '/api/users', args });
+    },
+  },
 
-  // ── analytics ───────────────────────────────────────────────────────────
-  // server/routes.ts → router.get('/api/dashboard/metrics') — no params
-  get('dashboard_metrics', 'analytics',
-    'The HR dashboard numbers: headcount, active employees, pending PTO, open candidates, upcoming interviews and recent hires.',
-    '/api/dashboard/metrics'),
-  // server/routes/analytics.ts → router.get('/metrics') (mounted at /api/analytics) — requireManager
-  // reads: timeRange (last7days|last30days|last90days|lastyear), department
-  get('hr_analytics', 'analytics',
-    'HR analytics for managers: hiring funnel, headcount by department, PTO usage and turnover over a time range, optionally for one department.',
-    '/api/analytics/metrics',
-    { timeRange: ENUM('Window: last7days, last30days (default), last90days or lastyear.', ['last7days', 'last30days', 'last90days', 'lastyear']), department: STRING('Department name, or "all".', { maxLength: 80 }) },
-    ['timeRange', 'department']),
-  // server/routes/recruiting-analytics.ts → router.get('/overview') (mounted at /api/recruiting-analytics)
-  // reads: period, startDate, endDate, assigneeId (dateRangeSchema)
-  get('recruiting_overview', 'analytics',
-    'Recruiting analytics overview: candidates added, interviews held, offers and hires in the window, with conversion rates.',
-    '/api/recruiting-analytics/overview', RANGE_PROPS, RANGE_QUERY),
-  // server/routes/recruiting-analytics.ts → router.get('/pipeline') — same params
-  get('recruiting_pipeline', 'analytics',
-    'Recruiting pipeline counts per stage in the window.',
-    '/api/recruiting-analytics/pipeline', RANGE_PROPS, RANGE_QUERY),
-  // server/routes/recruiting-analytics.ts → router.get('/sources') — same params
-  get('recruiting_sources', 'analytics',
-    'Where candidates came from (Indeed, referral, website…) and how each source converts, in the window.',
-    '/api/recruiting-analytics/sources', RANGE_PROPS, RANGE_QUERY),
-  // server/routes/recruiting-analytics.ts → router.get('/time-to-hire') — same params
-  get('recruiting_time_to_hire', 'analytics',
-    'Time-to-hire statistics (average, median, by position) for hires in the window.',
-    '/api/recruiting-analytics/time-to-hire', RANGE_PROPS, RANGE_QUERY),
+  // ── pto (1 tool) ────────────────────────────────────────────────────────
+  {
+    name: 'pto',
+    area: 'pto',
+    access: 'read',
+    description:
+      'PTO requests, calendar, and policies. By default lists PTO requests visible to caller. ' +
+      'Can also retrieve company-wide calendar, company policy, department settings, all policies (managers), or individual policy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM(
+          'View to retrieve: "requests" (default, PTO requests visible to caller), "calendar" (company-wide approved time off), ' +
+          '"company_policy" (default rules), "department_settings" (department policy overrides), ' +
+          '"policies" (all employee individual policy rows, managers only), "employee_policy" (one employee policy, requires employeeId).',
+          ['requests', 'calendar', 'company_policy', 'department_settings', 'policies', 'employee_policy'],
+        ),
+        employeeId: ID('employee'),
+      },
+    },
+    run: (ctx, args) => {
+      const view = args.view ?? 'requests';
+      switch (view) {
+        case 'calendar':
+          return loopbackGet(ctx, { path: '/api/pto/calendar', args });
+        case 'company_policy':
+          return loopbackGet(ctx, { path: '/api/pto/company-policy', args });
+        case 'department_settings':
+          return loopbackGet(ctx, { path: '/api/pto/department-settings', args });
+        case 'policies':
+          return loopbackGet(ctx, { path: '/api/pto-policies', args });
+        case 'employee_policy': {
+          const id = segment(args.employeeId);
+          if (!id) return Promise.resolve(badId('employee'));
+          return loopbackGet(ctx, { path: `/api/pto-policies/employee/${id}`, args });
+        }
+        case 'requests':
+        default:
+          return loopbackGet(ctx, { path: '/api/pto', args });
+      }
+    },
+  },
 
-  // ── workflows ───────────────────────────────────────────────────────────
-  // server/routes/workflows.ts → router.get('/api/workflows') — no params
-  get('workflows_list', 'workflows',
-    'Automation workflows: name, trigger, status and creator.',
-    '/api/workflows'),
-  // server/routes/workflows.ts → router.get('/api/workflows/:id')
-  getById('workflow', 'workflows',
-    'One workflow in full: name, trigger, status, configuration and creator.',
-    'id', 'workflow', (id) => `/api/workflows/${id}`),
-  // server/routes/workflows.ts → router.get('/api/workflows/:id/steps')
-  getById('workflow_steps', 'workflows',
-    'The ordered steps of one workflow with their action types and configuration.',
-    'id', 'workflow', (id) => `/api/workflows/${id}/steps`),
-  // server/routes/workflows.ts → router.get('/api/workflows/:id/executions')
-  getById('workflow_executions', 'workflows',
-    'Past executions of one workflow: when it ran, status and result.',
-    'id', 'workflow', (id) => `/api/workflows/${id}/executions`),
-  // server/routes/workflows.ts → router.get('/api/workflow-templates') — no params
-  get('workflow_templates', 'workflows',
-    'Reusable workflow templates a workflow can be created from.',
-    '/api/workflow-templates'),
+  // ── attendance (1 tool) ─────────────────────────────────────────────────
+  {
+    name: 'attendance',
+    area: 'attendance',
+    access: 'read',
+    description:
+      'Attendance (QR check-in) sessions, individual session check-ins, and aggregate analytics. ' +
+      'Requires facilities access. Omit arguments to list sessions (active=true filters open sessions).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM('View to retrieve: "sessions" (default, list sessions), "session_detail" (requires sessionId), or "analytics".', ['sessions', 'session_detail', 'analytics']),
+        sessionId: ID('attendance session'),
+        active: BOOL('true = only sessions currently open (when view is "sessions").'),
+        from: DATE('Start date for attendance analytics (ISO date)'),
+        to: DATE('End date for attendance analytics (ISO date)'),
+        location: STRING('Exact location name for attendance analytics.', { maxLength: 200 }),
+      },
+    },
+    run: (ctx, args) => {
+      const view = args.view ?? 'sessions';
+      if (view === 'session_detail') {
+        const id = segment(args.sessionId);
+        if (!id) return Promise.resolve(badId('attendance session'));
+        return loopbackGet(ctx, { path: `/api/attendance/sessions/${id}`, args });
+      }
+      if (view === 'analytics') {
+        return loopbackGet(ctx, { path: '/api/attendance/analytics', args, query: ['from', 'to', 'location'] });
+      }
+      return loopbackGet(ctx, { path: '/api/attendance/sessions', args, query: ['active'] });
+    },
+  },
+
+  // ── onboarding (1 tool) ─────────────────────────────────────────────────
+  {
+    name: 'onboarding',
+    area: 'onboarding',
+    access: 'read',
+    description:
+      'Onboarding workflows and task templates. By default lists onboarding instances in progress or completed. ' +
+      'Can filter by employeeId or status, view instance steps, or view templates and template details.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM(
+          'View to retrieve: "instances" (default, workflows), "instance_detail" (requires id), "instance_steps" (requires id), ' +
+          '"templates" (templates list), or "template_detail" (requires id).',
+          ['instances', 'instance_detail', 'instance_steps', 'templates', 'template_detail'],
+        ),
+        id: ID('onboarding instance or template'),
+        employeeId: ID('employee to filter workflows'),
+        status: STRING('Workflow status, e.g. NOT_STARTED, IN_PROGRESS, COMPLETED.', { maxLength: 40 }),
+      },
+    },
+    run: (ctx, args) => {
+      const view = args.view ?? 'instances';
+      switch (view) {
+        case 'template_detail': {
+          const id = segment(args.id);
+          if (!id) return Promise.resolve(badId('onboarding template'));
+          return loopbackGet(ctx, { path: `/api/onboarding-templates/${id}`, args });
+        }
+        case 'templates':
+          return loopbackGet(ctx, { path: '/api/onboarding-templates', args });
+        case 'instance_detail': {
+          const id = segment(args.id);
+          if (!id) return Promise.resolve(badId('onboarding instance'));
+          return loopbackGet(ctx, { path: `/api/onboarding-instances/${id}`, args });
+        }
+        case 'instance_steps': {
+          const id = segment(args.id);
+          if (!id) return Promise.resolve(badId('onboarding instance'));
+          return loopbackGet(ctx, { path: `/api/onboarding-instances/${id}/steps`, args });
+        }
+        case 'instances':
+        default:
+          return loopbackGet(ctx, { path: '/api/onboarding-instances', args, query: ['employeeId', 'status'] });
+      }
+    },
+  },
+
+  // ── documents (1 tool) ──────────────────────────────────────────────────
+  {
+    name: 'documents',
+    area: 'documents',
+    access: 'read',
+    description:
+      'Company documents, employee contracts, certificates of insurance (COI), and equipment agreements. ' +
+      'Metadata only, no file bytes. Select type and optional id or employeeId.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: ENUM('Document category: "documents" (default, company docs), "contracts" (employee contracts), "coi" (certificates of insurance), or "equipment" (equipment agreements).', ['documents', 'contracts', 'coi', 'equipment']),
+        id: ID('document, contract, or equipment agreement'),
+        employeeId: ID('employee to filter COI records'),
+      },
+    },
+    run: (ctx, args) => {
+      const type = args.type ?? 'documents';
+      switch (type) {
+        case 'contracts': {
+          if (args.id) {
+            const id = segment(args.id);
+            if (!id) return Promise.resolve(badId('contract'));
+            return loopbackGet(ctx, { path: `/api/employee-contracts/${id}`, args });
+          }
+          return loopbackGet(ctx, { path: '/api/contracts', args });
+        }
+        case 'coi': {
+          if (args.employeeId) {
+            const id = segment(args.employeeId);
+            if (!id) return Promise.resolve(badId('employee'));
+            return loopbackGet(ctx, { path: `/api/coi-documents/employee/${id}`, args });
+          }
+          return loopbackGet(ctx, { path: '/api/coi-documents', args });
+        }
+        case 'equipment': {
+          if (args.id) {
+            const id = segment(args.id);
+            if (!id) return Promise.resolve(badId('equipment agreement'));
+            return loopbackGet(ctx, { path: `/api/equipment-agreements/${id}`, args });
+          }
+          return loopbackGet(ctx, { path: '/api/equipment-agreements', args });
+        }
+        case 'documents':
+        default: {
+          if (args.id) {
+            const id = segment(args.id);
+            if (!id) return Promise.resolve(badId('document'));
+            return loopbackGet(ctx, { path: `/api/documents/${id}`, args });
+          }
+          return loopbackGet(ctx, { path: '/api/documents', args });
+        }
+      }
+    },
+  },
+
+  // ── recruiting (1 tool) ─────────────────────────────────────────────────
+  {
+    name: 'recruiting',
+    area: 'recruiting',
+    access: 'read',
+    description:
+      'Recruiting pipeline: candidate roster, candidate notes/interviews, job postings, scheduled interviews, ' +
+      'or interviewer availability slots.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM(
+          'Resource to query: "candidates" (default, pipeline), "candidate_notes" (requires candidateId), ' +
+          '"candidate_interviews" (requires candidateId), "jobs" (job postings), "job_detail" (requires jobId), ' +
+          '"interviews" (all interviews), "interview_detail" (requires interviewId), or "interviewer_availability" (requires interviewerId).',
+          ['candidates', 'candidate_notes', 'candidate_interviews', 'jobs', 'job_detail', 'interviews', 'interview_detail', 'interviewer_availability'],
+        ),
+        candidateId: ID('candidate'),
+        jobId: ID('job posting'),
+        interviewId: ID('interview'),
+        interviewerId: ID('interviewer user'),
+        includeArchived: BOOL('true = include archived candidates (when view is "candidates").'),
+      },
+    },
+    run: (ctx, args) => {
+      const view = args.view ?? 'candidates';
+      switch (view) {
+        case 'candidate_notes': {
+          const id = segment(args.candidateId);
+          if (!id) return Promise.resolve(badId('candidate'));
+          return loopbackGet(ctx, { path: `/api/candidates/${id}/notes`, args });
+        }
+        case 'candidate_interviews': {
+          const id = segment(args.candidateId);
+          if (!id) return Promise.resolve(badId('candidate'));
+          return loopbackGet(ctx, { path: `/api/interviews/candidate/${id}`, args });
+        }
+        case 'jobs':
+          return loopbackGet(ctx, { path: '/api/job-postings', args });
+        case 'job_detail': {
+          const id = segment(args.jobId);
+          if (!id) return Promise.resolve(badId('job posting'));
+          return loopbackGet(ctx, { path: `/api/job-postings/${id}`, args });
+        }
+        case 'interviews':
+          return loopbackGet(ctx, { path: '/api/interviews', args });
+        case 'interview_detail': {
+          const id = segment(args.interviewId);
+          if (!id) return Promise.resolve(badId('interview'));
+          return loopbackGet(ctx, { path: `/api/interviews/${id}`, args });
+        }
+        case 'interviewer_availability': {
+          const id = segment(args.interviewerId);
+          if (!id) return Promise.resolve(badId('interviewer'));
+          return loopbackGet(ctx, { path: `/api/interview-availability/${id}`, args });
+        }
+        case 'candidates':
+        default:
+          return loopbackGet(ctx, { path: '/api/candidates', args, query: ['includeArchived'] });
+      }
+    },
+  },
+
+  // ── meetings (1 tool) ───────────────────────────────────────────────────
+  {
+    name: 'meetings',
+    area: 'meetings',
+    access: 'read',
+    description:
+      'Scheduled meetings, personal invites, meeting rooms, and room availability checks. ' +
+      'Default lists meetings with optional filters (organizerId, roomId, type, startDate, endDate, attendeeId).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM(
+          'Resource: "meetings" (default, list meetings), "my_meetings" (caller invited/organizes), ' +
+          '"meeting_detail" (requires meetingId), "rooms" (meeting room list), or "room_availability" (requires roomId, startDate, endDate).',
+          ['meetings', 'my_meetings', 'meeting_detail', 'rooms', 'room_availability'],
+        ),
+        meetingId: ID('meeting'),
+        roomId: ID('meeting room'),
+        organizerId: ID('organizer (user)'),
+        attendeeId: ID('attendee (user)'),
+        type: STRING('Meeting type.', { maxLength: 40 }),
+        startDate: STRING('Window start (ISO date or date-time).', { maxLength: 40 }),
+        endDate: STRING('Window end (ISO date or date-time).', { maxLength: 40 }),
+        isActive: BOOL('true = only active meeting rooms (when view is "rooms").'),
+        minCapacity: { type: 'integer', minimum: 1, maximum: 10000, description: 'Minimum seats for meeting rooms.' },
+      },
+    },
+    run: (ctx, args) => {
+      const view = args.view ?? 'meetings';
+      switch (view) {
+        case 'my_meetings':
+          return loopbackGet(ctx, { path: '/api/meetings/my-meetings', args });
+        case 'meeting_detail': {
+          const id = segment(args.meetingId);
+          if (!id) return Promise.resolve(badId('meeting'));
+          return loopbackGet(ctx, { path: `/api/meetings/${id}`, args });
+        }
+        case 'rooms':
+          return loopbackGet(ctx, { path: '/api/meeting-rooms', args, query: ['isActive', 'minCapacity'] });
+        case 'room_availability': {
+          const id = segment(args.roomId);
+          if (!id) return Promise.resolve(badId('meeting room'));
+          return loopbackGet(ctx, { path: `/api/meeting-rooms/${id}/availability`, args, query: ['startDate', 'endDate'] });
+        }
+        case 'meetings':
+        default:
+          return loopbackGet(ctx, {
+            path: '/api/meetings',
+            args,
+            query: ['organizerId', 'roomId', 'type', 'startDate', 'endDate', 'attendeeId'],
+          });
+      }
+    },
+  },
+
+  // ── territories (1 tool) ────────────────────────────────────────────────
+  {
+    name: 'territories',
+    area: 'territories',
+    access: 'read',
+    description:
+      'Sales territories: name, code, region, manager and active flag. ' +
+      'Omit territoryId to list all territories, or provide territoryId for one specific territory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        territoryId: ID('territory'),
+      },
+    },
+    run: (ctx, args) => {
+      if (args.territoryId) {
+        const id = segment(args.territoryId);
+        if (!id) return Promise.resolve(badId('territory'));
+        return loopbackGet(ctx, { path: `/api/territories/${id}`, args });
+      }
+      return loopbackGet(ctx, { path: '/api/territories', args });
+    },
+  },
+
+  // ── analytics (1 tool) ──────────────────────────────────────────────────
+  {
+    name: 'analytics',
+    area: 'analytics',
+    access: 'read',
+    description:
+      'HR and recruiting analytics for managers: dashboard summary (headcount/openings), HR trends (turnover/PTO), ' +
+      'or recruiting funnel, pipeline, sources, and time-to-hire statistics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        report: ENUM(
+          'Report: "dashboard" (default, HR dashboard summary), "hr_metrics" (headcount/PTO/turnover), ' +
+          '"recruiting_overview" (candidates/offers/hires), "recruiting_pipeline" (pipeline stages), ' +
+          '"recruiting_sources" (lead sources), or "recruiting_time_to_hire" (duration to hire).',
+          ['dashboard', 'hr_metrics', 'recruiting_overview', 'recruiting_pipeline', 'recruiting_sources', 'recruiting_time_to_hire'],
+        ),
+        timeRange: ENUM('Window for hr_metrics: last7days, last30days (default), last90days or lastyear.', ['last7days', 'last30days', 'last90days', 'lastyear']),
+        department: STRING('Department name for hr_metrics, or "all".', { maxLength: 80 }),
+        ...RANGE_PROPS,
+      },
+    },
+    run: (ctx, args) => {
+      const report = args.report ?? 'dashboard';
+      switch (report) {
+        case 'hr_metrics':
+          return loopbackGet(ctx, { path: '/api/analytics/metrics', args, query: ['timeRange', 'department'] });
+        case 'recruiting_overview':
+          return loopbackGet(ctx, { path: '/api/recruiting-analytics/overview', args, query: RANGE_QUERY });
+        case 'recruiting_pipeline':
+          return loopbackGet(ctx, { path: '/api/recruiting-analytics/pipeline', args, query: RANGE_QUERY });
+        case 'recruiting_sources':
+          return loopbackGet(ctx, { path: '/api/recruiting-analytics/sources', args, query: RANGE_QUERY });
+        case 'recruiting_time_to_hire':
+          return loopbackGet(ctx, { path: '/api/recruiting-analytics/time-to-hire', args, query: RANGE_QUERY });
+        case 'dashboard':
+        default:
+          return loopbackGet(ctx, { path: '/api/dashboard/metrics', args });
+      }
+    },
+  },
+
+  // ── workflows (1 tool) ──────────────────────────────────────────────────
+  {
+    name: 'workflows',
+    area: 'workflows',
+    access: 'read',
+    description:
+      'Automation workflows, templates, steps, and past executions. By default lists workflows. ' +
+      'Provide workflowId to view one workflow, its steps, or execution history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: ENUM(
+          'View to retrieve: "workflows" (default, list workflows), "workflow_detail" (requires workflowId), ' +
+          '"steps" (requires workflowId), "executions" (requires workflowId), or "templates" (workflow templates).',
+          ['workflows', 'workflow_detail', 'steps', 'executions', 'templates'],
+        ),
+        workflowId: ID('workflow'),
+      },
+    },
+    run: (ctx, args) => {
+      const view = args.view ?? 'workflows';
+      switch (view) {
+        case 'templates':
+          return loopbackGet(ctx, { path: '/api/workflow-templates', args });
+        case 'workflow_detail': {
+          const id = segment(args.workflowId);
+          if (!id) return Promise.resolve(badId('workflow'));
+          return loopbackGet(ctx, { path: `/api/workflows/${id}`, args });
+        }
+        case 'steps': {
+          const id = segment(args.workflowId);
+          if (!id) return Promise.resolve(badId('workflow'));
+          return loopbackGet(ctx, { path: `/api/workflows/${id}/steps`, args });
+        }
+        case 'executions': {
+          const id = segment(args.workflowId);
+          if (!id) return Promise.resolve(badId('workflow'));
+          return loopbackGet(ctx, { path: `/api/workflows/${id}/executions`, args });
+        }
+        case 'workflows':
+        default:
+          return loopbackGet(ctx, { path: '/api/workflows', args });
+      }
+    },
+  },
 ];
