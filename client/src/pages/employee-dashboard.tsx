@@ -14,6 +14,7 @@ import OrgChart from '@/components/OrgChart';
 import { OnboardingTaskList } from '@/components/onboarding/OnboardingTaskList';
 import { AvailabilityManager } from '@/components/settings/availability-manager';
 import { EmailPreferences } from '@/components/settings/email-preferences';
+import { ConnectedAgents } from '@/components/settings/connected-agents';
 import {
   Calendar,
   Clock,
@@ -649,6 +650,9 @@ function EmployeeDashboard() {
               <EmailPreferences userId={user?.id} compact />
             </CardContent>
           </Card>
+
+          {/* Personal agent tokens (MCP) — read-only access as this person */}
+          <ConnectedAgents />
         </div>
 
         {/* Center Column - Activity & PTO */}

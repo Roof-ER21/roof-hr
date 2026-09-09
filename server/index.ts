@@ -15,6 +15,8 @@ import { sql } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { config, validateConfig } from './config';
 import { rateLimit, sanitizeInput, configureCORS, securityLogger, clearRateLimit } from './middleware/security';
+import { rateLimit as expressRateLimit, ipKeyGenerator } from 'express-rate-limit';
+import { createRoofHrMcpServer, mcpRateLimitKey } from './mcp/server';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { captureToGlitchTip } from './utils/glitchtip';
 import { requestLogger, logger } from './middleware/logger';
@@ -254,6 +256,26 @@ app.get('/api/public/reset-rate-limits', (req, res) => {
   clearRateLimit();
   console.log('[Rate Limit] Emergency rate limit reset triggered');
   res.json({ success: true, message: 'Rate limits cleared for all IPs' });
+});
+
+// ── /mcp — personal agent tokens act as the person (reads only) ─────────────
+// Mounted BEFORE the app-wide JSON parser so the 256kb body limit is real, and
+// before sanitizeInput (JSON-RPC bodies must reach the SDK untouched). Its own
+// limiter: 120 requests/minute per token, keyed on the sha256 of the bearer —
+// not the IP limiter above, which would starve every agent behind one office
+// NAT at once. Everything else (401/503, scopes, validation, audit) lives in
+// server/mcp/. Kill switch: MCP_ACCESS_DISABLED=true → 503.
+const mcpLimiter = expressRateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => mcpRateLimitKey(req) || ipKeyGenerator(req.ip ?? ''),
+  message: { error: 'Too many requests for this agent token; wait a minute.' },
+});
+const roofHrMcp = createRoofHrMcpServer();
+app.use('/mcp', mcpLimiter, express.json({ limit: '256kb' }), (req: Request, res: Response) => {
+  void roofHrMcp.handler(req, res);
 });
 
 // Body parsing with input sanitization

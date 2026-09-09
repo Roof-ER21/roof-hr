@@ -35,3 +35,17 @@ SESSION_SECRET=your_session_secret_here
 ## Current Status Check
 
 Let me check what environment variables you currently have set...
+## MCP (Connected agents)
+
+Personal agent tokens let an MCP client (Genie 21, Claude, ChatGPT, Cursor)
+read Roof HR as the person who minted the token — reads only, see
+`server/mcp/`. Two optional variables:
+
+```
+# Public origin shown as the endpoint in the Connected agents panel
+# (defaults to https://roofhr.up.railway.app → endpoint https://roofhr.up.railway.app/mcp)
+PUBLIC_URL=https://roofhr.up.railway.app
+
+# Kill switch: "true" makes /mcp answer 503 for every request, no deploy needed
+MCP_ACCESS_DISABLED=false
+```

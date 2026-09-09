@@ -14,6 +14,35 @@ import {
 } from '../../shared/constants/roles';
 import { canApprovePtoRequests } from '../services/authzService';
 
+// ─── Read-only agent sessions (MCP) ───────────────────────────────────────────
+//
+// An MCP tool never queries the database; it calls the app's own routes over
+// loopback with a 5-minute session row whose `agent_scope` is 'mcp:read'
+// (server/mcp/loopback.ts). That value is the ceiling: such a session is never
+// sliding-renewed, and it is refused on any request that is not GET/HEAD — here
+// in requireAuth and in the global session middleware in server/routes.ts, since
+// a few routes (equipment-agreements, attendance) rely on the latter alone.
+
+import { MCP_READ_SCOPE } from '../mcp/scope';
+export { MCP_READ_SCOPE };
+
+type SessionLike = { agentScope?: string | null } | null | undefined;
+
+export function isReadOnlyAgentSession(session: SessionLike): boolean {
+  return session?.agentScope === MCP_READ_SCOPE;
+}
+
+/**
+ * Refuse a write attempted through a read-only agent session. Returns true when
+ * the response has been sent (the caller must stop).
+ */
+export function refuseReadOnlyAgentWrite(session: SessionLike, req: Request, res: Response): boolean {
+  if (!isReadOnlyAgentSession(session)) return false;
+  if (req.method === 'GET' || req.method === 'HEAD') return false;
+  res.status(403).json({ error: 'Read-only agent token.' });
+  return true;
+}
+
 export async function requireAuth(req: any, res: Response, next: NextFunction) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) {
@@ -48,8 +77,18 @@ export async function requireAuth(req: any, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'Invalid or expired session' });
     }
 
+    // A read-only agent session (MCP loopback) reads as the person and nothing
+    // else: no write, no renewal. Routes still apply their own authorization
+    // to req.user below.
+    if (refuseReadOnlyAgentWrite(session, req, res)) return;
+
     console.log('[Auth] User authenticated:', user.email);
     req.user = user;
+    req.agentScope = session.agentScope ?? null;
+
+    if (isReadOnlyAgentSession(session)) {
+      return next();
+    }
 
     // Sliding session renewal — extend expiry by 24h on every authenticated request
     // Fire-and-forget (don't block the request)

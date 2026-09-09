@@ -34,6 +34,7 @@ import GoogleIntegration from './GoogleIntegration';
 import ScheduledReports from './ScheduledReports';
 import { AvailabilityManager } from '@/components/settings/availability-manager';
 import { EmailPreferences } from '@/components/settings/email-preferences';
+import { ConnectedAgents } from '@/components/settings/connected-agents';
 
 const companySettingsSchema = z.object({
   companyName: z.string().min(1),
@@ -332,6 +333,9 @@ function Settings() {
 
           {/* Interview Availability Settings */}
           <AvailabilityManager />
+
+          {/* Personal agent tokens (MCP) — read-only access as this person */}
+          <ConnectedAgents />
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">

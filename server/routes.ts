@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import { storage } from './storage';
+import { refuseReadOnlyAgentWrite } from './middleware/auth';
+import mcpTokenRoutes from './routes/mcp-tokens';
 import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { isNotificationEnabled } from './services/notification-preferences';
@@ -6010,7 +6012,12 @@ export function registerRoutes(app: express.Application) {
         if (session && new Date(session.expiresAt) > new Date()) {
           const user = await storage.getUserById(session.userId);
           if (user) {
+            // An MCP loopback session (agent_scope 'mcp:read') never writes,
+            // whatever route it reaches — some routes rely on this middleware
+            // alone (equipment-agreements, attendance) and never call requireAuth.
+            if (refuseReadOnlyAgentWrite(session, req, res)) return;
             req.user = user;
+            req.agentScope = session.agentScope ?? null;
             return next();
           }
         }
@@ -6045,6 +6052,9 @@ export function registerRoutes(app: express.Application) {
   
   // Mount document routes
   app.use('/api/documents', documentRoutes);
+
+  // Personal agent tokens for the MCP endpoint (server/mcp/, /mcp is mounted in index.ts)
+  app.use('/api/mcp/tokens', mcpTokenRoutes);
   
   // Mount email routes
   app.use('/api/emails', emailRoutes);

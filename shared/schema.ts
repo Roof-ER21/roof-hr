@@ -46,6 +46,10 @@ export const sessions = pgTable('sessions', {
   token: text('token').notNull().unique(),
   expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  // NULL = a normal login session. 'mcp:read' = a 5-minute loopback session an
+  // MCP tool acts through: never sliding-renewed, refused on any non-GET/HEAD
+  // request (server/middleware/auth.ts). The value is the ceiling.
+  agentScope: text('agent_scope'),
 });
 
 export const sessionSchema = createInsertSchema(sessions);
@@ -1748,6 +1752,42 @@ export const insertRoleEquipmentDefaultsSchema = createInsertSchema(roleEquipmen
 // Create types
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+
+// ── MCP personal agent tokens (migrations/0010_mcp_tokens.sql) ───────────────
+// The sha256 of a token, never the token. `scopes` holds "<area>:read" strings
+// (server/mcp/areas.ts). A token acts as `userId` over /mcp.
+export const mcpTokens = pgTable('mcp_tokens', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  tokenHint: text('token_hint').notNull(),
+  scopes: text('scopes').array().notNull().default([]),
+  expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+export type McpToken = typeof mcpTokens.$inferSelect;
+export type InsertMcpToken = typeof mcpTokens.$inferInsert;
+
+// One row per tools/call. Argument KEYS only, never values. No FK to
+// mcp_tokens on purpose: the trail outlives a deleted token.
+export const mcpAuditLog = pgTable('mcp_audit_log', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  tokenId: text('token_id').notNull(),
+  requestId: text('request_id').notNull(),
+  tool: text('tool').notNull(),
+  area: text('area').notNull(),
+  access: text('access').$type<'read' | 'write'>().notNull(),
+  argumentKeys: text('argument_keys').array().notNull().default([]),
+  ok: boolean('ok').notNull(),
+  error: text('error'),
+  durationMs: integer('duration_ms').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+export type McpAuditRow = typeof mcpAuditLog.$inferSelect;
 export type PtoRequest = typeof ptoRequests.$inferSelect;
 
 export type Candidate = typeof candidates.$inferSelect;
