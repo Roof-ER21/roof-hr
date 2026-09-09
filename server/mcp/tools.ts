@@ -24,6 +24,45 @@ const DATE = (description: string) => STRING(`${description} (ISO date, e.g. 202
 
 const badId = (what: string) => ({ isError: true, text: `The ${what} id is not a valid id.` });
 
+/**
+ * A list answer the agent can actually read: what matched, what came back, and
+ * the rows. Roof HR's list routes return everything ever recorded, so an
+ * unpaged answer either blows the context or — worse — arrives whole and gets
+ * skimmed, and the agent reports two of the three people who are out this
+ * month. Cutting is fine; cutting silently is not, hence `totalMatching`.
+ */
+function page<T>(list: T[], limit: unknown, key: string, fallback = 50): Record<string, unknown> {
+  const n = typeof limit === 'number' ? Math.min(Math.max(1, limit), 500) : fallback;
+  const rows = list.slice(0, n);
+  return { totalMatching: list.length, countReturned: rows.length, [key]: rows };
+}
+
+/** Does a row's [startDate, endDate] overlap the requested window? Inclusive both ends. */
+function inWindow(row: { startDate?: unknown; endDate?: unknown }, from?: string, to?: string): boolean {
+  const start = String(row.startDate ?? '').slice(0, 10);
+  if (!start) return false;
+  const end = String(row.endDate ?? '').slice(0, 10) || start;
+  if (from && end < from) return false;
+  if (to && start > to) return false;
+  return true;
+}
+
+/** The window a caller asked for: `month` ("2026-09") or explicit start/end. Unbounded when unasked. */
+function windowFrom(args: Args): { from?: string; to?: string; label?: string } {
+  const month = typeof args.month === 'string' && /^\d{4}-\d{2}$/.test(args.month) ? args.month : null;
+  if (month) {
+    const [y, m] = month.split('-').map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}`, label: month };
+  }
+  const from = typeof args.startDate === 'string' ? args.startDate.slice(0, 10) : undefined;
+  const to = typeof args.endDate === 'string' ? args.endDate.slice(0, 10) : undefined;
+  return { from, to, label: from || to ? `${from ?? 'any'}..${to ?? 'any'}` : undefined };
+}
+
+const byStartDate = (a: { startDate?: unknown }, b: { startDate?: unknown }) =>
+  String(a.startDate ?? '').localeCompare(String(b.startDate ?? ''));
+
 const RANGE_PROPS: Props = {
   period: ENUM('Preset window: 7d, 30d, 90d, year or all. Omit for the route default.', ['7d', '30d', '90d', 'year', 'all']),
   startDate: DATE('Start of a custom window'),
@@ -91,13 +130,19 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
     area: 'employees',
     access: 'read',
     description:
-      'Employee directory and notes. Omit arguments for the full employee directory (id, name, role, department, ' +
-      'position, employment type, hire date, phone, active status). Or provide employeeId with view="notes" for HR notes.',
+      'Employee directory, one employee, or HR notes on an employee. ' +
+      'Pass `search` to find a person by name or email — that is how you turn a name someone said out loud into ' +
+      'the employeeId every other tool asks for (do this first when the question names a person). ' +
+      'With no arguments this is the whole company and comes back paged; narrow it with search, department or activeOnly.',
     inputSchema: {
       type: 'object',
       properties: {
         employeeId: ID('employee'),
-        view: ENUM('View to retrieve: "directory" (default, employee list) or "notes" (notes on record, requires employeeId).', ['directory', 'notes']),
+        view: ENUM('View to retrieve: "directory" (default; one employee when employeeId is given) or "notes" (HR notes on record, requires employeeId).', ['directory', 'notes']),
+        search: STRING('Find a person by first name, last name, full name or email (case-insensitive substring).', { maxLength: 120 }),
+        department: STRING('Only this department (case-insensitive exact match).', { maxLength: 80 }),
+        activeOnly: BOOL('true = only currently active employees.'),
+        limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Max employees to return (defaults to 50).' },
       },
     },
     run: (ctx, args) => {
@@ -106,7 +151,41 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
         if (!id) return Promise.resolve(badId('employee'));
         return loopbackGet(ctx, { path: `/api/employees/${id}/notes`, args });
       }
-      return loopbackGet(ctx, { path: '/api/users', args });
+      const wantedId = args.employeeId ? String(args.employeeId).trim() : '';
+      return loopbackGet(ctx, {
+        path: '/api/users',
+        args,
+        pick: (json: unknown) => {
+          if (!Array.isArray(json)) return json;
+          let list = json as any[];
+          if (wantedId) list = list.filter((u: any) => u.id === wantedId);
+          const q = typeof args.search === 'string' ? args.search.trim().toLowerCase() : '';
+          if (q) {
+            list = list.filter((u: any) =>
+              `${u.firstName ?? ''} ${u.lastName ?? ''} ${u.email ?? ''}`.toLowerCase().includes(q));
+          }
+          const dept = typeof args.department === 'string' ? args.department.trim().toLowerCase() : '';
+          if (dept) list = list.filter((u: any) => String(u.department ?? '').toLowerCase() === dept);
+          if (args.activeOnly === true) list = list.filter((u: any) => u.isActive !== false);
+
+          const rows = list.map((u: any) => ({
+            id: u.id,
+            name: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim(),
+            email: u.email,
+            role: u.role,
+            department: u.department,
+            position: u.position,
+            employmentType: u.employmentType,
+            hireDate: u.hireDate,
+            isActive: u.isActive,
+            phone: u.phone,
+          }));
+          if (wantedId) {
+            return rows[0] ?? { employeeId: wantedId, notFound: 'No employee with that id is visible to this person.' };
+          }
+          return page(rows, args.limit, 'employees');
+        },
+      });
     },
   },
 
@@ -116,39 +195,128 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
     area: 'pto',
     access: 'read',
     description:
-      'PTO requests, calendar, and policies. By default lists PTO requests visible to caller. ' +
-      'Can also retrieve company-wide calendar, company policy, department settings, all policies (managers), or individual policy.',
+      'Time off: who is out and when, how many days one person has left, and the policies behind both. ' +
+      'view="calendar" answers "who is out this month" — pass `month` (or startDate/endDate), because the calendar ' +
+      'holds every approved request the company has ever recorded and an unfiltered answer will miss people. ' +
+      'view="balance" answers "how many PTO days does X have left"; look X up with the employees tool first to get their employeeId.',
     inputSchema: {
       type: 'object',
       properties: {
         view: ENUM(
           'View to retrieve: "requests" (default, PTO requests visible to caller), "calendar" (company-wide approved time off), ' +
+          '"balance" (days allocated, used and remaining for one person — employeeId, or omit for yourself), ' +
           '"company_policy" (default rules), "department_settings" (department policy overrides), ' +
-          '"policies" (all employee individual policy rows, managers only), "employee_policy" (one employee policy, requires employeeId).',
-          ['requests', 'calendar', 'company_policy', 'department_settings', 'policies', 'employee_policy'],
+          '"policies" (every individual policy row, managers only), "employee_policy" (same as "balance").',
+          ['requests', 'calendar', 'balance', 'company_policy', 'department_settings', 'policies', 'employee_policy'],
         ),
         employeeId: ID('employee'),
+        month: STRING('Restrict to one calendar month, as YYYY-MM (e.g. 2026-09). Use this for "this month" / "next month" questions.', { maxLength: 7 }),
+        startDate: DATE('Window start — keeps time off that ends on or after this date'),
+        endDate: DATE('Window end — keeps time off that starts on or before this date'),
+        status: STRING('Only requests with this status, e.g. PENDING, APPROVED, DENIED (when view is "requests").', { maxLength: 40 }),
+        limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Max rows to return (defaults to 100).' },
       },
     },
     run: (ctx, args) => {
       const view = args.view ?? 'requests';
+      const { from, to, label } = windowFrom(args);
       switch (view) {
         case 'calendar':
-          return loopbackGet(ctx, { path: '/api/pto/calendar', args });
+          return loopbackGet(ctx, {
+            path: '/api/pto/calendar',
+            args,
+            pick: (json: unknown) => {
+              if (!Array.isArray(json)) return json;
+              const rows = (json as any[]).filter((p) => inWindow(p, from, to)).sort(byStartDate);
+              return { window: label ?? 'all dates on record', ...page(rows, args.limit, 'timeOff', 100) };
+            },
+          });
         case 'company_policy':
           return loopbackGet(ctx, { path: '/api/pto/company-policy', args });
         case 'department_settings':
           return loopbackGet(ctx, { path: '/api/pto/department-settings', args });
         case 'policies':
-          return loopbackGet(ctx, { path: '/api/pto-policies', args });
+          return loopbackGet(ctx, {
+            path: '/api/pto-policies',
+            args,
+            pick: (json: unknown) => {
+              if (!Array.isArray(json)) return json;
+              const rows = (json as any[]).map((p: any) => ({
+                employeeId: p.employeeId,
+                policyLevel: p.policyLevel,
+                totalDays: p.totalDays,
+                usedDays: p.usedDays,
+                remainingDays: p.remainingDays,
+              }));
+              return page(rows, args.limit, 'policies', 100);
+            },
+          });
+        case 'balance':
         case 'employee_policy': {
-          const id = segment(args.employeeId);
-          if (!id) return Promise.resolve(badId('employee'));
-          return loopbackGet(ctx, { path: `/api/pto-policies/employee/${id}`, args });
+          const wanted = args.employeeId ? String(args.employeeId).trim() : '';
+          if (!wanted || wanted === ctx.auth.principal.id) {
+            return loopbackGet(ctx, { path: '/api/employee-portal/pto-balance', args });
+          }
+          if (!segment(wanted)) return Promise.resolve(badId('employee'));
+          // Deliberately NOT /api/pto-policies/employee/:id: that route CREATES a
+          // default policy row when the employee has none (pto-policies.ts), and a
+          // read tool must not leave a row behind. The manager-scoped list is the
+          // same data without the write.
+          return loopbackGet(ctx, {
+            path: '/api/pto-policies',
+            args,
+            pick: (json: unknown) => {
+              if (!Array.isArray(json)) return json;
+              const row = (json as any[]).find((p: any) => p.employeeId === wanted);
+              if (!row) {
+                return {
+                  employeeId: wanted,
+                  notFound: 'No individual PTO policy is on file for that employee; the department or company default applies to them.',
+                };
+              }
+              return {
+                employeeId: row.employeeId,
+                policyLevel: row.policyLevel,
+                totalDays: row.totalDays,
+                usedDays: row.usedDays,
+                remainingDays: row.remainingDays,
+                vacationDays: row.vacationDays,
+                sickDays: row.sickDays,
+                personalDays: row.personalDays,
+                notes: row.notes,
+              };
+            },
+          });
         }
         case 'requests':
         default:
-          return loopbackGet(ctx, { path: '/api/pto', args });
+          return loopbackGet(ctx, {
+            path: '/api/pto',
+            args,
+            pick: (json: unknown) => {
+              if (!Array.isArray(json)) return json;
+              let list = json as any[];
+              const wanted = args.employeeId ? String(args.employeeId).trim() : '';
+              if (wanted) list = list.filter((p: any) => p.employeeId === wanted);
+              const status = typeof args.status === 'string' ? args.status.trim().toUpperCase() : '';
+              if (status) list = list.filter((p: any) => String(p.status ?? '').toUpperCase() === status);
+              const rows = list
+                .filter((p) => inWindow(p, from, to))
+                .sort(byStartDate)
+                .map((p: any) => ({
+                  id: p.id,
+                  employeeId: p.employeeId,
+                  employeeName: p.employeeName,
+                  type: p.type,
+                  status: p.status,
+                  startDate: p.startDate,
+                  endDate: p.endDate,
+                  days: p.days,
+                  reason: p.reason,
+                }));
+              return { window: label ?? 'all dates on record', ...page(rows, args.limit, 'requests', 100) };
+            },
+          });
       }
     },
   },
@@ -173,7 +341,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
       },
     },
     run: (ctx, args) => {
-      const view = args.view ?? 'sessions';
+      const view = args.view ?? (args.sessionId ? 'session_detail' : 'sessions');
       if (view === 'session_detail') {
         const id = segment(args.sessionId);
         if (!id) return Promise.resolve(badId('attendance session'));
@@ -208,7 +376,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
       },
     },
     run: (ctx, args) => {
-      const view = args.view ?? 'instances';
+      const view = args.view ?? (args.id ? 'instance_detail' : 'instances');
       switch (view) {
         case 'template_detail': {
           const id = segment(args.id);
@@ -302,10 +470,11 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
       type: 'object',
       properties: {
         view: ENUM(
-          'Resource to query: "candidates" (default, pipeline), "candidate_notes" (requires candidateId), ' +
+          'Resource to query: "candidates" (default, pipeline), "candidate_detail" (one candidate, requires candidateId), ' +
+          '"candidate_notes" (recruiter notes and interview write-ups on one candidate, requires candidateId), ' +
           '"candidate_interviews" (requires candidateId), "jobs" (job postings), "job_detail" (requires jobId), ' +
           '"interviews" (all interviews), "interview_detail" (requires interviewId), or "interviewer_availability" (requires interviewerId).',
-          ['candidates', 'candidate_notes', 'candidate_interviews', 'jobs', 'job_detail', 'interviews', 'interview_detail', 'interviewer_availability'],
+          ['candidates', 'candidate_detail', 'candidate_notes', 'candidate_interviews', 'jobs', 'job_detail', 'interviews', 'interview_detail', 'interviewer_availability'],
         ),
         candidateId: ID('candidate'),
         jobId: ID('job posting'),
@@ -321,7 +490,9 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
       },
     },
     run: (ctx, args) => {
-      const view = args.view ?? 'candidates';
+      // A candidateId with no view used to fall through to the whole pipeline, which
+      // answered a question about one person with a list starting at somebody else.
+      const view = args.view ?? (args.candidateId ? 'candidate_detail' : 'candidates');
       switch (view) {
         case 'candidate_notes': {
           const id = segment(args.candidateId);
@@ -352,6 +523,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
           if (!id) return Promise.resolve(badId('interviewer'));
           return loopbackGet(ctx, { path: `/api/interview-availability/${id}`, args });
         }
+        case 'candidate_detail':
         case 'candidates':
         default:
           return loopbackGet(ctx, {
@@ -361,6 +533,8 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
             pick: (json: unknown) => {
               if (!Array.isArray(json)) return json;
               let list = json as any[];
+              const wantedId = view === 'candidate_detail' ? String(args.candidateId ?? '').trim() : '';
+              if (wantedId) list = list.filter((c: any) => c.id === wantedId);
 
               const STAGE_TO_DB: Record<string, string[]> = {
                 'phone screening': ['SCREENING'],
@@ -408,6 +582,9 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
                 territory: c.territory?.name,
                 sourcer: c.sourcer ? `${c.sourcer.firstName || ''} ${c.sourcer.lastName || ''}`.trim() : null,
               }));
+              if (wantedId) {
+                return sliced[0] ?? { candidateId: wantedId, notFound: 'No candidate with that id is visible to this person.' };
+              }
               return { totalMatching, countReturned: sliced.length, candidates: sliced };
             },
           });
@@ -443,7 +620,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
       },
     },
     run: (ctx, args) => {
-      const view = args.view ?? 'meetings';
+      const view = args.view ?? (args.meetingId ? 'meeting_detail' : 'meetings');
       switch (view) {
         case 'my_meetings':
           return loopbackGet(ctx, { path: '/api/meetings/my-meetings', args });
@@ -556,7 +733,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
       },
     },
     run: (ctx, args) => {
-      const view = args.view ?? 'workflows';
+      const view = args.view ?? (args.workflowId ? 'workflow_detail' : 'workflows');
       switch (view) {
         case 'templates':
           return loopbackGet(ctx, { path: '/api/workflow-templates', args });

@@ -210,9 +210,20 @@ describe('/mcp — a real MCP client acting as the person', () => {
       const pto: any = await client.callTool({ name: 'pto', arguments: {} });
       expect(pto.isError).toBeFalsy();
       const ptoJson = JSON.parse(firstText(pto));
-      expect(Array.isArray(ptoJson)).toBe(true);
       const directPto = await api('GET', '/api/pto', undefined, ADMIN_TOKEN);
-      expect(ptoJson).toEqual(directPto.json);
+      // The tool pages and projects the route's answer so an agent can read it,
+      // but every row it returns is a row the route itself gave this person —
+      // nothing here re-implements who may see what.
+      expect(ptoJson.totalMatching).toBe(directPto.json.length);
+      expect(ptoJson.countReturned).toBe(Math.min(directPto.json.length, 100));
+      const directIds = new Set(directPto.json.map((r: any) => r.id));
+      for (const row of ptoJson.requests) expect(directIds.has(row.id)).toBe(true);
+
+      // The window arguments are on the schema, so the unknown-argument guard
+      // lets them through rather than refusing the "who is out in September" call.
+      const windowed: any = await client.callTool({ name: 'pto', arguments: { view: 'calendar', month: '2026-09' } });
+      expect(windowed.isError).toBeFalsy();
+      expect(JSON.parse(firstText(windowed)).window).toBe('2026-09');
     } finally {
       await client.close();
     }
