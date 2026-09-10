@@ -6,6 +6,7 @@ import multer from 'multer';
 import { storage } from './storage';
 import { refuseReadOnlyAgentWrite } from './middleware/auth';
 import mcpTokenRoutes from './routes/mcp-tokens';
+import mcpConnectRoutes from './routes/mcp-connect';
 import { EmailService } from './email-service';
 import { equipmentReceiptService } from './services/equipment-receipt-service';
 import { isNotificationEnabled } from './services/notification-preferences';
@@ -6055,6 +6056,8 @@ export function registerRoutes(app: express.Application) {
 
   // Personal agent tokens for the MCP endpoint (server/mcp/, /mcp is mounted in index.ts)
   app.use('/api/mcp/tokens', mcpTokenRoutes);
+  // Connecting another Roof-ER app to Roof HR AS THE PERSON — see server/mcp/connect.ts.
+  app.use('/api/mcp/connect', mcpConnectRoutes);
   
   // Mount email routes
   app.use('/api/emails', emailRoutes);

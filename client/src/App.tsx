@@ -16,6 +16,7 @@ import Documents from '@/pages/documents';
 import Reviews from '@/pages/reviews';
 import ChangePassword from '@/pages/change-password';
 import Settings from '@/pages/settings';
+import ConnectAgent from '@/pages/connect-agent';
 import Login from '@/pages/login';
 import ApiTest from '@/pages/api-test';
 import Tasks from '@/pages/tasks';
@@ -100,6 +101,9 @@ function AuthenticatedRoutes() {
         } />
 
         {/* PTO: Everyone can access */}
+        {/* Connecting another Roof-ER app to Roof HR, as yourself. Any signed-in
+            role may reach it; the server decides what they can actually grant. */}
+        <Route path="/connect/agent" element={<ConnectAgent />} />
         <Route path="/pto" element={<PTO />} />
 
         {/* Tasks: Everyone (API scopes — employees see their own, managers see all) */}
