@@ -3731,7 +3731,9 @@ router.patch('/api/candidates/:id/sourcer-update', requireAuth, async (req: any,
       'firstName', 'lastName', 'email', 'phone', 'position', 'referralName',
       'interviewScreeningData', 'interviewScreeningDate', 'interviewScreeningNotes',
       'hasDriversLicense', 'hasReliableVehicle', 'canGetOnRoof', 'isOutgoing',
-      'availability', 'customTags', 'notes', 'phoneScreeningNotes'
+      'availability', 'customTags', 'notes', 'phoneScreeningNotes',
+      // The candidate's location. Editable after it's first set (9/11 ask).
+      'territoryId'
     ];
 
     const updates: Record<string, any> = {};

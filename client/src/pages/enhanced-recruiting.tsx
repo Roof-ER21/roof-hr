@@ -118,12 +118,14 @@ const positionTypes = [
 function EditCandidateForm({
   candidate,
   positionTypes,
+  territories,
   onSubmit,
   onCancel,
   isPending
 }: {
   candidate: Candidate;
   positionTypes: string[];
+  territories: Array<{ id: string; name: string; region?: string | null }>;
   onSubmit: (data: Partial<Candidate>) => void;
   onCancel: () => void;
   isPending: boolean;
@@ -135,10 +137,19 @@ function EditCandidateForm({
   const [position, setPosition] = useState(candidate.position);
   const [notes, setNotes] = useState(candidate.notes || '');
   const [referralName, setReferralName] = useState(candidate.referralName || '');
+  // Territory (the candidate's location) used to be settable only once, in the
+  // assignment dialog after upload. 'none' stands in for unset: Radix Select
+  // won't take an empty-string value.
+  const initialTerritoryId = (candidate as any).territoryId || (candidate as any).territory?.id || 'none';
+  const [territoryId, setTerritoryId] = useState<string>(initialTerritoryId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ firstName, lastName, email, phone, position, notes, referralName });
+    const data: any = { firstName, lastName, email, phone, position, notes, referralName };
+    if (territoryId !== initialTerritoryId) {
+      data.territoryId = territoryId === 'none' ? null : territoryId;
+    }
+    onSubmit(data);
   };
 
   return (
@@ -192,6 +203,27 @@ function EditCandidateForm({
           <SelectContent>
             {positionTypes.map(pos => (
               <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <Label htmlFor="edit-territory">Territory / Location</Label>
+        <Select value={territoryId} onValueChange={setTerritoryId}>
+          <SelectTrigger id="edit-territory">
+            <SelectValue placeholder="Select territory" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No territory</SelectItem>
+            {/* The list is only loaded for managers / lead sourcers; keep the current one visible for everyone else */}
+            {initialTerritoryId !== 'none' && !territories.some(t => t.id === initialTerritoryId) && (candidate as any).territory && (
+              <SelectItem value={initialTerritoryId}>{(candidate as any).territory.name}</SelectItem>
+            )}
+            {territories.map(t => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}{t.region ? ` (${t.region})` : ''}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -3423,6 +3455,7 @@ export default function EnhancedRecruiting() {
             <EditCandidateForm
               candidate={editingCandidate}
               positionTypes={positionTypes}
+              territories={territories}
               onSubmit={(data) => {
                 updateCandidateMutation.mutate({
                   id: editingCandidate.id,
