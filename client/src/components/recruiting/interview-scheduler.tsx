@@ -13,6 +13,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useOffices } from '@/hooks/useOffices';
 import { Calendar as CalendarIcon, Clock, MapPin, Video, Phone, Users, User, CheckCircle, XCircle, AlertCircle, Send, Link2, AlertTriangle, UserX, Loader2, RefreshCw } from 'lucide-react';
 import { MANAGER_ROLES, ADMIN_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
 import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
@@ -85,13 +86,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   const [rescheduleInterviewId, setRescheduleInterviewId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('schedule');
 
-  // Office locations
-  const officeLocations = {
-    DMV: '8100 Boone Blvd, Vienna, VA 22182, Suite 400',
-    PA: '851 Duportail Rd, Chesterbrook, PA 19087',
-    RICHMOND: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060',
-    CUSTOM: '',
-  };
+  // Office locations come from Recruiting → Email Templates → Offices.
+  const { data: offices = [] } = useOffices(isOpen);
 
   // Fetch available interviewers
   const { data: interviewers } = useQuery<Array<{ id: string; firstName: string; lastName: string; role: string }>>({
@@ -1031,50 +1027,24 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
                   {/* Office Location Checkboxes */}
                   <div className="flex flex-wrap gap-3">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="loc-dmv"
-                        name="officeLocation"
-                        checked={selectedOfficeLocation === 'DMV'}
-                        onChange={() => {
-                          setSelectedOfficeLocation('DMV');
-                          setLocation(officeLocations.DMV);
-                        }}
-                        className="rounded border-gray-300"
-                      />
-                      <label htmlFor="loc-dmv" className="text-sm font-medium">DMV Office</label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="loc-pa"
-                        name="officeLocation"
-                        checked={selectedOfficeLocation === 'PA'}
-                        onChange={() => {
-                          setSelectedOfficeLocation('PA');
-                          setLocation(officeLocations.PA);
-                        }}
-                        className="rounded border-gray-300"
-                      />
-                      <label htmlFor="loc-pa" className="text-sm font-medium">PHI Office</label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="loc-richmond"
-                        name="officeLocation"
-                        checked={selectedOfficeLocation === 'RICHMOND'}
-                        onChange={() => {
-                          setSelectedOfficeLocation('RICHMOND');
-                          setLocation(officeLocations.RICHMOND);
-                        }}
-                        className="rounded border-gray-300"
-                      />
-                      <label htmlFor="loc-richmond" className="text-sm font-medium">Richmond Office</label>
-                    </div>
+                    {offices.map((office) => (
+                      <div key={office.key} className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          id={`loc-${office.key.toLowerCase()}`}
+                          name="officeLocation"
+                          checked={selectedOfficeLocation === office.key}
+                          onChange={() => {
+                            setSelectedOfficeLocation(office.key);
+                            setLocation(office.address);
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <label htmlFor={`loc-${office.key.toLowerCase()}`} className="text-sm font-medium">
+                          {office.label}
+                        </label>
+                      </div>
+                    ))}
 
                     <div className="flex items-center space-x-2">
                       <input
@@ -1107,7 +1077,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
                   {selectedOfficeLocation && selectedOfficeLocation !== 'CUSTOM' && (
                     <p className="text-xs text-muted-foreground">
-                      Address auto-filled from {selectedOfficeLocation} office
+                      Address auto-filled from the {offices.find((o) => o.key === selectedOfficeLocation)?.label ?? selectedOfficeLocation} office
                     </p>
                   )}
                 </div>

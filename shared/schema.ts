@@ -3092,6 +3092,27 @@ export const welcomeEmailTemplateVersions = pgTable('welcome_email_template_vers
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Offices — the places a new hire reports to and an interview can happen.
+ * `key` is what hire/send routes pass as officeLocation ('DMV', 'PITT'...).
+ */
+export const offices = pgTable('offices', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull(),
+  label: text('label').notNull(),
+  address: text('address').notNull(),
+  meetPerson: text('meet_person').notNull().default('the team'),
+  enabled: boolean('enabled').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(100),
+  updatedBy: text('updated_by'),
+  deletedAt: timestamp('deleted_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export type Office = typeof offices.$inferSelect;
+export type InsertOffice = typeof offices.$inferInsert;
+
 export type WelcomeEmailAttachment = typeof welcomeEmailAttachments.$inferSelect;
 export type InsertWelcomeEmailAttachment = typeof welcomeEmailAttachments.$inferInsert;
 export type WelcomeEmailAttachmentVersion = typeof welcomeEmailAttachmentVersions.$inferSelect;

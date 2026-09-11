@@ -15,11 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Loader2, Users } from 'lucide-react';
 
-const OFFICE_LOCATIONS = {
-  DMV: { label: 'DMV (Vienna, VA)', address: '8100 Boone Blvd, Vienna, VA 22182, Suite 400', meetPerson: 'Reese Samala' },
-  PA: { label: 'PHI (Chesterbrook, PA)', address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
-  RICHMOND: { label: 'Richmond (Glen Allen, VA)', address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
-} as const;
+import { useOffices } from '@/hooks/useOffices';
 
 interface Employee {
   id: string;
@@ -45,7 +41,13 @@ export function SendWelcomeDialog({
 }: SendWelcomeDialogProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(preselectedIds));
   const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail' | 'none'>('insurance');
-  const [officeLocation, setOfficeLocation] = useState<keyof typeof OFFICE_LOCATIONS>('DMV');
+  const { data: offices = [] } = useOffices(open);
+  const [officeLocation, setOfficeLocation] = useState<string>('DMV');
+  useEffect(() => {
+    if (offices.length && !offices.some((o) => o.key === officeLocation)) {
+      setOfficeLocation(offices[0].key);
+    }
+  }, [offices, officeLocation]);
   const [ccSalesManagers, setCcSalesManagers] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -183,13 +185,13 @@ export function SendWelcomeDialog({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Office Location</label>
-              <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value as keyof typeof OFFICE_LOCATIONS)}>
+              <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value)}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select office" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(OFFICE_LOCATIONS).map(([key, loc]) => (
-                    <SelectItem key={key} value={key}>{loc.label}</SelectItem>
+                  {offices.map((loc) => (
+                    <SelectItem key={loc.key} value={loc.key}>{loc.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
