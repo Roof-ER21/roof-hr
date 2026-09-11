@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { InterviewQuestionsDialog } from './interview-questions-dialog';
 import { MANAGER_ROLES, ADMIN_ROLES } from '@shared/constants/roles';
 import { getTerritoryStyle } from '@/lib/territory-style';
+import { useOffices } from '@/hooks/useOffices';
 
 interface CandidateNote {
   id: string;
@@ -276,6 +277,12 @@ export function CandidateDetailsDialog({
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('09:00');
   const [rescheduleInterviewerId, setRescheduleInterviewerId] = useState('');
+  // Type / room / link are editable in place — no delete-and-recreate to go
+  // from Video to In Person.
+  const [rescheduleType, setRescheduleType] = useState('IN_PERSON');
+  const [rescheduleLocation, setRescheduleLocation] = useState('');
+  const [rescheduleMeetingLink, setRescheduleMeetingLink] = useState('');
+  const { data: offices = [] } = useOffices(showRescheduleDialog);
 
   // Fetch resume with authentication to bypass iframe auth issues
   useEffect(() => {
@@ -491,6 +498,9 @@ export function CandidateDetailsDialog({
     setRescheduleDate(dateStr);
     setRescheduleTime(timeStr);
     setRescheduleInterviewerId(interview.interviewerId || '');
+    setRescheduleType(interview.type || 'IN_PERSON');
+    setRescheduleLocation(interview.location || '');
+    setRescheduleMeetingLink(interview.meetingLink || '');
     setShowRescheduleDialog(true);
   };
 
@@ -510,10 +520,21 @@ export function CandidateDetailsDialog({
     const [hours, minutes] = rescheduleTime.split(':').map(Number);
     const scheduledDate = new Date(year, month - 1, day, hours, minutes);
 
-    // Validate 1 hour minimum
+    if (rescheduleType === 'IN_PERSON' && !rescheduleLocation.trim()) {
+      toast({
+        title: 'Location Required',
+        description: 'Pick an office or enter an address for an in-person interview.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate 1 hour minimum — only when the time actually moves, so a type or
+    // room change close to the start isn't refused.
     const now = new Date();
     const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-    if (scheduledDate < oneHourFromNow) {
+    const timeMoved = scheduledDate.getTime() !== new Date(rescheduleInterview.scheduledDate).getTime();
+    if (timeMoved && scheduledDate < oneHourFromNow) {
       toast({
         title: 'Insufficient Notice',
         description: 'Interviews must be scheduled at least 1 hour in advance',
@@ -526,9 +547,11 @@ export function CandidateDetailsDialog({
       interviewId: rescheduleInterview.id,
       scheduledDate: scheduledDate.toISOString(),
       duration: rescheduleInterview.duration,
-      type: rescheduleInterview.type,
-      location: rescheduleInterview.location,
-      meetingLink: rescheduleInterview.meetingLink,
+      type: rescheduleType,
+      // Send both explicitly; the one this type doesn't use goes as '' and the
+      // server clears it.
+      location: rescheduleType === 'IN_PERSON' ? rescheduleLocation.trim() : '',
+      meetingLink: ['VIDEO', 'PHONE'].includes(rescheduleType) ? rescheduleMeetingLink.trim() : '',
       interviewerId: rescheduleInterviewerId || undefined,
     });
   };
@@ -1117,7 +1140,7 @@ export function CandidateDetailsDialog({
                                       disabled={rescheduleInterviewMutation.isPending}
                                     >
                                       <RefreshCw className="h-4 w-4 mr-1" />
-                                      Reschedule
+                                      Edit / Reschedule
                                     </Button>
                                     <Button
                                       size="sm"
@@ -1331,9 +1354,9 @@ export function CandidateDetailsDialog({
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reschedule Interview</DialogTitle>
+            <DialogTitle>Edit / Reschedule Interview</DialogTitle>
             <DialogDescription>
-              Select a new date and time for this interview. The candidate and interviewer will be notified.
+              Change the date, time, type, location or interviewer. The candidate and interviewer will be notified.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1382,6 +1405,62 @@ export function CandidateDetailsDialog({
               </select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="reschedule-type">Interview Type</Label>
+              <select
+                id="reschedule-type"
+                value={rescheduleType}
+                onChange={(e) => setRescheduleType(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              >
+                <option value="IN_PERSON">In Person</option>
+                <option value="VIDEO">Video (Virtual)</option>
+                <option value="PHONE">Phone</option>
+                {/* Older interviews may carry a type the scheduler no longer offers */}
+                {!['IN_PERSON', 'VIDEO', 'PHONE'].includes(rescheduleType) && (
+                  <option value={rescheduleType}>{rescheduleType.replace(/_/g, ' ')}</option>
+                )}
+              </select>
+            </div>
+            {rescheduleType === 'IN_PERSON' && (
+              <div className="space-y-2">
+                <Label htmlFor="reschedule-location">Location</Label>
+                {offices.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {offices.map((office) => (
+                      <Button
+                        key={office.key}
+                        type="button"
+                        size="sm"
+                        variant={rescheduleLocation === office.address ? 'default' : 'outline'}
+                        onClick={() => setRescheduleLocation(office.address)}
+                      >
+                        {office.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  id="reschedule-location"
+                  value={rescheduleLocation}
+                  onChange={(e) => setRescheduleLocation(e.target.value)}
+                  placeholder="Pick an office or enter an address"
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                />
+              </div>
+            )}
+            {['VIDEO', 'PHONE'].includes(rescheduleType) && (
+              <div className="space-y-2">
+                <Label htmlFor="reschedule-link">Meeting Link {rescheduleType === 'PHONE' && '(optional)'}</Label>
+                <input
+                  id="reschedule-link"
+                  value={rescheduleMeetingLink}
+                  onChange={(e) => setRescheduleMeetingLink(e.target.value)}
+                  placeholder="https://meet.google.com/..."
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                />
+              </div>
+            )}
+            <div className="space-y-2">
               <Label htmlFor="reschedule-interviewer">Interviewer</Label>
               <select
                 id="reschedule-interviewer"
@@ -1400,7 +1479,7 @@ export function CandidateDetailsDialog({
             {rescheduleInterview && (
               <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-md">
                 <p><strong>Current:</strong> {format(new Date(rescheduleInterview.scheduledDate), 'PPP p')} ET</p>
-                <p><strong>Type:</strong> {rescheduleInterview.type}</p>
+                <p><strong>Current Type:</strong> {String(rescheduleInterview.type).replace(/_/g, ' ')}</p>
                 <p><strong>Duration:</strong> {rescheduleInterview.duration} minutes</p>
                 {rescheduleInterview.interviewerId && (
                   <p><strong>Current Interviewer:</strong> {users.find(u => u.id === rescheduleInterview.interviewerId)?.firstName} {users.find(u => u.id === rescheduleInterview.interviewerId)?.lastName}</p>
@@ -1426,7 +1505,7 @@ export function CandidateDetailsDialog({
                   Rescheduling...
                 </>
               ) : (
-                'Confirm Reschedule'
+                'Save Changes'
               )}
             </Button>
           </DialogFooter>

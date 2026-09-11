@@ -8,6 +8,7 @@ import { getConflictDetector } from '../services/calendar-conflict-detector';
 import { timezoneService } from '../services/timezone-service';
 import { requireAuth, requireManager } from '../middleware/auth';
 import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
+import { resolveInterviewChange, violatesNoticeRule } from '../lib/interview-change';
 
 const router = Router();
 
@@ -1003,12 +1004,13 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Interview not found' });
     }
 
-    // Validate same-day scheduling has at least 1 hour notice
-    const newScheduledDate = new Date(scheduledDate);
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    // Type, room and link can change in place; a field the new type doesn't use
+    // is cleared (see server/lib/interview-change.ts).
+    const change = resolveInterviewChange(existingInterview, { type, location, meetingLink, scheduledDate });
+    const newScheduledDate = change.scheduledDate;
 
-    if (newScheduledDate < oneHourFromNow) {
+    // One hour notice applies to a new time only, not to a type or room change.
+    if (violatesNoticeRule(change)) {
       return res.status(400).json({
         error: 'Insufficient notice',
         message: 'Interviews must be scheduled at least 1 hour in advance'
@@ -1023,9 +1025,9 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
     const updatedInterview = await storage.updateInterview(req.params.id, {
       scheduledDate: newScheduledDate,
       duration: interviewDuration,
-      type: type || existingInterview.type,
-      location: location !== undefined ? location : existingInterview.location,
-      meetingLink: meetingLink !== undefined ? meetingLink : existingInterview.meetingLink,
+      type: change.type as any,
+      location: change.location,
+      meetingLink: change.meetingLink,
       notes: notes !== undefined ? notes : existingInterview.notes,
       interviewerId: interviewerId || existingInterview.interviewerId,
       status: 'SCHEDULED', // Reset to SCHEDULED (in case it was RESCHEDULED before)
@@ -1056,9 +1058,15 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
         minute: '2-digit'
       });
 
+      const changes: string[] = [];
+      if (change.dateChanged) changes.push(`rescheduled from ${originalDateStr} to ${newDateStr}`);
+      if (change.typeChanged) changes.push(`changed from ${formatInterviewType(existingInterview.type)} to ${formatInterviewType(change.type)}`);
+      if (!change.typeChanged && change.location !== (existingInterview.location ?? null)) changes.push(`location changed to ${change.location || 'none'}`);
+      if (!change.typeChanged && change.meetingLink !== (existingInterview.meetingLink ?? null)) changes.push('meeting link changed');
+
       await storage.createCandidateNote({
         candidateId: existingInterview.candidateId,
-        content: `Interview rescheduled from ${originalDateStr} to ${newDateStr}`,
+        content: changes.length ? `Interview ${changes.join('; ')}` : `Interview updated (${newDateStr})`,
         type: 'INTERVIEW',
         authorId: (req as any).user?.id || 'system'
       });
@@ -1093,8 +1101,8 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
             interviewerEmail,
             {
               summary: `Interview: ${candidate?.firstName} ${candidate?.lastName} - ROOF ER`,
-              description: `Rescheduled Interview\n\nCandidate: ${candidate?.firstName} ${candidate?.lastName}\nType: ${formatInterviewType(type || existingInterview.type)}\n${notes ? `Notes: ${notes}` : ''}`,
-              location: location || meetingLink || existingInterview.location || existingInterview.meetingLink,
+              description: `${change.dateChanged ? 'Rescheduled' : 'Updated'} Interview\n\nCandidate: ${candidate?.firstName} ${candidate?.lastName}\nType: ${formatInterviewType(change.type)}\n${notes ? `Notes: ${notes}` : ''}`,
+              location: change.location || change.meetingLink || undefined,
               startDateTime: newScheduledDate,
               endDateTime,
               attendees,
@@ -1125,17 +1133,17 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
       if (candidate?.email) {
         await emailService.sendEmail({
           to: candidate.email,
-          subject: `Interview Rescheduled - ROOF ER`,
+          subject: change.dateChanged ? `Interview Rescheduled - ROOF ER` : `Interview Updated - ROOF ER`,
           html: `
             <p>Dear ${candidate.firstName},</p>
-            <p>Your interview has been rescheduled to a new date and time.</p>
-            <p><strong>New Interview Details:</strong></p>
+            <p>${change.dateChanged ? 'Your interview has been rescheduled to a new date and time.' : 'The details of your interview have changed.'}</p>
+            <p><strong>${change.dateChanged ? 'New ' : 'Updated '}Interview Details:</strong></p>
             <ul>
               <li>Date: ${newScheduledDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}</li>
               <li>Time: ${newScheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET</li>
-              <li>Type: ${formatInterviewType(type || existingInterview.type)}</li>
-              ${(location || existingInterview.location) ? `<li>Location: ${location || existingInterview.location}</li>` : ''}
-              ${(meetingLink || existingInterview.meetingLink) ? `<li>Meeting Link: <a href="${meetingLink || existingInterview.meetingLink}">${meetingLink || existingInterview.meetingLink}</a></li>` : ''}
+              <li>Type: ${formatInterviewType(change.type)}</li>
+              ${change.location ? `<li>Location: ${change.location}</li>` : ''}
+              ${change.meetingLink ? `<li>Meeting Link: <a href="${change.meetingLink}">${change.meetingLink}</a></li>` : ''}
             </ul>
             <p>If you have any questions, please reply to this email.</p>
             <p>Best regards,<br>The Roof Docs HR Team</p>
@@ -1149,19 +1157,20 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
       if (interviewer?.email) {
         await emailService.sendEmail({
           to: interviewer.email,
-          subject: `Interview Rescheduled: ${candidate?.firstName} ${candidate?.lastName}`,
+          subject: `Interview ${change.dateChanged ? 'Rescheduled' : 'Updated'}: ${candidate?.firstName} ${candidate?.lastName}`,
           html: `
             <p>Hi ${interviewer.firstName},</p>
-            <p>An interview has been rescheduled.</p>
+            <p>An interview has been ${change.dateChanged ? 'rescheduled' : 'updated'}.</p>
             <p><strong>Updated Interview Details:</strong></p>
             <ul>
               <li>Candidate: ${candidate?.firstName} ${candidate?.lastName}</li>
               <li>Position: ${candidate?.position || 'N/A'}</li>
               <li>Date: ${newScheduledDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}</li>
               <li>Time: ${newScheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET</li>
+              <li>Type: ${formatInterviewType(change.type)}</li>
               <li>Duration: ${interviewDuration} minutes</li>
-              ${(location || existingInterview.location) ? `<li>Location: ${location || existingInterview.location}</li>` : ''}
-              ${(meetingLink || existingInterview.meetingLink) ? `<li>Meeting Link: <a href="${meetingLink || existingInterview.meetingLink}">${meetingLink || existingInterview.meetingLink}</a></li>` : ''}
+              ${change.location ? `<li>Location: ${change.location}</li>` : ''}
+              ${change.meetingLink ? `<li>Meeting Link: <a href="${change.meetingLink}">${change.meetingLink}</a></li>` : ''}
             </ul>
             <p>A calendar invite has been sent to your calendar.</p>
           `,
