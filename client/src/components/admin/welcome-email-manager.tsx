@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import TokenEditor from '@/components/admin/token-editor';
+import OfficesCard from '@/components/admin/offices-card';
 
 // ---------------------------------------------------------------------------
 // Types + helpers
@@ -171,11 +172,12 @@ export default function WelcomeEmailManager() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Welcome Email</h2>
         <p className="text-sm text-muted-foreground">
-          The email every new hire receives, and the documents that come with it. Anything you
-          change here goes out with the next welcome email.
+          The email every new hire receives, the offices they can report to, and the documents
+          that come with it. Anything you change here goes out with the next welcome email.
         </p>
       </div>
 
+      <OfficesCard />
       <AttachmentsCard />
       <BodyCard />
     </div>

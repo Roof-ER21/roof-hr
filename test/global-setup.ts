@@ -83,7 +83,7 @@ export async function setup(): Promise<void> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  // 2. Make migration 0010 do real work at boot: drop what drizzle-kit just
+  // 2. Make migrations 0010 and 0011 do real work at boot: drop what drizzle-kit just
   //    created from shared/schema.ts so the runner has to create it.
   //    Pre-existing hazard, not ours: shared/schema.ts's authz_grants lacks the
   //    UNIQUE (capability, principal_type, principal) that 0008 declares, so on
@@ -97,6 +97,7 @@ export async function setup(): Promise<void> {
     DROP TABLE IF EXISTS mcp_tokens;
     ALTER TABLE sessions DROP COLUMN IF EXISTS agent_scope;
     DROP TABLE IF EXISTS authz_grants;
+    DROP TABLE IF EXISTS offices;
   `);
 
   // 3. Boot the server from the working tree.

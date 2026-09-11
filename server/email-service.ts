@@ -8,6 +8,7 @@ import { LEAD_SOURCER_EMAILS } from '../shared/constants/roles';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as welcomeEmailContent from './services/welcomeEmailContentService';
+import * as officeService from './services/officeService';
 
 const OAuth2 = google.auth.OAuth2;
 
@@ -866,19 +867,15 @@ class EmailService {
       includeEquipmentChecklist?: boolean;
       equipmentSigningUrl?: string;
       welcomeEmailType?: 'auto' | 'insurance' | 'retail';
-      officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
+      officeLocation?: string; // office key from the offices table, e.g. 'DMV', 'PITT'
       // An unsaved draft from the admin editor: render it with real token values
       // without saving it first.
       templateOverride?: { subject?: string; bodyHtml?: string };
     }
   ): Promise<{ subject: string; html: string; attachmentLabels: string[] }> {
-    const officeLocations: Record<string, { address: string; meetPerson: string }> = {
-      DMV: { address: '8100 Boone Blvd Suite 400, Vienna, VA 22182', meetPerson: 'Reese Samala' },
-      PA: { address: '851 Duportail Rd, Chesterbrook, PA 19087', meetPerson: 'the team' },
-      RICHMOND: { address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060', meetPerson: 'the team' },
-    };
-
-    const selectedOffice = officeLocations[options?.officeLocation || 'DMV'] || officeLocations.DMV;
+    // Offices live in the `offices` table (Recruiting → Email Templates →
+    // Offices) so HR can add one without a deploy. Unknown key → DMV.
+    const selectedOffice = await officeService.resolveOfficeForEmail(options?.officeLocation);
 
     const startDate = options?.startDate || getUpcomingMonday();
     const formattedDate = formatStartDate(startDate);
@@ -951,7 +948,7 @@ class EmailService {
       equipmentChecklistUrl?: string;
       equipmentSigningUrl?: string;
       welcomeEmailType?: 'auto' | 'insurance' | 'retail';
-      officeLocation?: 'DMV' | 'PA' | 'RICHMOND';
+      officeLocation?: string; // office key from the offices table, e.g. 'DMV', 'PITT'
       htmlOverride?: string;      // edited HTML from the hire modal — if present, used verbatim
       subjectOverride?: string;   // edited subject from the hire modal
     }

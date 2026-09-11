@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useOffices } from '@/hooks/useOffices';
 import {
   Dialog,
   DialogContent,
@@ -55,12 +56,6 @@ interface Bundle {
   description?: string;
 }
 
-const OFFICE_LOCATIONS = {
-  DMV: { label: 'DMV (Vienna, VA)', address: '8100 Boone Blvd Suite 400, Vienna, VA 22182' },
-  PA: { label: 'PHI (Chesterbrook, PA)', address: '851 Duportail Rd, Chesterbrook, PA 19087' },
-  RICHMOND: { label: 'Richmond (Glen Allen, VA)', address: '2400 Old Brick Rd, Suite 105, Glen Allen, VA 23060' },
-} as const;
-
 export interface HireData {
   startDate: string;
   startTime?: string;            // e.g. "10am" — editable in modal, also reflected in editable body
@@ -110,7 +105,16 @@ export function HireCandidateModal({
   const [welcomePackageId, setWelcomePackageId] = useState<string>('');
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [welcomeEmailType, setWelcomeEmailType] = useState<'insurance' | 'retail'>('insurance');
-  const [officeLocation, setOfficeLocation] = useState<keyof typeof OFFICE_LOCATIONS>('DMV');
+  // Offices come from Recruiting → Email Templates → Offices, so a new office
+  // (Pittsburgh, 9/2026) appears here without a code change.
+  const { data: offices = [] } = useOffices();
+  const [officeLocation, setOfficeLocation] = useState<string>('DMV');
+  const selectedOffice = offices.find((o) => o.key === officeLocation) ?? offices[0];
+  useEffect(() => {
+    if (offices.length && !offices.some((o) => o.key === officeLocation)) {
+      setOfficeLocation(offices[0].key);
+    }
+  }, [offices, officeLocation]);
   const [ccSalesManagers, setCcSalesManagers] = useState<string[]>([]);
 
   // Editable welcome email state
@@ -439,13 +443,13 @@ export function HireCandidateModal({
                     </div>
                     <div className="space-y-1">
                       <Label>Office Location</Label>
-                      <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value as keyof typeof OFFICE_LOCATIONS)}>
+                      <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value)}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(OFFICE_LOCATIONS).map(([key, loc]) => (
-                            <SelectItem key={key} value={key}>{loc.label}</SelectItem>
+                          {offices.map((loc) => (
+                            <SelectItem key={loc.key} value={loc.key}>{loc.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -466,7 +470,7 @@ export function HireCandidateModal({
                     {welcomeEmailType === 'insurance'
                       ? 'Includes apps, training, HR portal, and equipment checklist'
                       : 'Retail division training with Bruno - no equipment checklist'}
-                    {' | '}Office: {OFFICE_LOCATIONS[officeLocation].address}
+                    {' | '}Office: {selectedOffice?.address ?? '…'}
                   </p>
                   {salesManagers.length > 0 && (
                     <div className="space-y-1">

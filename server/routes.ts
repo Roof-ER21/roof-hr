@@ -70,6 +70,7 @@ import superAdminRoutes from './routes/super-admin';
 import ssoRoutes from './routes/sso';
 import authzRoutes from './routes/authz';
 import welcomeEmailRoutes from './routes/welcome-email';
+import officeRoutes from './routes/offices';
 import emailPreferencesRoutes from './routes/email-preferences';
 import candidateImportLogsRoutes from './routes/candidate-import-logs';
 import aiEvaluationsRoutes from './routes/ai-evaluations';
@@ -6149,6 +6150,7 @@ export function registerRoutes(app: express.Application) {
 
   // Mount welcome-email content admin routes (attachments + editable body)
   app.use(welcomeEmailRoutes);
+  app.use(officeRoutes);
 
   // Mount equipment agreement routes
   app.use(equipmentAgreementRoutes);
