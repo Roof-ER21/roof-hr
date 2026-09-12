@@ -38,7 +38,7 @@ class GmailService {
         return token;
       } catch (fallbackError) {
         console.error('[Gmail] Fallback token retrieval failed:', fallbackError);
-        throw new Error('Unable to obtain Gmail access token. Please check GOOGLE_REFRESH_TOKEN environment variable.');
+        throw new Error('Unable to obtain Gmail access token. Please check GOOGLE_REFRESH_TOKEN environment variable.', { cause: fallbackError });
       }
     }
   }

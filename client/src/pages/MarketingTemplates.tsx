@@ -123,25 +123,25 @@ function BrandKitDialog({ brand, isCustomized }: { brand: BrandTokens; isCustomi
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium">Phone</label>
-                <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
+                <label htmlFor="phone" className="text-sm font-medium">Phone</label>
+                <Input id="phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
               </div>
               <div>
-                <label className="text-sm font-medium">Website</label>
-                <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} className="mt-1" />
+                <label htmlFor="website" className="text-sm font-medium">Website</label>
+                <Input id="website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} className="mt-1" />
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Email</label>
-              <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" />
+              <label htmlFor="email" className="text-sm font-medium">Email</label>
+              <Input id="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1" />
             </div>
             <div>
-              <label className="text-sm font-medium">Serving areas (comma-separated)</label>
-              <Input value={form.servingAreas} onChange={(e) => setForm({ ...form, servingAreas: e.target.value })} className="mt-1" />
+              <label htmlFor="serving-areas-comma-separated" className="text-sm font-medium">Serving areas (comma-separated)</label>
+              <Input id="serving-areas-comma-separated" value={form.servingAreas} onChange={(e) => setForm({ ...form, servingAreas: e.target.value })} className="mt-1" />
             </div>
             <div>
-              <label className="text-sm font-medium">Service chips (comma-separated)</label>
-              <Input value={form.chips} onChange={(e) => setForm({ ...form, chips: e.target.value })} className="mt-1" />
+              <label htmlFor="service-chips-comma-separated" className="text-sm font-medium">Service chips (comma-separated)</label>
+              <Input id="service-chips-comma-separated" value={form.chips} onChange={(e) => setForm({ ...form, chips: e.target.value })} className="mt-1" />
             </div>
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
@@ -290,8 +290,8 @@ export default function MarketingTemplates() {
           {/* Campaign picker */}
           <Card>
             <CardContent className="pt-6 flex flex-col md:flex-row md:items-center gap-3">
-              <label className="text-sm font-medium shrink-0">Campaign QR code:</label>
-              <select
+              <label htmlFor="campaign-qr-code" className="text-sm font-medium shrink-0">Campaign QR code:</label>
+              <select id="campaign-qr-code"
                 value={campaign?.id || ''}
                 onChange={(e) => setCampaignId(e.target.value)}
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm md:w-96"

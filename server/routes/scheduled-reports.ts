@@ -67,7 +67,7 @@ router.get('/api/scheduled-reports/:id', requireAuth, async (req, res) => {
     const history = await storage.getReportHistoryByReportId(req.params.id);
 
     // Sort history by most recent first
-    const sortedHistory = history.sort((a: any, b: any) =>
+    const sortedHistory = history.toSorted((a: any, b: any) =>
       new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()
     );
 

@@ -182,7 +182,7 @@ describe('/mcp — a real MCP client acting as the person', () => {
     const client = await connect(mintedToken);
     try {
       const { tools } = await client.listTools();
-      const names = tools.map((t) => t.name).sort();
+      const names = tools.map((t) => t.name).toSorted();
       expect(names).toContain('me');
       expect(names).toContain('my_portal');
       expect(names).toContain('pto');
@@ -205,7 +205,7 @@ describe('/mcp — a real MCP client acting as the person', () => {
       expect(meJson.email).toBe(ADMIN_EMAIL);
       expect(me.structuredContent).toBeTypeOf('object');
       const direct = await api('GET', '/api/auth/me', undefined, ADMIN_TOKEN);
-      expect(Object.keys(meJson).sort()).toEqual(Object.keys(direct.json).sort());
+      expect(Object.keys(meJson).toSorted()).toEqual(Object.keys(direct.json).toSorted());
 
       const pto: any = await client.callTool({ name: 'pto', arguments: {} });
       expect(pto.isError).toBeFalsy();
@@ -270,7 +270,7 @@ describe('/mcp — a real MCP client acting as the person', () => {
     expect(okMe.user_id).toBe(ADMIN_ID);
 
     const refused = rows.find((r: any) => r.tool === 'pto' && !r.ok);
-    expect(refused.argument_keys.sort()).toEqual(['bogus', 'employeeId']);
+    expect(refused.argument_keys.toSorted()).toEqual(['bogus', 'employeeId']);
     expect(JSON.stringify(rows)).not.toContain(SECRET_VALUE);
     expect(JSON.stringify(rows)).not.toContain(ADMIN_ID.slice(0, 8) + '"'); // the id VALUE is not in argument_keys
 

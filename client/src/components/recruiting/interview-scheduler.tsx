@@ -793,12 +793,12 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                     <SelectContent>
                       {(() => {
                         // FIXED: Case-insensitive matching + debug logging
-                        const managerRolesUpper = MANAGER_ROLES.map(r => r.toUpperCase());
+                        const managerRolesUpper = new Set(MANAGER_ROLES.map(r => r.toUpperCase()));
                         const adminRolesUpper = ADMIN_ROLES.map(r => r.toUpperCase());
 
                         const eligibleInterviewers = interviewers?.filter((user: any) => {
                           const userRole = (user.role || '').toUpperCase();
-                          return managerRolesUpper.includes(userRole) || adminRolesUpper.includes(userRole);
+                          return managerRolesUpper.has(userRole) || adminRolesUpper.includes(userRole);
                         }) || [];
 
                         // Debug logging for troubleshooting

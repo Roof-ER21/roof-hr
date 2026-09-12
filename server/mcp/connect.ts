@@ -136,7 +136,7 @@ export function issueCode(input: Omit<CodeRecord, 'expiresAt'>): string {
   sweep();
   if (codes.size >= MAX_LIVE_CODES) {
     // Never grow without bound; the oldest live code is the least likely to be redeemed.
-    const oldest = [...codes.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0];
+    const oldest = [...codes.entries()].toSorted((a, b) => a[1].expiresAt - b[1].expiresAt)[0];
     if (oldest) codes.delete(oldest[0]);
   }
   const code = `rhc_${crypto.randomBytes(32).toString('base64url')}`;

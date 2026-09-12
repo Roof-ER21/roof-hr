@@ -41,9 +41,9 @@ function parseDate(text: string): string | null {
   // Try various date patterns
   const patterns = [
     // MM/DD/YYYY or MM-DD-YYYY
-    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/,
+    /(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/,
     // MM/DD/YY or MM-DD-YY
-    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})/,
+    /(\d{1,2})[/\-](\d{1,2})[/\-](\d{2})/,
     // Month DD, YYYY
     /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/i,
     // DD Month YYYY
@@ -74,7 +74,7 @@ function extractAmounts(text: string): number[] {
     }
   }
 
-  return amounts.sort((a, b) => b - a); // Sort descending
+  return amounts.toSorted((a, b) => b - a); // Sort descending
 }
 
 /**
@@ -105,13 +105,13 @@ function detectDocumentType(text: string): COIParsedData['documentType'] {
 function extractPolicyNumber(text: string): string | null {
   const patterns = [
     // "Policy Number: ABC123456"
-    /policy\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9\-]+)/i,
+    /policy\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9-]+)/i,
     // "Policy: ABC123456"
-    /policy\s*:?\s*([A-Z0-9\-]{6,})/i,
+    /policy\s*:?\s*([A-Z0-9-]{6,})/i,
     // "Certificate Number: 123456"
-    /certificate\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9\-]+)/i,
+    /certificate\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9-]+)/i,
     // Standalone policy number format
-    /\b([A-Z]{2,4}[\-\s]?\d{6,})\b/,
+    /\b([A-Z]{2,4}[-\s]?\d{6,})\b/,
   ];
 
   for (const pattern of patterns) {
@@ -265,7 +265,7 @@ function extractInsuredName(text: string): InsuredNameResult {
     console.log('[Document Parser] Text after email (first 200 chars):', afterEmail.substring(0, 200).replace(/\n/g, '\\n'));
 
     // Common address/non-name words to exclude from person name matching
-    const addressWords = ['blvd', 'ste', 'suite', 'ave', 'avenue', 'street', 'drive', 'road', 'lane', 'way', 'court', 'circle', 'plaza', 'floor'];
+    const addressWords = new Set(['blvd', 'ste', 'suite', 'ave', 'avenue', 'street', 'drive', 'road', 'lane', 'way', 'court', 'circle', 'plaza', 'floor']);
 
     // FIRST: Try to find a company name (LLC, Inc, Corp, etc.) BEFORE any address
     const companyPattern = /^\s*([A-Za-z][A-Za-z0-9\s\.\,\&\-\']+(?:LLC|Inc|Corp|Ltd|Co\.|Company|Enterprises|Services|Roofing|Construction|Contracting|Carpentry|dba\s+[A-Za-z0-9\-]+)[^\n]*)/im;
@@ -290,7 +290,7 @@ function extractInsuredName(text: string): InsuredNameResult {
         const candidate = nameMatch[1].trim();
         // Make sure it's not an address word like "Blvd Ste"
         const words = candidate.toLowerCase().split(/\s+/);
-        const isAddressWord = words.some(w => addressWords.includes(w));
+        const isAddressWord = words.some(w => addressWords.has(w));
 
         if (!isAddressWord && looksLikeValidName(candidate)) {
           rawName = candidate;
@@ -310,7 +310,7 @@ function extractInsuredName(text: string): InsuredNameResult {
   // 5449 VARNUM ST
   // Pattern: Find text between INSURED and a street address (number + street name)
   if (!rawName) {
-    const companyBeforeAddressPattern = /INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+?)[\s\n]+\d{2,5}\s+[A-Z]/i;
+    const companyBeforeAddressPattern = /INSURED[\s\n]+([A-Z][A-Za-z0-9\s.\,&\-']+?)[\s\n]+\d{2,5}\s+[A-Z]/i;
     const addressMatch = text.match(companyBeforeAddressPattern);
     if (addressMatch && addressMatch[1]) {
       const candidate = addressMatch[1].trim()
@@ -334,9 +334,9 @@ function extractInsuredName(text: string): InsuredNameResult {
   if (!rawName) {
     const companyPatterns = [
       // Company name with common suffixes (LLC, Inc, Corp, etc.)
-      /INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+(?:LLC|Inc|Corp|Ltd|Co\.|Company|Enterprises|Services|Roofing|Construction|Contracting|Carpentry)[^\n]*)/i,
+      /INSURED[\s\n]+([A-Z][A-Za-z0-9\s.\,&\-']+(?:LLC|Inc|Corp|Ltd|Co\.|Company|Enterprises|Services|Roofing|Construction|Contracting|Carpentry)[^\n]*)/i,
       // Business name ending with LLC etc. anywhere in the INSURED section
-      /INSURED[\s\S]{0,100}?([A-Z][A-Za-z0-9\s\.\,\&\-\']+(?:LLC|Inc|Corp|Ltd))/i,
+      /INSURED[\s\S]{0,100}?([A-Z][A-Za-z0-9\s.\,&\-']+(?:LLC|Inc|Corp|Ltd))/i,
     ];
 
     for (const pattern of companyPatterns) {
@@ -387,9 +387,9 @@ function extractInsuredName(text: string): InsuredNameResult {
     // Look for text after "INSURED" label up to address
     const patterns = [
       // INSURED followed by multi-word name (at least 2 words to avoid single word headers)
-      /INSURED\s+([A-Z][A-Za-z]+(?:\s+[A-Za-z0-9\&]+)+)(?:\s+\d{2,}|\s+[A-Z]{2}\s+\d|\n)/,
+      /INSURED\s+([A-Z][A-Za-z]+(?:\s+[A-Za-z0-9&]+)+)(?:\s+\d{2,}|\s+[A-Z]{2}\s+\d|\n)/,
       // Named Insured pattern
-      /(?:named\s+)?insured\s*:?\s*([A-Z][A-Za-z]+(?:\s+[A-Za-z0-9\&]+)+)(?:\s+\d{3,}|\n)/i,
+      /(?:named\s+)?insured\s*:?\s*([A-Z][A-Za-z]+(?:\s+[A-Za-z0-9&]+)+)(?:\s+\d{3,}|\n)/i,
     ];
 
     for (const pattern of patterns) {
@@ -487,13 +487,13 @@ function extractInsuredNameLegacy(text: string): string | null {
 function extractInsurerName(text: string): string | null {
   const patterns = [
     // "Insurer: Company Name"
-    /insurer\s*[a-z]?\s*:?\s*([A-Za-z0-9\s\.,&\-']+?)(?:\n|naic)/i,
+    /insurer\s*[a-z]?\s*:?\s*([A-Za-z0-9\s.,&\-']+?)(?:\n|naic)/i,
     // "Insurance Company: Name"
-    /insurance\s+company\s*:?\s*([A-Za-z0-9\s\.,&\-']+?)(?:\n|$)/i,
+    /insurance\s+company\s*:?\s*([A-Za-z0-9\s.,&\-']+?)(?:\n|$)/i,
     // "Carrier: Name"
-    /carrier\s*:?\s*([A-Za-z0-9\s\.,&\-']+?)(?:\n|$)/i,
+    /carrier\s*:?\s*([A-Za-z0-9\s.,&\-']+?)(?:\n|$)/i,
     // "Underwritten by: Name"
-    /underwritten\s+by\s*:?\s*([A-Za-z0-9\s\.,&\-']+?)(?:\n|$)/i,
+    /underwritten\s+by\s*:?\s*([A-Za-z0-9\s.,&\-']+?)(?:\n|$)/i,
   ];
 
   for (const pattern of patterns) {
@@ -656,9 +656,9 @@ function extractDates(text: string): { effectiveDate: string | null; expirationD
   // GENERIC patterns (fallback)
   if (!effectiveDate) {
     const effectivePatterns = [
-      /effective\s*(?:date)?\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /policy\s+period\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /from\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      /effective\s*(?:date)?\s*:?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
+      /policy\s+period\s*:?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
+      /from\s*:?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
     ];
 
     for (const pattern of effectivePatterns) {
@@ -672,9 +672,9 @@ function extractDates(text: string): { effectiveDate: string | null; expirationD
 
   if (!expirationDate) {
     const expirationPatterns = [
-      /expir(?:ation|es)\s*(?:date)?\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /to\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /ends?\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      /expir(?:ation|es)\s*(?:date)?\s*:?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
+      /to\s*:?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
+      /ends?\s*:?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
     ];
 
     for (const pattern of expirationPatterns) {
@@ -688,7 +688,7 @@ function extractDates(text: string): { effectiveDate: string | null; expirationD
 
   // Try to find date range format: MM/DD/YYYY to MM/DD/YYYY
   if (!effectiveDate || !expirationDate) {
-    const rangePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s*(?:to|through|\-)\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i;
+    const rangePattern = /(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})\s*(?:to|through|-)\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i;
     const match = text.match(rangePattern);
     if (match) {
       effectiveDate = effectiveDate || match[1];
@@ -817,7 +817,7 @@ export async function parseContractDocument(buffer: Buffer): Promise<ContractPar
 
     // Extract party names (between "between" and "and" typically)
     const partyNames: string[] = [];
-    const partyPattern = /between\s+([A-Za-z0-9\s\.,&\-']+?)\s+(?:and|,)/gi;
+    const partyPattern = /between\s+([A-Za-z0-9\s.,&\-']+?)\s+(?:and|,)/gi;
     let match;
     while ((match = partyPattern.exec(text)) !== null) {
       const name = match[1].trim();
@@ -844,7 +844,7 @@ export async function parseContractDocument(buffer: Buffer): Promise<ContractPar
 
     // Extract key terms (look for numbered sections or bullet points)
     const keyTerms: string[] = [];
-    const termPattern = /(?:\d+\.|\•|\-)\s*([A-Z][^\.]{10,100}\.)/g;
+    const termPattern = /(?:\d+\.|•|-)\s*([A-Z][^.]{10,100}\.)/g;
     let termMatch;
     let termCount = 0;
     while ((termMatch = termPattern.exec(text)) !== null && termCount < 10) {

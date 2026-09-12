@@ -171,9 +171,9 @@ export function SendWelcomeDialog({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Welcome Email Type</label>
+              <label id="welcome-email-type-label" className="text-sm font-medium">Welcome Email Type</label>
               <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail' | 'none')}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" aria-labelledby="welcome-email-type-label">
                   <SelectValue placeholder="Select email type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -184,9 +184,9 @@ export function SendWelcomeDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Office Location</label>
+              <label id="office-location-label" className="text-sm font-medium">Office Location</label>
               <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value)}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" aria-labelledby="office-location-label">
                   <SelectValue placeholder="Select office" />
                 </SelectTrigger>
                 <SelectContent>
@@ -200,11 +200,11 @@ export function SendWelcomeDialog({
 
           {salesManagers.length > 0 && (
             <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-1.5">
+              <div id="cc-sales-managers-label" className="text-sm font-medium flex items-center gap-1.5">
                 <Users className="h-4 w-4" />
                 CC Sales Managers
-              </label>
-              <div className="flex flex-wrap gap-3">
+              </div>
+              <div className="flex flex-wrap gap-3" role="group" aria-labelledby="cc-sales-managers-label">
                 {salesManagers.map((mgr: any) => (
                   <div key={mgr.id} className="flex items-center space-x-2">
                     <Checkbox

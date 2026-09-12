@@ -5,7 +5,7 @@ import { logger } from '../middleware/logger';
 let isRunning = false;
 let jobInterval: NodeJS.Timeout | null = null;
 
-const REMINDER_STAGES = [2, 4, 7];
+const REMINDER_STAGES = new Set([2, 4, 7]);
 
 export async function checkContractReminders(): Promise<void> {
   if (isRunning) {
@@ -28,7 +28,7 @@ export async function checkContractReminders(): Promise<void> {
       const sentDate = new Date(contract.sentDate);
       const daysSinceSent = Math.floor((now.getTime() - sentDate.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (!REMINDER_STAGES.includes(daysSinceSent)) continue;
+      if (!REMINDER_STAGES.has(daysSinceSent)) continue;
 
       const reminderStages = contract.reminderStages || [];
       const stageKey = String(daysSinceSent);

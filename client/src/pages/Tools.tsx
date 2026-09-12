@@ -115,7 +115,7 @@ const statusColors = {
 };
 
 const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', 'XXL', '3X', '4X'] as const;
-const CLOTHING_CATEGORIES = ['POLO', 'OTHER', 'BOOTS'];
+const CLOTHING_CATEGORIES = new Set(['POLO', 'OTHER', 'BOOTS']);
 
 export function Tools() {
   const { user } = useAuth();
@@ -1540,7 +1540,7 @@ export function Tools() {
                     </div>
                   </div>
 
-                  {CLOTHING_CATEGORIES.includes(newTool.category) && (
+                  {CLOTHING_CATEGORIES.has(newTool.category) && (
                     <div className="space-y-2">
                       <Label>Size</Label>
                       <Select
@@ -2432,7 +2432,7 @@ export function Tools() {
                 </div>
               </div>
 
-              {CLOTHING_CATEGORIES.includes(selectedTool.category) && (
+              {CLOTHING_CATEGORIES.has(selectedTool.category) && (
                 <div className="space-y-2">
                   <Label>Size</Label>
                   <Select

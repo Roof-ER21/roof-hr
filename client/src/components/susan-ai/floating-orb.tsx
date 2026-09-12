@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { MessageCircle, X, Send, Mic, MicOff, Sparkles, Bot } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -231,6 +231,10 @@ export function SusanFloatingOrb() {
   };
 
   return (
+    <MotionConfig reducedMotion="user">
+    {/* reducedMotion="user" makes framer-motion honour the OS setting. The CSS
+        @media guard in index.css cannot reach framer, which animates via inline
+        style, so a correct-looking CSS-only guard would have done nothing here. */}
     <>
       {/* Floating Orb Button */}
       <AnimatePresence>
@@ -423,5 +427,6 @@ export function SusanFloatingOrb() {
         )}
       </AnimatePresence>
     </>
+    </MotionConfig>
   );
 }

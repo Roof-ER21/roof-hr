@@ -74,7 +74,7 @@ router.get('/metrics', requireAuth, requireManager, async (req: any, res: any) =
       : 0;
 
     const medianTimeToHire = timeToHireData.length > 0
-      ? timeToHireData.sort((a: number, b: number) => a - b)[Math.floor(timeToHireData.length / 2)]
+      ? timeToHireData.toSorted((a: number, b: number) => a - b)[Math.floor(timeToHireData.length / 2)]
       : 0;
 
     // Source effectiveness analysis

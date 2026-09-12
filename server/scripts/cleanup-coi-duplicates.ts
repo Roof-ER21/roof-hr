@@ -148,7 +148,7 @@ async function cleanupDuplicateCOIs() {
         // Pattern: "Drive ID: <id>" or similar
         const patterns = [
           /Drive ID:\s*([^\s),]+)/i,
-          /drive\.google\.com\/file\/d\/([^\/\s?]+)/i,
+          /drive\.google\.com\/file\/d\/([^/\s?]+)/i,
           /id=([^\s&]+)/i,
         ];
 

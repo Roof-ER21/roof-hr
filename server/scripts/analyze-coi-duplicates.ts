@@ -93,7 +93,7 @@ async function analyzeDuplicateCOIs() {
       }
 
       // Show statistics by duplicate count
-      const sortedCounts = Array.from(byDupCount.keys()).sort((a, b) => b - a);
+      const sortedCounts = Array.from(byDupCount.keys()).toSorted((a, b) => b - a);
       for (const count of sortedCounts) {
         const groupsWithCount = byDupCount.get(count)!;
         console.log(`\n${groupsWithCount.length} groups with ${count} duplicates each:`);

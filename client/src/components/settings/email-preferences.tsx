@@ -53,9 +53,7 @@ export function EmailPreferences({ userId, compact = false }: EmailPreferencesPr
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/email-preferences/${userId}`, {
         credentials: 'include',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: (token ? { Authorization: `Bearer ${token}` } : {}),
       });
       if (!response.ok) {
         if (response.status === 404) {

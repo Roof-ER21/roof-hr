@@ -14,7 +14,11 @@
     "coi:cleanup": "tsx server/scripts/cleanup-coi-duplicates.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "test:unit": "vitest run --config vitest.config.unit.ts"
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "gate": "node scripts/quality-gate.mjs",
+    "gate:update": "node scripts/quality-gate.mjs --update"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.37.0",

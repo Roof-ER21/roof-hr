@@ -75,7 +75,7 @@ class GoogleAuthService {
       console.log('[GoogleAuth] Access token refreshed');
     } catch (error) {
       console.error('[GoogleAuth] Error refreshing access token:', error);
-      throw new Error('Failed to refresh Google access token');
+      throw new Error('Failed to refresh Google access token', { cause: error });
     }
   }
 

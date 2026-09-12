@@ -108,7 +108,7 @@ IMPORTANT:
    */
   private cleanEmail(email: any): string | null {
     if (!email || typeof email !== 'string') return null;
-    const match = email.match(/[\w._%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}/);
+    const match = email.match(/[\w._%+-]+@[\w.-]+\.[a-zA-Z]{2,}/);
     return match ? match[0].toLowerCase() : null;
   }
 
@@ -153,11 +153,11 @@ IMPORTANT:
     }
 
     // Try to extract email
-    const emailMatch = text.match(/[\w._%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}/);
+    const emailMatch = text.match(/[\w._%+-]+@[\w.-]+\.[a-zA-Z]{2,}/);
     const email = emailMatch ? emailMatch[0].toLowerCase() : null;
 
     // Try to extract phone
-    const phoneMatch = text.match(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/);
+    const phoneMatch = text.match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
     const phone = phoneMatch ? this.cleanPhone(phoneMatch[0]) : null;
 
     return {

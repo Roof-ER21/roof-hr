@@ -32,7 +32,7 @@ import pg from 'pg';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER_LOG = process.env.TEST_SERVER_LOG || '/tmp/roofhr-test-server.log';
-const LOCAL_HOSTS = ['localhost', '127.0.0.1', '::1'];
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 function defaultTestDbUrl(): string {
   const user = process.env.PGUSER || os.userInfo().username;
@@ -68,7 +68,7 @@ let child: ChildProcess | null = null;
 export async function setup(): Promise<void> {
   const dbUrl = process.env.TEST_DATABASE_URL || defaultTestDbUrl();
   const host = new URL(dbUrl).hostname;
-  if (!LOCAL_HOSTS.includes(host)) {
+  if (!LOCAL_HOSTS.has(host)) {
     throw new Error(`[global-setup] Refusing non-local test database host "${host}" — this runner drops every table.`);
   }
 

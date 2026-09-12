@@ -58,21 +58,21 @@ export function clearRateLimit(ip?: string) {
 }
 
 // Whitelist for development and testing
-const WHITELISTED_IPS = [
+const WHITELISTED_IPS = new Set([
   '127.0.0.1',
   'localhost',
   '::1',
   '172.31.88.162', // Development server
   '::ffff:172.31.88.162', // IPv6 mapped IPv4
   '108.28.124.207' // Temporarily whitelist user IP
-];
+]);
 
 export function rateLimit(options: { windowMs: number; max: number; skipSuccessfulRequests?: boolean }) {
   return (req: Request, res: Response, next: NextFunction) => {
     const key = req.ip || 'unknown';
     
     // Skip rate limiting for whitelisted IPs
-    if (WHITELISTED_IPS.includes(key)) {
+    if (WHITELISTED_IPS.has(key)) {
       return next();
     }
     

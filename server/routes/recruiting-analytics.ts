@@ -8,7 +8,7 @@ import { candidateStatusHistory } from '@shared/schema';
 const router = Router();
 
 // Manager roles that can see all candidates
-const MANAGER_ROLES = ['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN'];
+const MANAGER_ROLES = new Set(['SYSTEM_ADMIN', 'HR_ADMIN', 'GENERAL_MANAGER', 'TERRITORY_MANAGER', 'MANAGER', 'TRUE_ADMIN', 'ADMIN']);
 
 // Validation schema for date range query parameters
 const dateRangeSchema = z.object({
@@ -32,7 +32,7 @@ function requireAuthOrAssignments() {
     }
 
     // Managers have full access
-    if (MANAGER_ROLES.includes(req.user.role)) {
+    if (MANAGER_ROLES.has(req.user.role)) {
       req.isManager = true;
       return next();
     }
@@ -1161,7 +1161,7 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
         const user = await storage.getUserById(session.userId);
         if (user) {
           req.user = user;
-          req.isManager = MANAGER_ROLES.includes(user.role) || user.email === 'ahmed.mahmoud@theroofdocs.com';
+          req.isManager = MANAGER_ROLES.has(user.role) || user.email === 'ahmed.mahmoud@theroofdocs.com';
         }
       }
     } catch (e) {
@@ -1268,8 +1268,8 @@ router.get('/export/analytics-report', async (req: any, res: any, next: any) => 
     // Calculate INTERVIEW metrics
     let interviews = allInterviews;
     if (assigneeId && assigneeId !== 'all') {
-      const candidateIds = candidates.map((c: any) => c.id);
-      interviews = allInterviews.filter((i: any) => candidateIds.includes(i.candidateId));
+      const candidateIds = new Set(candidates.map((c: any) => c.id));
+      interviews = allInterviews.filter((i: any) => candidateIds.has(i.candidateId));
     }
     const filteredInterviews = interviews.filter((i: any) => {
       const scheduledDate = new Date(i.scheduledDate || i.createdAt);

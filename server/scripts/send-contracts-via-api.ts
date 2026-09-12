@@ -33,7 +33,7 @@ async function authedFetch(token: string, path: string, options: RequestInit = {
   const response = await fetch(`${APP_URL}${path}`, {
     ...options,
     headers: {
-      ...(options.headers || {}),
+      ...options.headers,
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },

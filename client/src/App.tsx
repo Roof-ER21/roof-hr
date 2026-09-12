@@ -7,68 +7,101 @@ import { queryClient } from '@/lib/queryClient';
 import { AppLayout } from '@/components/layout/app-layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_ROLES, MANAGER_ROLES, ONBOARDING_ADMIN_EMAILS, canAccessFacilities } from '@shared/constants/roles';
-import Dashboard from '@/pages/dashboard';
-import EnhancedEmployees from '@/pages/enhanced-employees';
-import PTO from '@/pages/pto';
-import EnhancedRecruiting from '@/pages/enhanced-recruiting';
-import RecruitingAnalytics from '@/pages/RecruitingAnalytics';
-import Documents from '@/pages/documents';
-import Reviews from '@/pages/reviews';
 import ChangePassword from '@/pages/change-password';
-import Settings from '@/pages/settings';
-import ConnectAgent from '@/pages/connect-agent';
 import Login from '@/pages/login';
-import ApiTest from '@/pages/api-test';
-import Tasks from '@/pages/tasks';
-import QRCodes from '@/pages/qr-codes';
-import Marketing from '@/pages/Marketing';
-import MarketingCampaigns from '@/pages/MarketingCampaigns';
-import MarketingTemplates from '@/pages/MarketingTemplates';
-import { Tools } from '@/pages/Tools';
-import EmailTemplates from '@/pages/EmailTemplates';
-import WorkflowBuilder from '@/pages/WorkflowBuilder';
-import Territories from '@/pages/Territories';
-import PtoPolicies from '@/pages/PtoPolicies';
-import CoiDocuments from '@/pages/CoiDocuments';
-import EmployeeAssignments from '@/pages/EmployeeAssignments';
-import Contracts from '@/pages/Contracts';
-import SusanAI from '@/pages/susan-ai';
-import SusanAIAdmin from '@/pages/susan-ai-admin';
-import AttendanceDashboard from '@/pages/AttendanceDashboard';
-import AttendanceCheckIn from '@/pages/AttendanceCheckIn';
-import AttendanceAdminDashboard from '@/pages/AttendanceAdminDashboard';
-import EquipmentChecklistForm from '@/pages/equipment-checklist-form';
-import EquipmentAgreementForm from '@/pages/equipment-agreement-form';
-import EquipmentReturnForm from '@/pages/equipment-return-form';
-import PublicContractPage from '@/pages/public-contract';
-import SignEquipmentReceipt from '@/pages/sign-equipment-receipt';
-import EmployeeDashboard from '@/pages/employee-dashboard';
-import TeamDirectory from '@/pages/team-directory';
-import TeamDashboard from '@/pages/team-dashboard';
-import MeetingRooms from '@/pages/MeetingRooms';
-import OnboardingTemplates from '@/pages/OnboardingTemplates';
-import OrgChartPage from '@/pages/OrgChartPage';
-import { SusanFloatingOrb } from '@/components/susan-ai/floating-orb';
-import { OnboardingTour } from '@/components/OnboardingTour';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import '@/lib/api-interceptor';
 
+// ─── Route chunks ────────────────────────────────────────────────────────────
+//
+// Every page used to be a static import, so one 2.75 MB chunk carried the
+// super-admin console, the SQL runner, the workflow builder, Recharts and the
+// QR poster rasteriser to someone who only wanted to see their PTO balance.
+// Each route is its own chunk now; Login and ChangePassword stay eager because
+// the auth gate renders them before any route matches.
+
+// The orb and the tour are the only two framer-motion consumers reachable from
+// the shell. Kept lazy so framer-motion stays out of the entry chunk.
+const SusanFloatingOrb = lazy(() => import('@/components/susan-ai/floating-orb').then(m => ({ default: m.SusanFloatingOrb })));
+const OnboardingTour = lazy(() => import('@/components/OnboardingTour').then(m => ({ default: m.OnboardingTour })));
+const Dashboard = lazy(() => import('@/pages/dashboard'));
+const EnhancedEmployees = lazy(() => import('@/pages/enhanced-employees'));
+const PTO = lazy(() => import('@/pages/pto'));
+const EnhancedRecruiting = lazy(() => import('@/pages/enhanced-recruiting'));
+const RecruitingAnalytics = lazy(() => import('@/pages/RecruitingAnalytics'));
+const Documents = lazy(() => import('@/pages/documents'));
+const Reviews = lazy(() => import('@/pages/reviews'));
+const Settings = lazy(() => import('@/pages/settings'));
+const ConnectAgent = lazy(() => import('@/pages/connect-agent'));
+const ApiTest = lazy(() => import('@/pages/api-test'));
+const Tasks = lazy(() => import('@/pages/tasks'));
+const QRCodes = lazy(() => import('@/pages/qr-codes'));
+const Marketing = lazy(() => import('@/pages/Marketing'));
+const MarketingCampaigns = lazy(() => import('@/pages/MarketingCampaigns'));
+const MarketingTemplates = lazy(() => import('@/pages/MarketingTemplates'));
+const Tools = lazy(() => import('@/pages/Tools').then(m => ({ default: m.Tools })));
+const EmailTemplates = lazy(() => import('@/pages/EmailTemplates'));
+const WorkflowBuilder = lazy(() => import('@/pages/WorkflowBuilder'));
+const Territories = lazy(() => import('@/pages/Territories'));
+const PtoPolicies = lazy(() => import('@/pages/PtoPolicies'));
+const CoiDocuments = lazy(() => import('@/pages/CoiDocuments'));
+const EmployeeAssignments = lazy(() => import('@/pages/EmployeeAssignments'));
+const Contracts = lazy(() => import('@/pages/Contracts'));
+const SusanAI = lazy(() => import('@/pages/susan-ai'));
+const SusanAIAdmin = lazy(() => import('@/pages/susan-ai-admin'));
+const AttendanceDashboard = lazy(() => import('@/pages/AttendanceDashboard'));
+const AttendanceCheckIn = lazy(() => import('@/pages/AttendanceCheckIn'));
+const AttendanceAdminDashboard = lazy(() => import('@/pages/AttendanceAdminDashboard'));
+const EquipmentChecklistForm = lazy(() => import('@/pages/equipment-checklist-form'));
+const EquipmentAgreementForm = lazy(() => import('@/pages/equipment-agreement-form'));
+const EquipmentReturnForm = lazy(() => import('@/pages/equipment-return-form'));
+const PublicContractPage = lazy(() => import('@/pages/public-contract'));
+const SignEquipmentReceipt = lazy(() => import('@/pages/sign-equipment-receipt'));
+const EmployeeDashboard = lazy(() => import('@/pages/employee-dashboard'));
+const TeamDirectory = lazy(() => import('@/pages/team-directory'));
+const TeamDashboard = lazy(() => import('@/pages/team-dashboard'));
+const MeetingRooms = lazy(() => import('@/pages/MeetingRooms'));
+const OnboardingTemplates = lazy(() => import('@/pages/OnboardingTemplates'));
+const OrgChartPage = lazy(() => import('@/pages/OrgChartPage'));
+
+
+
+// Shown while a route chunk is in flight. Deliberately quiet: no spinner on a
+// fast connection, because a chunk that arrives in 80ms should not flash a
+// loading state at anyone. aria-busy lets a screen reader know something is
+// pending without announcing it repeatedly.
+function RouteFallback() {
+  return (
+    <div
+      className="min-h-[60vh] flex items-center justify-center"
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <span className="sr-only">Loading</span>
+    </div>
+  );
+}
 
 function AuthenticatedRoutes() {
   const { user, isLoading, isInitialized } = useAuth();
   const facilitiesAccess = canAccessFacilities(user);
-  
+
   if (!isInitialized || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        role="status"
+        aria-live="polite"
+      >
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+          <p className="mt-2 text-muted-foreground">Loading</p>
         </div>
       </div>
     );
   }
-  
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -80,6 +113,7 @@ function AuthenticatedRoutes() {
   
   return (
     <AppLayout>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Dashboard: Admin/Manager only */}
         <Route path="/" element={
@@ -250,8 +284,11 @@ function AuthenticatedRoutes() {
         <Route path="/scheduled-reports" element={<Navigate to="/settings?tab=reports" replace />} />
         <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
       </Routes>
-      <SusanFloatingOrb />
-      <OnboardingTour />
+      <Suspense fallback={null}>
+        <SusanFloatingOrb />
+        <OnboardingTour />
+      </Suspense>
+      </Suspense>
     </AppLayout>
   );
 }
@@ -261,6 +298,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Public routes - no authentication required */}
             <Route path="/attendance/check-in" element={<AttendanceCheckIn />} />
@@ -274,6 +312,7 @@ function App() {
             {/* Protected routes - require authentication */}
             <Route path="/*" element={<AuthenticatedRoutes />} />
           </Routes>
+          </Suspense>
           <Toaster />
         </AuthProvider>
       </BrowserRouter>

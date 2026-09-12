@@ -90,7 +90,7 @@ async function checkRyanOnboarding() {
     // Process workflows
     for (const workflow of employeeWorkflows) {
       const steps = await storage.getOnboardingStepsByWorkflowId(workflow.id);
-      const sortedSteps = steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber);
+      const sortedSteps = steps.toSorted((a: any, b: any) => a.stepNumber - b.stepNumber);
       const completedCount = sortedSteps.filter((s: any) => s.status === 'COMPLETED').length;
 
       enrichedData.push({
@@ -105,7 +105,7 @@ async function checkRyanOnboarding() {
     // Process instances
     for (const instance of instances) {
       const steps = await storage.getOnboardingStepsByWorkflowId(instance.id);
-      const sortedSteps = steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber);
+      const sortedSteps = steps.toSorted((a: any, b: any) => a.stepNumber - b.stepNumber);
       const completedCount = sortedSteps.filter((s: any) => s.status === 'COMPLETED').length;
       const template = await storage.getOnboardingTemplateById(instance.templateId);
 

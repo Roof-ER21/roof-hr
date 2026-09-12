@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion, MotionConfig } from 'framer-motion';
 import { format } from 'date-fns';
 import {
   Brain,
@@ -443,6 +443,7 @@ export default function SusanAI() {
 
   // Admin Susan AI Interface
   return (
+    <MotionConfig reducedMotion="user">
     <div className="flex flex-col h-full bg-gradient-to-br from-orange-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* Admin Header */}
       <div className="bg-white dark:bg-gray-800 border-b p-6">
@@ -1075,5 +1076,6 @@ export default function SusanAI() {
         </DialogContent>
       </Dialog>
     </div>
+    </MotionConfig>
   );
 }

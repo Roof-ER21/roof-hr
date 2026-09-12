@@ -51,7 +51,7 @@ export class WorkflowExecutor {
       const steps = await storage.getWorkflowStepsByWorkflowId(workflowId);
 
       // Execute steps in sequence
-      for (const step of steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber)) {
+      for (const step of steps.toSorted((a: any, b: any) => a.stepNumber - b.stepNumber)) {
         logger.info(`Executing step ${step.stepNumber}: ${step.name}`);
         
         try {

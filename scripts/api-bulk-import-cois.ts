@@ -69,7 +69,7 @@ async function parseCOIDocument(buffer: Buffer): Promise<COIParsedData> {
 
   // Try INSURED section
   if (!insuredName) {
-    const insuredMatch = text.match(/INSURED[\s\n]+([A-Z][A-Za-z0-9\s\.\,\&\-\']+?)[\s\n]+\d{2,5}\s+[A-Z]/i);
+    const insuredMatch = text.match(/INSURED[\s\n]+([A-Z][A-Za-z0-9\s.\,&\-']+?)[\s\n]+\d{2,5}\s+[A-Z]/i);
     if (insuredMatch) {
       rawInsuredName = insuredMatch[1].trim().replace(/\s{2,}/g, ' ');
       // Check if it's a person name
@@ -93,7 +93,7 @@ async function parseCOIDocument(buffer: Buffer): Promise<COIParsedData> {
 
   // Extract policy number
   let policyNumber: string | null = null;
-  const policyMatch = text.match(/policy\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9\-]+)/i);
+  const policyMatch = text.match(/policy\s*(?:number|no\.?|#)\s*:?\s*([A-Z0-9-]+)/i);
   if (policyMatch) {
     policyNumber = policyMatch[1].trim();
   }

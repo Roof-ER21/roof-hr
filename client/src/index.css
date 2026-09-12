@@ -1,4 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* ─────────────────────────────────────────────────────────────────────────────
+   Roof HR design tokens — "Docs"
+
+   The Roof-ER system from ~/roofdocs-site/PICKUP.md, carried inward:
+   Geist + Geist Mono, 2px radius, slate-biased neutrals, #B60807 for fills
+   and marks. Fonts are linked from client/index.html with preconnect, NOT
+   @import-ed here — an @import at the top of this file blocks rendering and
+   cannot start until the whole stylesheet has downloaded and parsed.
+
+   Every colour below was measured, not eyeballed. Ratios in comments are
+   against that theme's own card surface, which is the dominant ground.
+
+   Two values from the website system deliberately do NOT carry over as-is:
+
+   1. --mute #949BA1 is 7.00:1 on the dark ink but only 2.57:1 on light paper.
+      It is a dark-ground value. Light muted text uses #575E64 (6.58:1).
+
+   2. The brand red is 6.94:1 on white and 2.84:1 on #0A0B0C. On THIS app the
+      "never small text" rule therefore applies to dark mode only — red body
+      text is legal on light. Dark mode gets --brand-ink instead: #F0444C,
+      5.01:1 on cards. (sa21's #EE212B was rejected here: 4.58 on the ink but
+      4.34 on the card surface, which is where most text actually sits.)
+   ───────────────────────────────────────────────────────────────────────── */
 
 @tailwind base;
 @tailwind components;
@@ -6,49 +28,112 @@
 
 @layer base {
   :root {
-    --background: hsl(0, 0%, 98%);
-    --foreground: hsl(0, 0%, 15%);
-    --card: hsl(0, 0%, 100%);
-    --card-foreground: hsl(0, 0%, 15%);
-    --popover: hsl(0, 0%, 100%);
-    --popover-foreground: hsl(0, 0%, 15%);
-    --primary: hsl(0, 97%, 36%);
-    --primary-foreground: hsl(0, 0%, 98%);
-    --secondary: hsl(0, 0%, 19%);
-    --secondary-foreground: hsl(0, 0%, 98%);
-    --muted: hsl(0, 0%, 96%);
-    --muted-foreground: hsl(0, 0%, 45%);
-    --accent: hsl(0, 0%, 96%);
-    --accent-foreground: hsl(0, 0%, 15%);
-    --destructive: hsl(0, 84%, 60%);
-    --destructive-foreground: hsl(0, 0%, 98%);
-    --border: hsl(0, 0%, 90%);
-    --input: hsl(0, 0%, 90%);
-    --ring: hsl(0, 97%, 36%);
-    --radius: 0.5rem;
+    /* Ground */
+    --background: #f3f5f6;          /* paper */
+    --foreground: #0a0b0c;          /* ink, 18.01:1 */
+    --card: #ffffff;
+    --card-foreground: #0a0b0c;     /* 19.70:1 */
+    --popover: #ffffff;
+    --popover-foreground: #0a0b0c;
+
+    /* Brand. Fills and marks; legal as text on light. */
+    --primary: #b60807;             /* white on it: 6.94:1 */
+    --primary-foreground: #ffffff;
+    --brand-ink: #b60807;           /* red TEXT on light: 6.94:1 */
+
+    /* Neutrals */
+    --secondary: #e8ebed;
+    --secondary-foreground: #0a0b0c;
+    --muted: #eceff1;
+    --muted-foreground: #575e64;    /* 6.58:1 on card, 6.02:1 on paper */
+    --accent: #e8ebed;
+    --accent-foreground: #0a0b0c;
+
+    /* Semantic roles. Four, and only four. */
+    --destructive: #a3120e;         /* 7.92:1 — the old #ef4343 was 3.78:1 */
+    --destructive-foreground: #ffffff;
+    --positive: #166534;            /* 7.13:1 */
+    --positive-foreground: #ffffff;
+    --warning: #854d0e;             /* 6.85:1 */
+    --warning-foreground: #ffffff;
+
+    --border: #d7dbde;
+    --input: #c9cfd3;
+    --ring: #b60807;
+
+    /* 2px everywhere. Reads engineered. */
+    --radius: 2px;
+
+    /* Data visualisation. Previously undefined, so every chart-N class
+       resolved to nothing. Ordered by hue distance, checked on white. */
+    --chart-1: #b60807;
+    --chart-2: #0f766e;
+    --chart-3: #854d0e;
+    --chart-4: #3f3f8c;
+    --chart-5: #5c646b;
+
+    /* Sidebar. Also previously undefined — ui/sidebar.tsx has been rendering
+       bg-sidebar as transparent this whole time. */
+    --sidebar-background: #0a0b0c;
+    --sidebar-foreground: #f3f5f6;
+    --sidebar-primary: #b60807;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #1a1d1f;
+    --sidebar-accent-foreground: #f3f5f6;
+    --sidebar-border: #232629;
+    --sidebar-ring: #b60807;
   }
 
   .dark {
-    /* Pure black/charcoal backgrounds - NO blue tones */
-    --background: hsl(0, 0%, 7%);
-    --foreground: hsl(0, 0%, 98%);
-    --card: hsl(0, 0%, 10%);
-    --card-foreground: hsl(0, 0%, 98%);
-    --popover: hsl(0, 0%, 10%);
-    --popover-foreground: hsl(0, 0%, 98%);
-    --primary: hsl(0, 97%, 36%);
-    --primary-foreground: hsl(0, 0%, 100%);
-    --secondary: hsl(0, 0%, 18%);
-    --secondary-foreground: hsl(0, 0%, 98%);
-    --muted: hsl(0, 0%, 15%);
-    --muted-foreground: hsl(0, 0%, 65%);
-    --accent: hsl(0, 0%, 18%);
-    --accent-foreground: hsl(0, 0%, 98%);
-    --destructive: hsl(0, 62%, 50%);
-    --destructive-foreground: hsl(0, 0%, 98%);
-    --border: hsl(0, 0%, 22%);
-    --input: hsl(0, 0%, 22%);
-    --ring: hsl(0, 97%, 36%);
+    /* Slate-biased, not blue. The previous dark set said "NO blue tones" in a
+       comment while 51 hand-written dark:bg-gray-800 classes (#1f2937, hue
+       ~215deg) said otherwise. These are the real values; the utilities were
+       migrated onto them. */
+    --background: #0a0b0c;          /* ink */
+    --foreground: #f3f5f6;          /* 18.01:1 */
+    --card: #101315;                /* ink-2 */
+    --card-foreground: #f3f5f6;     /* 17.05:1 */
+    --popover: #101315;
+    --popover-foreground: #f3f5f6;
+
+    /* The fill stays brand. The TEXT colour does not: #B60807 is 2.70:1 here
+       and fails at every size. */
+    --primary: #b60807;
+    --primary-foreground: #ffffff;  /* on the fill: 6.94:1 */
+    --brand-ink: #f0444c;           /* red TEXT on dark: 5.01:1 on cards */
+
+    --secondary: #1a1d1f;
+    --secondary-foreground: #f3f5f6;
+    --muted: #16191b;
+    --muted-foreground: #949ba1;    /* 6.63:1 — the website's --mute, at home */
+    --accent: #1a1d1f;
+    --accent-foreground: #f3f5f6;
+
+    --destructive: #f0444c;         /* 5.01:1 */
+    --destructive-foreground: #0a0b0c;
+    --positive: #4ade80;            /* 11.30:1 */
+    --positive-foreground: #0a0b0c;
+    --warning: #fbbf24;             /* 11.80:1 */
+    --warning-foreground: #0a0b0c;
+
+    --border: #232629;
+    --input: #2a2e32;
+    --ring: #f0444c;
+
+    --chart-1: #f0444c;
+    --chart-2: #34d399;
+    --chart-3: #fbbf24;
+    --chart-4: #8b8bd4;
+    --chart-5: #949ba1;
+
+    --sidebar-background: #050607;
+    --sidebar-foreground: #f3f5f6;
+    --sidebar-primary: #b60807;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #16191b;
+    --sidebar-accent-foreground: #f3f5f6;
+    --sidebar-border: #1e2124;
+    --sidebar-ring: #f0444c;
   }
 }
 
@@ -56,9 +141,35 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Data reads as data: names, dates, times, territories, comp, IDs, counts.
+     This is the "Docs" thesis showing up in the typography. */
+  .font-mono,
+  [data-numeric],
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Tabular figures everywhere a number can change width under it. */
+  table,
+  input[type='number'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Never remove a focus ring without putting one back. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
@@ -66,15 +177,15 @@
   .animate-fade-in {
     animation: fadeIn 0.3s ease-out;
   }
-  
+
   .animate-slide-in {
     animation: slideIn 0.3s ease-out;
   }
-  
+
   .animate-count-up {
     animation: countUp 0.5s ease-out;
   }
-  
+
   @keyframes fadeIn {
     0% {
       opacity: 0;
@@ -85,7 +196,7 @@
       transform: translateY(0);
     }
   }
-  
+
   @keyframes slideIn {
     0% {
       transform: translateX(-100%);
@@ -94,7 +205,7 @@
       transform: translateX(0);
     }
   }
-  
+
   @keyframes countUp {
     0% {
       transform: scale(0.8);
@@ -119,24 +230,38 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-  border-radius: 5px;
+  background: var(--muted);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.5);
-  border-radius: 5px;
+  background: var(--border);
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
   background-clip: content-box;
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--muted-foreground) / 0.5) hsl(var(--muted));
+  scrollbar-color: var(--border) var(--muted);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────────
+   This covers CSS only. framer-motion animates via inline style and ignores it,
+   so the three files using it (susan-ai, susan-ai-admin, susan-ai/floating-orb)
+   also call useReducedMotion. A CSS guard alone would have looked correct and
+   done nothing for them. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

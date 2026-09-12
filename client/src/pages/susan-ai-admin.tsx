@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import {
   Bot, Send, Mic, MicOff, Brain, Sparkles, TrendingUp,
@@ -1538,8 +1538,10 @@ export default function SusanAIAdmin() {
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
 
   return (
+    <MotionConfig reducedMotion="user">
     <ProtectedRoute requiredRole="ADMIN">
       {isSuperAdmin ? <SuperAdminContent /> : <AccessDenied />}
     </ProtectedRoute>
+    </MotionConfig>
   );
 }

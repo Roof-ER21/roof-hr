@@ -47,7 +47,7 @@ function listMigrationFiles(): MigrationFile[] {
       files.push({ filename: name, number: parseInt(m[1], 10), fullPath: path.join(MIGRATIONS_DIR, name) });
     }
   }
-  return files.sort((a, b) => a.number - b.number);
+  return files.toSorted((a, b) => a.number - b.number);
 }
 
 export interface MigrationRunResult {

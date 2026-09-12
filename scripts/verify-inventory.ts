@@ -19,10 +19,10 @@ async function verify() {
     byCategory[item.category].push(item);
   }
 
-  for (const [cat, catItems] of Object.entries(byCategory).sort()) {
+  for (const [cat, catItems] of Object.entries(byCategory).toSorted()) {
     const catQty = catItems.reduce((sum: number, i: any) => sum + i.quantity, 0);
     console.log(`\n${cat} (${catItems.length} items, ${catQty} total qty):`);
-    for (const item of catItems.sort((a: any, b: any) => a.name.localeCompare(b.name))) {
+    for (const item of catItems.toSorted((a: any, b: any) => a.name.localeCompare(b.name))) {
       console.log(`  - ${item.name}: ${item.quantity} (avail: ${item.availableQuantity})`);
     }
   }

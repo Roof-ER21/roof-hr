@@ -3,12 +3,49 @@ import { storage } from '../storage';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { EmailService } from '../email-service';
+import { SUPER_ADMIN_EMAIL, isAdmin, isManager } from '../../shared/constants/roles';
 
 const router = Router();
 
 // Generate a secure token for public form access
 function generateAccessToken(): string {
   return crypto.randomBytes(32).toString('hex');
+}
+
+// ─── What an authenticated caller may see of an agreement ────────────────────
+//
+// `accessToken` is the whole authentication for POST /api/public/equipment-
+// agreement/:token — anyone holding it can sign as that employee. It must never
+// leave the server on a route that is not the one issuing it. `signatureData`
+// is the employee's actual signature image and `signatureIp` is their location
+// at signing; neither is anyone else's business.
+//
+// The public GET below already projects a safe subset for exactly this reason.
+//
+// These fields are NOT stripped unconditionally: the HR view legitimately needs
+// all three — `accessToken` backs the "copy form link" button, and the signature
+// image and IP are shown in the agreement viewer. So the projection is scoped to
+// the caller's authority rather than applied blanket, which keeps that UI intact
+// while making the fields unreachable for everyone else.
+type AgreementRow = Record<string, any>;
+
+function visibleFields(agreement: AgreementRow, user: AgreementRow): AgreementRow {
+  if (canAdministerAgreements(user)) return agreement;
+  const { accessToken, signatureData, signatureIp, ...safe } = agreement;
+  return { ...safe, isSigned: agreement.status === 'SIGNED' };
+}
+
+// Managers and above administer everyone's agreements; everyone else sees only
+// the ones addressed to them. `employeeId` is null for agreements sent before a
+// candidate became a user, so email is the fallback identity.
+function canAdministerAgreements(user: AgreementRow): boolean {
+  return user?.email === SUPER_ADMIN_EMAIL || isManager(user?.role) || isAdmin(user);
+}
+
+function isOwnAgreement(agreement: AgreementRow, user: AgreementRow): boolean {
+  if (agreement.employeeId && agreement.employeeId === user?.id) return true;
+  if (!agreement.employeeEmail || !user?.email) return false;
+  return agreement.employeeEmail.toLowerCase() === user.email.toLowerCase();
 }
 
 // ============================================
@@ -23,7 +60,11 @@ router.get('/api/equipment-agreements', async (req: any, res) => {
     }
 
     const agreements = await storage.getAllEquipmentAgreements();
-    res.json(agreements);
+    const visible = canAdministerAgreements(req.user)
+      ? agreements
+      : agreements.filter((a: AgreementRow) => isOwnAgreement(a, req.user));
+
+    res.json(visible.map((a: AgreementRow) => visibleFields(a, req.user)));
   } catch (error: any) {
     console.error('Error fetching equipment agreements:', error);
     res.status(500).json({ error: 'Failed to fetch equipment agreements' });
@@ -42,7 +83,11 @@ router.get('/api/equipment-agreements/:id', async (req: any, res) => {
       return res.status(404).json({ error: 'Equipment agreement not found' });
     }
 
-    res.json(agreement);
+    if (!canAdministerAgreements(req.user) && !isOwnAgreement(agreement, req.user)) {
+      return res.status(404).json({ error: 'Equipment agreement not found' });
+    }
+
+    res.json(visibleFields(agreement, req.user));
   } catch (error: any) {
     console.error('Error fetching equipment agreement:', error);
     res.status(500).json({ error: 'Failed to fetch equipment agreement' });
@@ -55,6 +100,10 @@ router.get('/api/equipment-agreements/:id', async (req: any, res) => {
       if (!req.user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+      if (!canAdministerAgreements(req.user)) {
+        return res.status(403).json({ error: 'Manager access required' });
+      }
+
 
       const { employeeId, employeeName, employeeEmail, employeeRole, items, employeeStartDate } = req.body;
 
@@ -179,6 +228,10 @@ router.patch('/api/equipment-agreements/:id', async (req: any, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
+    if (!canAdministerAgreements(req.user)) {
+      return res.status(403).json({ error: 'Manager access required' });
+    }
+
     const agreement = await storage.getEquipmentAgreementById(req.params.id);
     if (!agreement) {
       return res.status(404).json({ error: 'Equipment agreement not found' });
@@ -199,6 +252,13 @@ router.delete('/api/equipment-agreements/:id', async (req: any, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
+    // Deleting someone's signed equipment agreement destroys a record they
+    // signed. Managers and above only — an employee may read their own, never
+    // remove it.
+    if (!canAdministerAgreements(req.user)) {
+      return res.status(403).json({ error: 'Manager access required' });
+    }
+
     const agreement = await storage.getEquipmentAgreementById(req.params.id);
     if (!agreement) {
       return res.status(404).json({ error: 'Equipment agreement not found' });
@@ -217,6 +277,10 @@ router.post('/api/equipment-agreements/:id/resend', async (req: any, res) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!canAdministerAgreements(req.user)) {
+      return res.status(403).json({ error: 'Manager access required' });
     }
 
     const agreement = await storage.getEquipmentAgreementById(req.params.id);
@@ -320,6 +384,10 @@ router.put('/api/role-equipment-defaults/:role', async (req: any, res) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!canAdministerAgreements(req.user)) {
+      return res.status(403).json({ error: 'Manager access required' });
     }
 
     // Only admins can update defaults

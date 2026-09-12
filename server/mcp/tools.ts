@@ -227,7 +227,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
             args,
             pick: (json: unknown) => {
               if (!Array.isArray(json)) return json;
-              const rows = (json as any[]).filter((p) => inWindow(p, from, to)).sort(byStartDate);
+              const rows = (json as any[]).filter((p) => inWindow(p, from, to)).toSorted(byStartDate);
               return { window: label ?? 'all dates on record', ...page(rows, args.limit, 'timeOff', 100) };
             },
           });
@@ -302,7 +302,7 @@ export const MCP_TOOLS: readonly Mcp21Tool<Args>[] = [
               if (status) list = list.filter((p: any) => String(p.status ?? '').toUpperCase() === status);
               const rows = list
                 .filter((p) => inWindow(p, from, to))
-                .sort(byStartDate)
+                .toSorted(byStartDate)
                 .map((p: any) => ({
                   id: p.id,
                   employeeId: p.employeeId,

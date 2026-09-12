@@ -193,7 +193,7 @@ export class AttendanceManager {
     try {
       const sessions = await storage.getAllAttendanceSessions();
       const sortedSessions = sessions
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, limit);
 
       const recentSessions = await Promise.all(
@@ -252,7 +252,7 @@ export class AttendanceManager {
     }, {} as Record<string, number>);
 
     const [location, count] = Object.entries(locationCounts)
-      .sort(([, a], [, b]) => b - a)[0] || ['Unknown', 0];
+      .toSorted(([, a], [, b]) => b - a)[0] || ['Unknown', 0];
 
     return { location, sessionCount: count };
   }
@@ -266,7 +266,7 @@ export class AttendanceManager {
     });
 
     const sortedHours = Object.entries(hourCounts)
-      .sort(([, a], [, b]) => b - a)
+      .toSorted(([, a], [, b]) => b - a)
       .slice(0, 3)
       .map(([hour, count]) => ({
         hour: parseInt(hour),
@@ -307,7 +307,7 @@ export class AttendanceManager {
     });
 
     // Calculate trend (increasing/decreasing)
-    const months = Object.keys(monthlyData).sort();
+    const months = Object.keys(monthlyData).toSorted();
     if (months.length < 2) {
       return { trend: 'insufficient data', monthlyData };
     }

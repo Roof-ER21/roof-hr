@@ -288,15 +288,15 @@ export function canAccessOnboardingChecklist(user: { role?: string; email?: stri
 // ============================================================================
 // POLICY ADMIN ACCESS
 // ============================================================================
-const POLICY_ADMIN_EMAILS = [
+const POLICY_ADMIN_EMAILS = new Set([
   'ahmed.mahmoud@theroofdocs.com',
   'ford.barsi@theroofdocs.com'
-];
+]);
 
 export function canEditPtoPolicies(user: { role?: string; email?: string } | null): boolean {
   if (!user) return false;
   if (isAdmin(user)) return true;
-  if (user.email && POLICY_ADMIN_EMAILS.includes(user.email)) return true;
+  if (user.email && POLICY_ADMIN_EMAILS.has(user.email)) return true;
   return false;
 }
 

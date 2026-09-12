@@ -247,11 +247,11 @@ export default function MarketingCampaigns() {
           <DialogHeader><DialogTitle>{editingId ? 'Edit campaign' : 'New campaign'}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Name *</label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Fall Yard Sign Blitz" />
+              <label htmlFor="campaign-name" className="text-sm font-medium">Name *</label>
+              <Input id="campaign-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Fall Yard Sign Blitz" />
             </div>
             <div>
-              <label className="text-sm font-medium">Destination URL *</label>
+              <label htmlFor="campaign-destination" className="text-sm font-medium">Destination URL *</label>
               <div className="flex flex-wrap gap-2 my-2">
                 {DEST_PRESETS.map((p) => (
                   <button key={p.url} type="button" onClick={() => setForm({ ...form, destinationUrl: p.url })}
@@ -260,20 +260,20 @@ export default function MarketingCampaigns() {
                   </button>
                 ))}
               </div>
-              <Input value={form.destinationUrl} onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })} placeholder="https://www.theroofdocs.com/inspection/" />
+              <Input id="campaign-destination" value={form.destinationUrl} onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })} placeholder="https://www.theroofdocs.com/inspection/" />
               <p className="text-xs text-muted-foreground mt-1">Pick a preset or paste any URL. UTM tags are added automatically.</p>
             </div>
             <div>
-              <label className="text-sm font-medium">Channel</label>
-              <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}
+              <label htmlFor="campaign-channel" className="text-sm font-medium">Channel</label>
+              <select id="campaign-channel" value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}
                 className="mt-1 w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                 {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             {!editingId && (
               <div>
-                <label className="text-sm font-medium">Custom short code (optional)</label>
-                <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="auto-generated from name" />
+                <label htmlFor="campaign-code" className="text-sm font-medium">Custom short code (optional)</label>
+                <Input id="campaign-code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="auto-generated from name" />
                 <p className="text-xs text-muted-foreground mt-1">The link becomes /m/&lt;code&gt;. Can't change after the QR is printed.</p>
               </div>
             )}
@@ -289,9 +289,9 @@ export default function MarketingCampaigns() {
             </button>
             {showAdvanced && (
               <div className="grid grid-cols-3 gap-2">
-                <div><label className="text-xs text-muted-foreground">utm_source</label><Input value={form.utmSource} onChange={(e) => setForm({ ...form, utmSource: e.target.value })} placeholder="qr" /></div>
-                <div><label className="text-xs text-muted-foreground">utm_medium</label><Input value={form.utmMedium} onChange={(e) => setForm({ ...form, utmMedium: e.target.value })} placeholder="offline" /></div>
-                <div><label className="text-xs text-muted-foreground">utm_campaign</label><Input value={form.utmCampaign} onChange={(e) => setForm({ ...form, utmCampaign: e.target.value })} placeholder="code" /></div>
+                <div><label htmlFor="utm_source" className="text-xs text-muted-foreground">utm_source</label><Input id="utm_source" value={form.utmSource} onChange={(e) => setForm({ ...form, utmSource: e.target.value })} placeholder="qr" /></div>
+                <div><label htmlFor="utm_medium" className="text-xs text-muted-foreground">utm_medium</label><Input id="utm_medium" value={form.utmMedium} onChange={(e) => setForm({ ...form, utmMedium: e.target.value })} placeholder="offline" /></div>
+                <div><label htmlFor="utm_campaign" className="text-xs text-muted-foreground">utm_campaign</label><Input id="utm_campaign" value={form.utmCampaign} onChange={(e) => setForm({ ...form, utmCampaign: e.target.value })} placeholder="code" /></div>
               </div>
             )}
           </div>

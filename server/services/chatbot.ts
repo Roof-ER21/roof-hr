@@ -75,7 +75,7 @@ export class RecruitmentChatbot {
 
     } catch (error) {
       logger.error('Error generating chatbot response:', error);
-      throw new Error('Failed to generate response');
+      throw new Error('Failed to generate response', { cause: error });
     }
   }
 

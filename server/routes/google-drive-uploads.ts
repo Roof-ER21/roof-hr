@@ -746,7 +746,7 @@ router.get('/api/resumes/embed-url/:candidateId', requireAuth as any, async (req
     }
 
     // Check if it's a Google Drive URL
-    const driveMatch = candidate.resumeUrl.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+    const driveMatch = candidate.resumeUrl.match(/drive\.google\.com\/file\/d\/([^/]+)/);
     if (driveMatch) {
       const fileId = driveMatch[1];
       // Return our proxy URL

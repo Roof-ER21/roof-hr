@@ -1,0 +1,54 @@
+name: CI
+
+# Roof HR had no CI at all before this. The typecheck script and the oxlint
+# config both existed and both were red, which is how ~120 type errors and 195
+# lint errors accumulated unnoticed.
+#
+# The gate is a ratchet, not a wall: it fails when the error count goes UP
+# against .quality-baseline.json, and rewrites the baseline downward when it
+# goes down. See scripts/quality-gate.mjs.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Must pass outright. A broken build is never acceptable.
+      - name: Build
+        run: npm run build
+
+      # Must pass outright. Both suites are green today; keep them that way.
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: npm test
+
+      # Ratchet: fails only if lint or type errors increased.
+      - name: Quality gate
+        run: npm run gate
+
+      # Informational until the inherited backlog is cleared. Read the log.
+      - name: Lint report
+        if: always()
+        continue-on-error: true
+        run: npm run lint

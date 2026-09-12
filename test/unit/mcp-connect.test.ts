@@ -106,7 +106,7 @@ describe('the redirect allowlist is exact — this is what stops a token being s
 
 describe('a person can only grant what their own role reaches', () => {
   it('an admin can grant everything the app asked for', () => {
-    expect(grantableAreas(sa21, admin).sort()).toEqual([...sa21.requestedAreas].sort());
+    expect(grantableAreas(sa21, admin).toSorted()).toEqual([...sa21.requestedAreas].toSorted());
   });
 
   it('a plain employee grants a narrower set, never a wider one', () => {
@@ -122,7 +122,7 @@ describe('a person can only grant what their own role reaches', () => {
   it('what is withheld is the difference, so the screen can be honest about it', () => {
     const granted = grantableAreas(sa21, employee);
     const withheld = sa21.requestedAreas.filter((a) => !granted.includes(a));
-    expect([...granted, ...withheld].sort()).toEqual([...sa21.requestedAreas].sort());
+    expect([...granted, ...withheld].toSorted()).toEqual([...sa21.requestedAreas].toSorted());
   });
 
   it('the description shown to a person is a real label, not a raw slug', () => {

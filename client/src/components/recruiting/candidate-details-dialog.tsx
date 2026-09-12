@@ -62,7 +62,7 @@ const getResumeViewUrl = (resumeUrl: string): string => {
   if (!resumeUrl) return '';
 
   // Check if it's a Google Drive URL
-  const driveMatch = resumeUrl.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+  const driveMatch = resumeUrl.match(/drive\.google\.com\/file\/d\/([^/]+)/);
   if (driveMatch) {
     const fileId = driveMatch[1];
     // Use our proxy endpoint
@@ -296,7 +296,7 @@ export function CandidateDetailsDialog({
       setResumeError(null);
 
       // Extract fileId from Google Drive URL
-      const driveMatch = candidate.resumeUrl.match(/drive\.google\.com\/file\/d\/([^\/]+)/);
+      const driveMatch = candidate.resumeUrl.match(/drive\.google\.com\/file\/d\/([^/]+)/);
       if (!driveMatch) {
         // Non-Google Drive URL - use directly
         setResumeBlobUrl(candidate.resumeUrl);

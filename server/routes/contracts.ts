@@ -68,10 +68,10 @@ function validateTemplateVariables(
 }
 
 // Standard template variables that are auto-filled
-const AUTO_FILLED_VARIABLES = [
+const AUTO_FILLED_VARIABLES = new Set([
   'name', 'employeeName', 'contractorName', 'firstName', 'lastName',
   'position', 'department', 'email', 'date', 'startDate', 'effectiveDate'
-];
+]);
 
 const MANAGER_LIKE_ROLES = ['MANAGER', 'TERRITORY_MANAGER', 'TERRITORY_SALES_MANAGER'] as const;
 const isManagerRole = (role?: string | null) =>
@@ -221,8 +221,8 @@ router.get('/api/contract-templates/:id/variables', requireAuth, requireManager,
     const variables = extractTemplateVariables(template.content);
 
     // Categorize variables
-    const autoFilled = variables.filter(v => AUTO_FILLED_VARIABLES.includes(v));
-    const userProvided = variables.filter(v => !AUTO_FILLED_VARIABLES.includes(v));
+    const autoFilled = variables.filter(v => AUTO_FILLED_VARIABLES.has(v));
+    const userProvided = variables.filter(v => !AUTO_FILLED_VARIABLES.has(v));
 
     res.json({
       templateId: template.id,
@@ -281,7 +281,7 @@ router.post('/api/contract-templates/:id/validate', requireAuth, requireManager,
     }
 
     // Combine auto-filled and user-provided values
-    const allValues = { ...autoValues, ...fieldValues };
+    const allValues = { ...autoValues, ...(fieldValues || {}) };
 
     // Validate
     const validation = validateTemplateVariables(template.content, allValues);
@@ -481,9 +481,9 @@ router.get('/api/contracts', requireAuth, async (req, res) => {
     if (isManagerRole(user.role)) {
       // Get direct reports (users where this manager is their primaryManagerId)
       const allUsers = await storage.getAllUsers();
-      const directReportIds = allUsers
+      const directReportIds = new Set(allUsers
         .filter(u => u.primaryManagerId === user.id)
-        .map(u => u.id);
+        .map(u => u.id));
 
       const filteredContracts = allContracts.filter(contract => {
         // Their own contracts
@@ -491,7 +491,7 @@ router.get('/api/contracts', requireAuth, async (req, res) => {
         // Contracts they created
         if (contract.createdBy === user.id) return true;
         // Direct reports' contracts
-        if (contract.employeeId && directReportIds.includes(contract.employeeId)) return true;
+        if (contract.employeeId && directReportIds.has(contract.employeeId)) return true;
         return false;
       });
 
@@ -526,14 +526,14 @@ router.get('/api/employee-contracts', requireAuth, requireManager, async (req, r
     // Manager role - see own contracts + contracts they created + direct reports' contracts
     if (isManagerRole(user.role)) {
       const allUsers = await storage.getAllUsers();
-      const directReportIds = allUsers
+      const directReportIds = new Set(allUsers
         .filter(u => u.primaryManagerId === user.id)
-        .map(u => u.id);
+        .map(u => u.id));
 
       const filteredContracts = allContracts.filter(contract => {
         if (contract.employeeId === user.id) return true;
         if (contract.createdBy === user.id) return true;
-        if (contract.employeeId && directReportIds.includes(contract.employeeId)) return true;
+        if (contract.employeeId && directReportIds.has(contract.employeeId)) return true;
         return false;
       });
 

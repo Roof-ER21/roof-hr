@@ -536,7 +536,7 @@ function EnhancedEmployees() {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <label htmlFor="import-file" className="inline-flex">
+          <label htmlFor="import-file" className="inline-flex" aria-label="Import employees from a file">
             <Button variant="outline" size="sm" asChild>
               <span>
                 <Upload className="w-4 h-4 mr-2" />

@@ -170,7 +170,7 @@ async function updateInventory() {
     }
 
     console.log('\nBreakdown by category:');
-    for (const [category, data] of Object.entries(categoryCounts).sort()) {
+    for (const [category, data] of Object.entries(categoryCounts).toSorted()) {
       console.log(`  ${category}: ${data.count} items (${data.quantity} total qty)`);
     }
 

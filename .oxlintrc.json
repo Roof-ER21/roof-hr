@@ -1,6 +1,14 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "react-hooks", "jsx-a11y", "import", "unicorn", "promise"],
+  "plugins": [
+    "typescript",
+    "react",
+    "react-hooks",
+    "jsx-a11y",
+    "import",
+    "unicorn",
+    "promise"
+  ],
   "categories": {
     "correctness": "error",
     "perf": "warn",
@@ -14,20 +22,34 @@
     "es2024": true
   },
   "ignorePatterns": [
-    "node_modules",
-    "dist",
-    "build",
-    "public",
-    "uploads",
+    "*.config.js",
+    "*.d.ts",
+    "*.min.js",
     "attached_assets",
+    "build",
+    "dist",
+    "migrations",
+    "node_modules",
+    "public",
+    "scripts",
     "supervisor_logs",
     "supervisor_state",
-    "migrations",
-    "*.min.js",
-    "*.config.js"
+    "uploads"
   ],
   "rules": {
     "no-unused-vars": "off",
-    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
+    "react/react-in-jsx-scope": "off",
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-has-content": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+    "unicorn/no-useless-fallback-in-spread": "off"
   }
 }

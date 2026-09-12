@@ -678,7 +678,7 @@ router.get('/api/employee-portal/onboarding', requireAuth, async (req: any, res)
     const enrichedOnboarding = await Promise.all([
       ...employeeWorkflows.map(async (workflow: any) => {
         const steps = await storage.getOnboardingStepsByWorkflowId(workflow.id);
-        const sortedSteps = steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber);
+        const sortedSteps = steps.toSorted((a: any, b: any) => a.stepNumber - b.stepNumber);
 
         const completedCount = sortedSteps.filter((s: any) => s.status === 'COMPLETED').length;
         const now = new Date();
@@ -701,7 +701,7 @@ router.get('/api/employee-portal/onboarding', requireAuth, async (req: any, res)
       }),
       ...instances.map(async (instance: any) => {
         const steps = await storage.getOnboardingStepsByWorkflowId(instance.id);
-        const sortedSteps = steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber);
+        const sortedSteps = steps.toSorted((a: any, b: any) => a.stepNumber - b.stepNumber);
         const template = await storage.getOnboardingTemplateById(instance.templateId);
 
         const completedCount = sortedSteps.filter((s: any) => s.status === 'COMPLETED').length;

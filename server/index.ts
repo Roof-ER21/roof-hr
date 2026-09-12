@@ -4,6 +4,8 @@ import path from 'path';
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import session from "express-session";
+import helmet from "helmet";
+import { timingSafeEqual } from "crypto";
 import passport from "passport";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -236,6 +238,51 @@ app.use(session({
   }
 }));
 
+// ── Security headers ────────────────────────────────────────────────────────
+//
+// helmet has been a dependency for months without ever being imported, so
+// production has been shipping no HSTS, no CSP, no X-Content-Type-Options and a
+// cheerful `x-powered-by: Express`. This turns it on.
+//
+// CSP is REPORT-ONLY for now, deliberately. Enforcing it blind would break the
+// Google Fonts stylesheet, the Socket.IO upgrade, the data: URLs the signature
+// canvas produces, and the Google Drive image proxy. Watch the browser console
+// on a real session, confirm the directives below cover everything, then set
+// CSP_ENFORCE=true to flip it. Everything else here is enforced immediately.
+app.disable('x-powered-by');
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  // Signature images, Drive thumbnails and the PDF viewer are cross-origin reads.
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: false, // do not preload until the apex domain is settled
+  },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+
+const cspDirectives = {
+  defaultSrc: ["'self'"],
+  // 'unsafe-inline' on styles is required by Radix, which sets inline styles for
+  // positioning. Scripts do NOT get it.
+  styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+  fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+  scriptSrc: ["'self'"],
+  imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+  connectSrc: ["'self'", 'ws:', 'wss:'],
+  frameSrc: ["'self'", 'https://drive.google.com', 'https://docs.google.com'],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  formAction: ["'self'"],
+  frameAncestors: ["'none'"],
+};
+app.use(helmet.contentSecurityPolicy({
+  directives: cspDirectives,
+  reportOnly: process.env.CSP_ENFORCE !== 'true',
+}));
+
 // Request logging
 app.use(requestLogger);
 
@@ -251,11 +298,54 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Public endpoint to clear rate limits (for emergency lockout recovery)
+// ── Credential endpoints get their own, much tighter budget ─────────────────
+//
+// The limiter above is sized for polling (notifications, auth validation) and
+// at 1000/15min it is no brake at all on password guessing. Login, password
+// reset and the public signing forms each get a real one. Keyed on IP + the
+// email being tried, so one person fat-fingering their password cannot lock out
+// an office sharing a NAT.
+const credentialLimiter = expressRateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const who = typeof req.body?.email === 'string' ? req.body.email.toLowerCase() : '';
+    return `${ipKeyGenerator(req.ip ?? '')}:${who}`;
+  },
+  message: { error: 'Too many attempts. Wait 15 minutes and try again.' },
+});
+
+// Emergency lockout recovery.
+//
+// This was an unauthenticated GET that cleared the limiter for EVERY IP, which
+// made the limiter above meaningless: spend the budget, reset it, repeat. It is
+// kept, because locking yourself out of an HR system at 7am is a real problem
+// and you cannot authenticate your way out of it — but it now needs a secret,
+// and it only clears the caller's own IP unless explicitly told otherwise.
+//
+// Set RATE_LIMIT_RESET_KEY to enable it. Unset, the route does not exist.
+//   curl -H "x-reset-key: $KEY" https://roofhr.up.railway.app/api/public/reset-rate-limits
 app.get('/api/public/reset-rate-limits', (req, res) => {
-  clearRateLimit();
-  console.log('[Rate Limit] Emergency rate limit reset triggered');
-  res.json({ success: true, message: 'Rate limits cleared for all IPs' });
+  const expected = process.env.RATE_LIMIT_RESET_KEY;
+  if (!expected) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const provided = String(req.headers['x-reset-key'] ?? '');
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    console.warn('[Rate Limit] Reset refused: bad or missing key from', req.ip);
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const all = req.query.scope === 'all';
+  clearRateLimit(all ? undefined : req.ip);
+  console.log(`[Rate Limit] Reset by key holder from ${req.ip} (scope: ${all ? 'all IPs' : 'caller only'})`);
+  res.json({ success: true, scope: all ? 'all' : req.ip });
 });
 
 // ── /mcp — personal agent tokens act as the person (reads only) ─────────────
@@ -282,6 +372,11 @@ app.use('/mcp', mcpLimiter, express.json({ limit: '256kb' }), (req: Request, res
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(sanitizeInput);
+
+// Credential brake. Mounted here, after the JSON parser, because its key is
+// IP + the email being tried and req.body does not exist before this point.
+app.use(['/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'], credentialLimiter);
+
 
 // Initialize Passport
 app.use(passport.initialize());

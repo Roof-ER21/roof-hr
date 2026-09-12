@@ -49,7 +49,7 @@ router.get('/api/employee-portal/dashboard', requireAuth, async (req: any, res) 
 
     // Get recent activity (last 10 items)
     const recentPtoActivity = myPtoRequests
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .toSorted((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, 5)
       .map(r => ({
         type: 'pto' as const,
@@ -332,7 +332,7 @@ router.get('/api/employee-portal/upcoming-events', requireAuth, async (req: any,
 
     // Combine and sort by date
     const allEvents = [...upcomingPto, ...upcomingReviews]
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .toSorted((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 10);
 
     res.json(allEvents);
@@ -504,7 +504,7 @@ router.get('/api/employee-portal/my-pto', requireAuth, async (req: any, res) => 
     const allPtoRequests = await storage.getAllPtoRequests();
     const myRequests = allPtoRequests
       .filter(r => r.employeeId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     res.json(myRequests);
   } catch (error) {
@@ -540,7 +540,7 @@ router.get('/api/employee-portal/manager/pto-requests', requireAuth, async (req:
         employeeDepartment: employee?.department,
         employeePosition: employee?.position
       };
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }).toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     res.json(requestsWithNames);
   } catch (error) {

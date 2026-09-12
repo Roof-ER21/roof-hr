@@ -1,0 +1,8 @@
+# Read by ~/.claude/pre-push-checks/runner.sh before it runs its checks.
+#
+# Typecheck is off by default in the shared runner because it can OOM on big
+# repos. Roof HR is ~150k lines and tsc completes in well under a minute here,
+# so it is on: the whole point of the ratchet is that a regression is caught
+# before it reaches a branch, not after.
+PREPUSH_RUN_TYPECHECK=1
+NODE_OPTIONS=--max-old-space-size=4096

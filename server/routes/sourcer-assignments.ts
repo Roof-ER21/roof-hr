@@ -461,10 +461,10 @@ router.post('/api/candidates/bulk-assign', requireAuth, requireManagerOrLeadSour
 });
 
 // Priority sourcer emails - these appear first in the list
-const PRIORITY_SOURCER_EMAILS = [
+const PRIORITY_SOURCER_EMAILS = new Set([
   'careers@theroofdocs.com',     // Ryan Ferguson
   'jobs@theroofdocs.com',        // Julian Lemmond
-];
+]);
 
 /**
  * GET /api/sourcers/available
@@ -513,8 +513,8 @@ router.get('/api/sourcers/available', requireAuth, requireManagerOrLeadSourcer, 
     // 2. Then users with activeAssignments > 0
     // 3. Then alphabetically by firstName
     usersWithWorkload.sort((a, b) => {
-      const aIsPriority = PRIORITY_SOURCER_EMAILS.includes(a.email);
-      const bIsPriority = PRIORITY_SOURCER_EMAILS.includes(b.email);
+      const aIsPriority = PRIORITY_SOURCER_EMAILS.has(a.email);
+      const bIsPriority = PRIORITY_SOURCER_EMAILS.has(b.email);
 
       // Priority emails first
       if (aIsPriority && !bIsPriority) return -1;

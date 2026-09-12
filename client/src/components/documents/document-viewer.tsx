@@ -347,20 +347,20 @@ export function DocumentViewer({ document, onAcknowledge }: DocumentViewerProps)
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label htmlFor="digital-signature-full-name" className="block text-sm font-medium mb-2">
                     Digital Signature (Full Name) *
                   </label>
-                  <Input
+                  <Input id="digital-signature-full-name"
                     placeholder="Enter your full name"
                     value={signature}
                     onChange={(e) => setSignature(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label htmlFor="additional-notes-optional" className="block text-sm font-medium mb-2">
                     Additional Notes (Optional)
                   </label>
-                  <Textarea
+                  <Textarea id="additional-notes-optional"
                     placeholder="Any questions or comments about this document..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}

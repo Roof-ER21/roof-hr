@@ -160,7 +160,7 @@ export class CalendarConflictDetector {
     if (domainEmails.length === 0) return [];
 
     // Check cache
-    const cacheKey = `${domainEmails.sort().join(',')}-${startTime.toISOString()}-${endTime.toISOString()}`;
+    const cacheKey = `${domainEmails.toSorted().join(',')}-${startTime.toISOString()}-${endTime.toISOString()}`;
     const cached = freeBusyCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
       console.log(`[CalendarConflictDetector] 📦 Using cached FreeBusy data (${cached.data.length} blocks)`);

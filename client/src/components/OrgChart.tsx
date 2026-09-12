@@ -21,7 +21,7 @@ const FORD_EMAIL = 'ford.barsi@theroofdocs.com';
 const AHMED_EMAIL = 'ahmed.mahmoud@theroofdocs.com';
 
 // Users who can edit the org chart
-const EDIT_EMAILS = [AHMED_EMAIL, OLIVER_EMAIL, REESE_EMAIL, FORD_EMAIL];
+const EDIT_EMAILS = new Set([AHMED_EMAIL, OLIVER_EMAIL, REESE_EMAIL, FORD_EMAIL]);
 
 type User = {
   id: string;
@@ -69,7 +69,7 @@ export default function OrgChart({ readOnly = false }: OrgChartProps) {
   const [zoomLevel, setZoomLevel] = useState(0.85);
 
   // Check if current user can edit (disabled if readOnly is true)
-  const canEdit = !readOnly && EDIT_EMAILS.includes(currentUser?.email?.toLowerCase() || '');
+  const canEdit = !readOnly && EDIT_EMAILS.has(currentUser?.email?.toLowerCase() || '');
 
   // Fetch all users
   const { data: users = [], isLoading } = useQuery<User[]>({

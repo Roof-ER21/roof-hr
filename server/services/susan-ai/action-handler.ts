@@ -93,7 +93,7 @@ function findCandidatesFuzzy(candidates: any[], searchName: string, threshold: n
   // Filter by threshold and sort by score
   return results
     .filter(r => r.score >= threshold)
-    .sort((a, b) => b.score - a.score);
+    .toSorted((a, b) => b.score - a.score);
 }
 
 export interface ActionResult {
@@ -684,7 +684,7 @@ export class SusanActionHandler {
       let location = '';
       
       // Complex pattern for "move chen to schedule an interview for 8/26 with reese in the office"
-      const complexMatch = message.match(/(?:move\s+)?(\w+)\s+to\s+schedule\s+an?\s+interview\s+(?:for|on)\s+([\d\/\-]+)(?:\s+with\s+(\w+))?(?:\s+(?:in|at)\s+(.+))?/i);
+      const complexMatch = message.match(/(?:move\s+)?(\w+)\s+to\s+schedule\s+an?\s+interview\s+(?:for|on)\s+([\d/\-]+)(?:\s+with\s+(\w+))?(?:\s+(?:in|at)\s+(.+))?/i);
       
       if (complexMatch) {
         candidateName = complexMatch[1];
@@ -702,7 +702,7 @@ export class SusanActionHandler {
         }
         
         // Extract date if present
-        const dateMatch = message.match(/(?:for|on)\s+([\d\/\-]+|\w+\s+\d+)/i);
+        const dateMatch = message.match(/(?:for|on)\s+([\d/\-]+|\w+\s+\d+)/i);
         if (dateMatch) {
           interviewDate = dateMatch[1];
         }
@@ -1668,8 +1668,8 @@ Should I proceed with scheduling this interview?`,
       // "create note on [name] saying [content]"
       const notePatterns = [
         /(?:add|create|make|record|write)\s+(?:a\s+)?note\s+(?:to|for|on|about)\s+([A-Za-z\s]+?)[\s:]+(.+)/i,
-        /note\s+(?:for|on|about)\s+([A-Za-z\s]+?)[\s:\-]+(.+)/i,
-        /([A-Za-z\s]+?)\s+note[\s:\-]+(.+)/i,
+        /note\s+(?:for|on|about)\s+([A-Za-z\s]+?)[\s:-]+(.+)/i,
+        /([A-Za-z\s]+?)\s+note[\s:-]+(.+)/i,
       ];
 
       let personName: string | null = null;
@@ -1732,7 +1732,7 @@ Should I proceed with scheduling this interview?`,
             return { employee: emp, score };
           })
           .filter(m => m.score >= 0.6)
-          .sort((a, b) => b.score - a.score);
+          .toSorted((a, b) => b.score - a.score);
 
         if (employeeMatches.length > 0) {
           const bestMatch = employeeMatches[0];
@@ -2158,7 +2158,7 @@ Should I proceed with scheduling this interview?`,
     try {
       // Parse PTO details
       const employeeMatch = message.match(/(?:submit|request)\s+(?:pto|time off|vacation)\s+for\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
-      const dateMatch = message.match(/(?:from|on)\s+([\d\/\-]+)\s+(?:to|until)\s+([\d\/\-]+)/i);
+      const dateMatch = message.match(/(?:from|on)\s+([\d/\-]+)\s+(?:to|until)\s+([\d/\-]+)/i);
       
       if (!employeeMatch) {
         return {
@@ -3688,7 +3688,7 @@ Should I proceed with scheduling this interview?`,
     }
 
     // Standard date formats
-    const dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+    const dateMatch = text.match(/(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?/);
     if (dateMatch) {
       const month = parseInt(dateMatch[1]) - 1;
       const day = parseInt(dateMatch[2]);
@@ -4283,7 +4283,7 @@ Should I proceed with scheduling this interview?`,
         });
 
         const deptList = Object.entries(deptCounts)
-          .sort((a, b) => b[1] - a[1])
+          .toSorted((a, b) => b[1] - a[1])
           .map(([dept, count]) => `• ${dept}: ${count}`)
           .join('\n');
 
@@ -4315,7 +4315,7 @@ Should I proceed with scheduling this interview?`,
         };
 
         const roleList = Object.entries(roleCounts)
-          .sort((a, b) => b[1] - a[1])
+          .toSorted((a, b) => b[1] - a[1])
           .map(([role, count]) => `• ${roleDisplayNames[role] || role}: ${count}`)
           .join('\n');
 

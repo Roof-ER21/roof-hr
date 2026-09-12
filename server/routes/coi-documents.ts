@@ -998,7 +998,7 @@ router.get('/api/coi-documents/employees/list', requireAuth, requireHROrManager,
         email: u.email,
         fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim()
       }))
-      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+      .toSorted((a, b) => a.fullName.localeCompare(b.fullName));
 
     res.json(employees);
   } catch (error: any) {
