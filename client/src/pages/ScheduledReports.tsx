@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useConfirm } from '@/components/ui/confirm';
 import { Plus, Edit2, Trash2, Calendar, Play, Clock, FileText, Mail, History } from 'lucide-react';
 import type { ScheduledReport, ReportExecution } from '@/../../shared/schema';
 
@@ -366,8 +367,13 @@ export default function ScheduledReports({ embedded = false }: ScheduledReportsP
     setIsHistoryDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this scheduled report?')) {
+  const confirm = useConfirm();
+
+  const handleDelete = async (id: string) => {
+    if (await confirm({
+      title: 'Delete this scheduled report?',
+      description: 'It stops being generated and sent.',
+    })) {
       deleteMutation.mutate(id);
     }
   };

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/components/ui/confirm';
 import {
   Package,
   Plus,
@@ -100,6 +101,7 @@ const DEFAULT_EQUIPMENT_BY_ROLE: Record<string, EquipmentItem[]> = {
 };
 
 export function EquipmentAgreementsSection() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
@@ -470,8 +472,11 @@ export function EquipmentAgreementsSection() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this agreement?')) {
+                              onClick={async () => {
+                                if (await confirm({
+                                  title: 'Delete this equipment agreement?',
+                                  description: 'If it was already signed, the signature is deleted with it.',
+                                })) {
                                   deleteMutation.mutate(agreement.id);
                                 }
                               }}

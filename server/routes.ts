@@ -3616,12 +3616,34 @@ router.patch('/api/candidates/:id', requireAuth, requireManager, async (req: any
   }
 });
 
-router.delete('/api/candidates/:id', requireAuth, requireManager, async (req, res) => {
+// Permanently purge a candidate.
+//
+// This used to be `requireManager` calling a bare `db.delete(candidates)`. With
+// no foreign keys anywhere in the schema, that never errored — it just stranded
+// rows in thirteen tables that still named a person who no longer existed, and
+// swallowed the reason behind a blanket 400.
+//
+// Archiving (`POST /api/candidates/:id/archive`) remains the normal path and is
+// what the UI calls. This is the purge: HR admins and above only, cascaded,
+// transactional, and recorded with a full snapshot in the audit log.
+router.delete('/api/candidates/:id', requireAuth, requireAdmin, async (req: any, res) => {
   try {
-    await storage.deleteCandidate(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(400).json({ error: 'Failed to delete candidate' });
+    const result = await storage.deleteCandidateCascade(req.params.id, {
+      id: req.user.id,
+      email: req.user.email,
+      ipAddress: (req.ip || req.headers['x-forwarded-for'] || '') as string,
+      userAgent: req.headers['user-agent'] as string,
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    if (error?.message === 'Candidate not found') {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+    // The real reason, not a blanket 400. A half-failed purge of a person's
+    // record is exactly the thing you need to be able to read afterwards.
+    console.error('[Candidates] Purge failed for', req.params.id, error);
+    res.status(500).json({ error: 'Failed to delete candidate', detail: error?.message });
   }
 });
 

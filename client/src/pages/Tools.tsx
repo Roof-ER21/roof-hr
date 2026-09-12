@@ -17,6 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
 import { apiRequest } from '@/lib/queryClient';
+import { useConfirm } from '@/components/ui/confirm';
 import {
   Laptop, Package, Car, HardHat, Shirt, Wrench, Plus,
   Send, Edit, Trash2, CheckCircle, XCircle, Clock,
@@ -775,8 +776,13 @@ export function Tools() {
     });
   };
 
-  const handleDeleteTool = (id: string) => {
-    if (confirm('Are you sure you want to delete this tool?')) {
+  const confirm = useConfirm();
+
+  const handleDeleteTool = async (id: string) => {
+    if (await confirm({
+      title: 'Delete this tool?',
+      description: 'Any assignment history for it is removed with it.',
+    })) {
       deleteToolMutation.mutate(id);
     }
   };

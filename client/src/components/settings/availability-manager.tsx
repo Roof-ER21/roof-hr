@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
+import { useConfirm } from '@/components/ui/confirm';
 import { Clock, Plus, Trash2, Save, Calendar } from 'lucide-react';
 
 interface AvailabilitySlot {
@@ -190,8 +191,13 @@ export function AvailabilityManager({ userId }: AvailabilityManagerProps) {
     }
   };
 
-  const handleDeleteSlot = (slot: AvailabilitySlot) => {
-    if (slot.id && confirm('Are you sure you want to delete this availability slot?')) {
+  const confirm = useConfirm();
+
+  const handleDeleteSlot = async (slot: AvailabilitySlot) => {
+    if (slot.id && await confirm({
+      title: 'Delete this availability slot?',
+      description: 'Interviews already booked in it are not cancelled.',
+    })) {
       deleteMutation.mutate(slot.id);
     }
   };

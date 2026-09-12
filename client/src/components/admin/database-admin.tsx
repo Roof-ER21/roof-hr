@@ -32,6 +32,7 @@ import {
   ShieldOff
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/components/ui/confirm';
 
 interface TableInfo {
   tableName: string;
@@ -63,6 +64,7 @@ interface SqlHistoryEntry {
 }
 
 export function DatabaseAdmin() {
+  const confirm = useConfirm();
   const { toast } = useToast();
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -115,7 +117,7 @@ export function DatabaseAdmin() {
   };
 
   // Execute SQL with read-only protection
-  const executeQuery = () => {
+  const executeQuery = async () => {
     const trimmedQuery = sqlQuery.trim();
 
     if (isWriteQuery(trimmedQuery)) {
@@ -128,9 +130,19 @@ export function DatabaseAdmin() {
         return;
       } else {
         // Confirm write operation
-        const confirmed = window.confirm(
-          `⚠️ WARNING: This query will modify data!\n\n${trimmedQuery.substring(0, 200)}${trimmedQuery.length > 200 ? '...' : ''}\n\nAre you sure you want to execute this?`
-        );
+        const confirmed = await confirm({
+          title: 'This query modifies data',
+          description: (
+            <>
+              It runs against the live HR database and is not reversible from here.
+              <code className="mt-2 block whitespace-pre-wrap break-all rounded-sm bg-muted p-2 font-mono text-xs">
+                {trimmedQuery.substring(0, 200)}{trimmedQuery.length > 200 ? '…' : ''}
+              </code>
+            </>
+          ),
+          confirmLabel: 'Execute',
+          typeToConfirm: 'EXECUTE',
+        });
         if (!confirmed) return;
       }
     }

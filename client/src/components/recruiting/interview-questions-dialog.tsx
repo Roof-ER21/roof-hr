@@ -9,6 +9,7 @@ import { ClipboardList, Save, Loader2, Shield, ShoppingBag, ArrowLeft } from 'lu
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { format } from 'date-fns';
 
 // Insurance/Roofing Sales Interview Questions
@@ -57,6 +58,7 @@ export function InterviewQuestionsDialog({
   onOpenChange,
   candidate,
 }: InterviewQuestionsDialogProps) {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -129,11 +131,13 @@ export function InterviewQuestionsDialog({
 
   const answeredCount = Object.values(answers).filter((a) => a?.trim()).length;
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (answeredCount > 0) {
-      const confirmClose = window.confirm(
-        'You have unsaved interview answers. Are you sure you want to close?'
-      );
+      const confirmClose = await confirm({
+        title: 'Close without saving?',
+        description: `You have ${answeredCount} answer${answeredCount === 1 ? '' : 's'} that have not been saved.`,
+        confirmLabel: 'Discard answers',
+      });
       if (!confirmClose) return;
     }
     setAnswers({});
@@ -141,11 +145,13 @@ export function InterviewQuestionsDialog({
     onOpenChange(false);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     if (answeredCount > 0) {
-      const confirmBack = window.confirm(
-        'You have unsaved answers. Going back will clear them. Continue?'
-      );
+      const confirmBack = await confirm({
+        title: 'Go back and clear your answers?',
+        description: `Going back discards ${answeredCount} unsaved answer${answeredCount === 1 ? '' : 's'}.`,
+        confirmLabel: 'Discard answers',
+      });
       if (!confirmBack) return;
     }
     setAnswers({});

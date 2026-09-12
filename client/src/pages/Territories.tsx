@@ -17,6 +17,7 @@ import { MapPin, Users, Plus, Edit2, Trash2, UserPlus } from 'lucide-react';
 import { insertTerritorySchema } from '@/../../shared/schema';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
+import { useConfirm } from '@/components/ui/confirm';
 import type { User, Territory } from '@/../../shared/schema';
 
 const formSchema = insertTerritorySchema.extend({
@@ -226,8 +227,13 @@ export default function Territories() {
     setIsEditDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this territory?')) {
+  const confirm = useConfirm();
+
+  const handleDelete = async (id: string) => {
+    if (await confirm({
+      title: 'Delete this territory?',
+      description: 'Reps assigned to it keep their records, but the territory disappears from every picker.',
+    })) {
       deleteMutation.mutate(id);
     }
   };

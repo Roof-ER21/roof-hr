@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Edit2, Trash2, ClipboardList, Users, CheckCircle, Circle, GripVertical, X, AlertTriangle, FileText, Package } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useConfirm } from '@/components/ui/confirm';
 import type { OnboardingTemplate, OnboardingInstance, User } from '@/../../shared/schema';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -441,8 +442,13 @@ export default function OnboardingTemplates() {
     setIsViewDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this template?')) {
+  const confirm = useConfirm();
+
+  const handleDelete = async (id: string) => {
+    if (await confirm({
+      title: 'Delete this onboarding template?',
+      description: 'Instances already created from it are not affected.',
+    })) {
       deleteMutation.mutate(id);
     }
   };

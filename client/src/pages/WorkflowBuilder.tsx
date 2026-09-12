@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
+import { useConfirm } from '@/components/ui/confirm';
 
 interface WorkflowStep {
   id: string;
@@ -146,6 +147,7 @@ function WorkflowStepCard({ step, onEdit, onDelete }: {
 }
 
 export default function WorkflowBuilder() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
@@ -446,8 +448,11 @@ export default function WorkflowBuilder() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {
-                        if (confirm('Are you sure you want to delete this workflow?')) {
+                      onClick={async () => {
+                        if (await confirm({
+                          title: 'Delete this workflow?',
+                          description: 'Its run history goes with it.',
+                        })) {
                           deleteWorkflowMutation.mutate(selectedWorkflow.id);
                         }
                       }}

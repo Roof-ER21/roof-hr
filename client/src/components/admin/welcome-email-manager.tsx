@@ -49,6 +49,7 @@ import {
 import { apiRequest } from '@/lib/queryClient';
 import TokenEditor from '@/components/admin/token-editor';
 import OfficesCard from '@/components/admin/offices-card';
+import { useConfirm } from '@/components/ui/confirm';
 
 // ---------------------------------------------------------------------------
 // Types + helpers
@@ -189,6 +190,7 @@ export default function WelcomeEmailManager() {
 // ---------------------------------------------------------------------------
 
 function AttachmentsCard() {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [showRemoved, setShowRemoved] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -361,8 +363,8 @@ function AttachmentsCard() {
                             variant="ghost"
                             size="sm"
                             title="Remove"
-                            onClick={() => {
-                              if (window.confirm(`Remove "${row.label}" from the welcome email?`)) {
+                            onClick={async () => {
+                              if (await confirm({ title: `Remove ${row.label} from the welcome email?` })) {
                                 remove.mutate(row);
                               }
                             }}
@@ -701,6 +703,7 @@ function BodyCard() {
 }
 
 function BodyEditor({ variant }: { variant: Variant }) {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [subject, setSubject] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
@@ -937,8 +940,13 @@ function BodyEditor({ variant }: { variant: Variant }) {
         {!data?.usingBuiltIn && (
           <Button
             variant="ghost"
-            onClick={() => {
-              if (window.confirm('Go back to the standard email? Your edited version stays in History.')) {
+            onClick={async () => {
+              if (await confirm({
+                title: 'Go back to the standard email?',
+                description: 'Your edited version stays in History, so this is reversible.',
+                confirmLabel: 'Use the standard email',
+                destructive: false,
+              })) {
                 useBuiltIn.mutate();
               }
             }}

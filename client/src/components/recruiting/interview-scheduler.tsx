@@ -19,6 +19,7 @@ import { MANAGER_ROLES, ADMIN_ROLES, isSourcer, isLeadSourcer, isExtendedSourcer
 import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { DialogFooter } from '@/components/ui/dialog';
 import { useAuth } from '@/lib/auth';
+import { useConfirm } from '@/components/ui/confirm';
 import { format, addDays, setHours, setMinutes, isBefore, isAfter, startOfDay, endOfDay } from 'date-fns';
 
 interface InterviewSchedulerProps {
@@ -35,6 +36,7 @@ interface InterviewSchedulerProps {
 }
 
 export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange }: InterviewSchedulerProps) {
+  const confirm = useConfirm();
   const candidateId = candidate.id;
   const candidateName = `${candidate.firstName} ${candidate.lastName}`;
   const position = candidate.position;
@@ -547,8 +549,12 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
   };
 
   // Handler for No Show (immediate, no dialog)
-  const handleNoShow = (interview: any) => {
-    if (window.confirm('Mark as No Show?\n\nThis will move the candidate to Dead status with a "No Show" tag.')) {
+  const handleNoShow = async (interview: any) => {
+    if (await confirm({
+      title: 'Mark this candidate as a no show?',
+      description: 'They move to Dead status with a "No Show" tag. You can move them back afterwards.',
+      confirmLabel: 'Mark no show',
+    })) {
       updateInterviewStatusMutation.mutate({
         interviewId: interview.id,
         status: 'NO_SHOW',

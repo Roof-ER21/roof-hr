@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { MANAGER_ROLES, SUPER_ADMIN_EMAIL } from '@shared/constants/roles';
 import { downloadQrSvg, downloadQrPng } from '@/lib/qr-download';
+import { useConfirm } from '@/components/ui/confirm';
 import {
   Megaphone, Eye, QrCode, Plus, Pencil, Trash2, Copy, ExternalLink,
   AlertCircle, Power,
@@ -54,6 +55,7 @@ const emptyForm = {
 type FormState = typeof emptyForm;
 
 export default function MarketingCampaigns() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const { toast } = useToast();
   const isManager = user?.email === SUPER_ADMIN_EMAIL || (!!user?.role && MANAGER_ROLES.includes(user.role));
@@ -230,7 +232,7 @@ export default function MarketingCampaigns() {
                     </Button>
                     <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" title="Delete"
-                      onClick={() => { if (window.confirm(`Delete campaign "${c.name}"? Its scan history is removed too.`)) deleteMutation.mutate(c.id); }}>
+                      onClick={async () => { if (await confirm({ title: `Delete ${c.name}?`, description: 'Its scan history is removed too, so past attribution is lost.' })) deleteMutation.mutate(c.id); }}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>

@@ -24,6 +24,7 @@ import { DEPARTMENTS } from '@/../../shared/constants/departments';
 import { employeeGetsPto, ADMIN_ROLES, MANAGER_ROLES, PTO_APPROVER_EMAILS, PTO_DEPARTMENT_APPROVERS } from '@shared/constants/roles';
 import { PTO_POLICY } from '@shared/constants/pto-policy';
 import { apiRequest } from '@/lib/queryClient';
+import { useConfirm } from '@/components/ui/confirm';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -52,6 +53,7 @@ type AdminPTOFormData = z.infer<typeof adminPtoSchema>;
 type HolidayEntry = { date: string; name: string };
 
 function PTO() {
+  const confirm = useConfirm();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState('requests');
   const [editingCompanyPolicy, setEditingCompanyPolicy] = useState(false);
@@ -2716,8 +2718,13 @@ function PTO() {
 
               <Button
                 variant="destructive"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to reset all PTO balances? This cannot be undone.')) {
+                onClick={async () => {
+                  if (await confirm({
+                    title: 'Reset PTO balances for every employee?',
+                    description: 'This rewrites the allocation and used days on every employee record. It cannot be undone and there is no backup of the previous balances.',
+                    confirmLabel: 'Reset all balances',
+                    typeToConfirm: 'RESET',
+                  })) {
                     resetAllPTOMutation.mutate();
                   }
                 }}

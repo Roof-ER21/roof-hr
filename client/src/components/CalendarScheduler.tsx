@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, MapPin, Users, Video, Edit2, Trash2, X } from 'lucide-react';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay, parseISO, setHours, setMinutes } from 'date-fns';
 
@@ -59,6 +60,7 @@ const MEETING_TYPE_LABELS: Record<Meeting['type'], string> = {
 const TIME_SLOTS = Array.from({ length: 11 }, (_, i) => i + 8); // 8 AM to 6 PM
 
 export default function CalendarScheduler() {
+  const confirm = useConfirm();
   const { toast } = useToast();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
@@ -229,8 +231,11 @@ export default function CalendarScheduler() {
   };
 
   // Handle delete
-  const handleDelete = () => {
-    if (selectedMeeting && window.confirm('Are you sure you want to delete this meeting?')) {
+  const handleDelete = async () => {
+    if (selectedMeeting && await confirm({
+      title: 'Delete this meeting?',
+      description: 'Attendees are not notified.',
+    })) {
       deleteMeetingMutation.mutate(selectedMeeting.id);
     }
   };

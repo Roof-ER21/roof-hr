@@ -25,6 +25,7 @@ import { InterviewQuestionsDialog } from './interview-questions-dialog';
 import { MANAGER_ROLES, ADMIN_ROLES } from '@shared/constants/roles';
 import { getTerritoryStyle } from '@/lib/territory-style';
 import { useOffices } from '@/hooks/useOffices';
+import { useConfirm } from '@/components/ui/confirm';
 
 interface CandidateNote {
   id: string;
@@ -245,6 +246,7 @@ export function CandidateDetailsDialog({
   isAnalyzing,
   isUpdating,
 }: CandidateDetailsDialogProps) {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -582,8 +584,12 @@ export function CandidateDetailsDialog({
   };
 
   // Handler for No Show (immediate, no dialog)
-  const handleNoShow = (interview: any) => {
-    if (window.confirm('Mark as No Show?\n\nThis will move the candidate to Dead status with a "No Show" tag.')) {
+  const handleNoShow = async (interview: any) => {
+    if (await confirm({
+      title: 'Mark this candidate as a no show?',
+      description: 'They move to Dead status with a "No Show" tag. You can move them back afterwards.',
+      confirmLabel: 'Mark no show',
+    })) {
       updateInterviewStatusMutation.mutate({
         interviewId: interview.id,
         status: 'NO_SHOW',

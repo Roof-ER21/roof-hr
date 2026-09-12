@@ -14,6 +14,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { useConfirm } from '@/components/ui/confirm';
 
 // sa21 is the source of truth; a rep QR code == a sa21 employee_profile. This page
 // mirrors it: managers see all reps read-only, a rep sees only their own row, and
@@ -48,6 +49,7 @@ const profileSchema = z.object({
 type ProfileForm = z.infer<typeof profileSchema>;
 
 export default function QRCodes() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const { toast } = useToast();
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
@@ -315,7 +317,7 @@ export default function QRCodes() {
                         <Button variant="ghost" size="icon" onClick={() => openEdit(qr)} title="Edit"><Pencil className="h-4 w-4" /></Button>
                         <Button
                           variant="ghost" size="icon" title="Delete"
-                          onClick={() => { if (window.confirm(`Delete the QR profile for ${qr.rep?.firstName} ${qr.rep?.lastName}? This removes it in Susan AI-21.`)) deleteMutation.mutate(qr.id); }}
+                          onClick={async () => { if (await confirm({ title: `Delete the QR profile for ${qr.rep?.firstName} ${qr.rep?.lastName}?`, description: 'This also removes it in Susan AI-21. Printed codes stop resolving.' })) deleteMutation.mutate(qr.id); }}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>

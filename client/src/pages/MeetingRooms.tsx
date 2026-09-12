@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Edit2, Trash2, Users, MapPin, Tv, Mic, Video, Phone, PenTool, Calendar, DoorOpen } from 'lucide-react';
 import CalendarScheduler from '@/components/CalendarScheduler';
+import { useConfirm } from '@/components/ui/confirm';
 
 interface MeetingRoom {
   id: string;
@@ -250,8 +251,13 @@ export default function MeetingRooms() {
     setIsEditDialogOpen(true);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+  const confirm = useConfirm();
+
+  const handleDelete = async (id: string, name: string) => {
+    if (await confirm({
+      title: `Delete ${name}?`,
+      description: 'Existing bookings for this room are removed.',
+    })) {
       deleteMutation.mutate(id);
     }
   };

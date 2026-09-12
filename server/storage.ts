@@ -88,7 +88,11 @@ import {
   // Notifications
   Notification, InsertNotification, notifications,
   // Email Preferences
-  userEmailPreferences
+  userEmailPreferences,
+  candidateStatusHistory,
+  aiEvaluations,
+  calendarEvents,
+  recruitmentBotConversations,
 } from '@shared/schema';
 import { DEFAULT_INTERVIEW_DURATION_MINUTES } from '@shared/interview-constants';
 import { db } from './db';
@@ -709,6 +713,93 @@ class DrizzleStorage implements IStorage {
 
   async deleteCandidate(id: string): Promise<void> {
     await db.delete(candidates).where(eq(candidates.id, id));
+  }
+
+  /**
+   * Permanently delete a candidate and everything hanging off them, in one
+   * transaction.
+   *
+   * `deleteCandidate` above removes the row and nothing else. Thirteen tables
+   * carry `candidate_id` and the schema declares NO foreign keys at all, so
+   * that delete never errors — it silently strands interview notes, AI
+   * evaluations, SMS history, status history and campaign membership, which
+   * then reference a person who no longer exists. Archiving is still the normal
+   * path (`archiveCandidate`); this is the purge, for a retention window or a
+   * real "delete my data" request.
+   *
+   * Two deliberate choices:
+   *
+   * - `employee_contracts` rows are NOT deleted. A signed contract is a legal
+   *   record that outlives the candidate row, so the link is nulled instead and
+   *   the document is preserved.
+   * - The full candidate snapshot is written to the audit log BEFORE anything
+   *   is removed, inside the same transaction. If the delete rolls back so does
+   *   the audit row, and if it commits there is a record of exactly what was
+   *   destroyed and by whom.
+   */
+  async deleteCandidateCascade(
+    id: string,
+    actor: { id: string; email: string; ipAddress?: string; userAgent?: string },
+  ): Promise<{ deleted: Record<string, number>; contractsDetached: number }> {
+    return db.transaction(async (tx) => {
+      const [candidate] = await tx.select().from(candidates).where(eq(candidates.id, id));
+      if (!candidate) {
+        throw new Error('Candidate not found');
+      }
+
+      // Written first, and rolled back with everything else if the purge fails.
+      await tx.insert(systemAuditLogs).values({
+        id: uuidv4(),
+        userId: actor.id,
+        userEmail: actor.email,
+        action: 'DELETE',
+        resourceType: 'candidate',
+        resourceId: id,
+        resourceName: `${candidate.firstName ?? ''} ${candidate.lastName ?? ''}`.trim() || candidate.email || id,
+        previousValue: JSON.stringify(candidate),
+        newValue: null,
+        ipAddress: actor.ipAddress ?? null,
+        userAgent: actor.userAgent ?? null,
+      } as any);
+
+      // Children first. Order does not strictly matter without FKs, but keeping
+      // it leaf-inward means adding real constraints later needs no rewrite.
+      const children: Array<[string, any, any]> = [
+        ['candidate_notes', candidateNotes, candidateNotes.candidateId],
+        ['candidate_status_history', candidateStatusHistory, candidateStatusHistory.candidateId],
+        ['candidate_sources', candidateSources, candidateSources.candidateId],
+        ['interviews', interviews, interviews.candidateId],
+        ['ai_evaluations', aiEvaluations, aiEvaluations.candidateId],
+        ['ai_email_generations', aiEmailGenerations, aiEmailGenerations.candidateId],
+        ['calendar_events', calendarEvents, calendarEvents.candidateId],
+        ['campaign_recipients', campaignRecipients, campaignRecipients.candidateId],
+        ['communication_preferences', communicationPreferences, communicationPreferences.candidateId],
+        ['email_logs', emailLogs, emailLogs.candidateId],
+        ['sms_messages', smsMessages, smsMessages.candidateId],
+        ['recruitment_bot_conversations', recruitmentBotConversations, recruitmentBotConversations.candidateId],
+      ];
+
+      const deleted: Record<string, number> = {};
+      for (const [name, table, column] of children) {
+        // `table` is `any` across a heterogeneous list, so drizzle widens
+        // .returning() to a union that has no .length. The rows are only ever
+        // counted, never read.
+        const rows = (await tx.delete(table).where(eq(column, id)).returning()) as unknown[];
+        deleted[name] = rows.length;
+      }
+
+      // Signed paperwork survives; only the link goes.
+      const detached = await tx
+        .update(employeeContracts)
+        .set({ candidateId: null })
+        .where(eq(employeeContracts.candidateId, id))
+        .returning();
+
+      await tx.delete(candidates).where(eq(candidates.id, id));
+      deleted['candidates'] = 1;
+
+      return { deleted, contractsDetached: detached.length };
+    });
   }
 
   // Archive methods
