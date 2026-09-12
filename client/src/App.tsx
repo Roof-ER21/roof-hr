@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { ConfirmProvider } from '@/components/ui/confirm';
+import { RouteErrorBoundary } from '@/components/route-error-boundary';
 import { useToast } from '@/hooks/use-toast';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { queryClient } from '@/lib/queryClient';
@@ -115,6 +116,7 @@ function AuthenticatedRoutes() {
   
   return (
     <AppLayout>
+      <RouteErrorBoundary>
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Dashboard: Admin/Manager only */}
@@ -295,6 +297,7 @@ function AuthenticatedRoutes() {
         <OnboardingTour />
       </Suspense>
       </Suspense>
+      </RouteErrorBoundary>
     </AppLayout>
   );
 }
@@ -305,6 +308,7 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
         <ConfirmProvider>
+          <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Public routes - no authentication required */}
@@ -320,6 +324,7 @@ function App() {
             <Route path="/*" element={<AuthenticatedRoutes />} />
           </Routes>
           </Suspense>
+          </RouteErrorBoundary>
           <Toaster />
         </ConfirmProvider>
         </AuthProvider>
