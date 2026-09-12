@@ -24,6 +24,7 @@ import { captureToGlitchTip } from './utils/glitchtip';
 import { requestLogger, logger } from './middleware/logger';
 import { auditTrail } from './middleware/audit';
 import { contractPdfService } from './services/contractPdfService';
+import { assertSafeDatabase, integrationsEnabled, announceIntegrationMode } from './runtime-guards';
 
 async function createAdminUser() {
   try {
@@ -270,6 +271,11 @@ const cspDirectives = {
   styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
   fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
   scriptSrc: ["'self'"],
+  // The service worker (client/public/sw.js) is a worker script, and CSP
+  // checks worker-src for it, not script-src. Without this it would be blocked
+  // the moment CSP_ENFORCE is turned on, and offline check-in would silently
+  // stop working with only a console error to show for it.
+  workerSrc: ["'self'"],
   imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
   connectSrc: ["'self'", 'ws:', 'wss:'],
   frameSrc: ["'self'", 'https://drive.google.com', 'https://docs.google.com'],
@@ -440,6 +446,11 @@ app.use(auditTrail);
 
   await registerRoutes(app);
 
+  // Refuse to migrate a remote database from a dev run. Must come before the
+  // connection test, so a guarded run never opens the connection at all.
+  assertSafeDatabase();
+  announceIntegrationMode();
+
   // Test database connection before starting server
   logger.info('Testing database connection...');
   const dbConnected = await testConnection(5); // 5 retries
@@ -579,8 +590,13 @@ app.use(auditTrail);
         await agentManager.runAllAgents();
       }
       
-      // Initialize enhanced Google synchronization
+      // Initialize enhanced Google synchronization.
+      // This provisions Drive folders under the service account, which is not
+      // something a local run should ever do.
       try {
+        if (!integrationsEnabled()) {
+          throw new Error('skip');
+        }
         const { googleSyncEnhanced } = await import('./services/google-sync-enhanced');
         await googleSyncEnhanced.initialize();
         logger.info('Enhanced Google synchronization initialized with bidirectional sync');
@@ -589,9 +605,13 @@ app.use(auditTrail);
         const { initializeAttendanceGoogleSync } = await import('./routes/attendance');
         initializeAttendanceGoogleSync(googleSyncEnhanced);
         logger.info('Attendance Google sync initialized');
-      } catch (error) {
-        logger.error('Failed to initialize enhanced Google sync:', error);
-        // Continue without sync - it's not critical for basic operations
+      } catch (error: any) {
+        if (error?.message === 'skip') {
+          logger.info('[guard] Google sync skipped (ENABLE_INTEGRATIONS is not 1)');
+        } else {
+          logger.error('Failed to initialize enhanced Google sync:', error);
+          // Continue without sync - it's not critical for basic operations
+        }
       }
 
       // Initialize termination reminder job (runs daily at 9 AM)

@@ -130,8 +130,11 @@ function Login() {
           </CardHeader>
           <CardContent>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* role="alert" so a failed sign-in is actually announced.
+                  Without it the message appears silently and a screen-reader
+                  user is left on a form that simply did not submit. */}
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" role="alert">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -147,11 +150,16 @@ function Login() {
                     type="email"
                     placeholder="Enter your email"
                     className="pl-10"
+                    autoComplete="username"
+                    aria-invalid={!!form.formState.errors.email}
+                    aria-describedby={form.formState.errors.email ? 'email-error' : undefined}
                     {...form.register('email')}
                   />
                 </div>
                 {form.formState.errors.email && (
-                  <p className="text-sm text-red-600">{form.formState.errors.email.message}</p>
+                  <p id="email-error" role="alert" className="text-sm text-destructive">
+                    {form.formState.errors.email.message}
+                  </p>
                 )}
               </div>
 
@@ -164,10 +172,15 @@ function Login() {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
                     className="pl-10 pr-10"
+                    autoComplete="current-password"
+                    aria-invalid={!!form.formState.errors.password}
+                    aria-describedby={form.formState.errors.password ? 'password-error' : undefined}
                     {...form.register('password')}
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowPassword(!showPassword)}
                   >
@@ -175,7 +188,7 @@ function Login() {
                   </button>
                 </div>
                 {form.formState.errors.password && (
-                  <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>
+                  <p id="password-error" role="alert" className="text-sm text-destructive">{form.formState.errors.password.message}</p>
                 )}
               </div>
 

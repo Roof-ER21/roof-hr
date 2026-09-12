@@ -113,8 +113,16 @@ export function serveStatic(app: Express) {
   app.use(express.static(servePath, {
     maxAge: 0, // Don't cache index.html
     setHeaders: (res, path) => {
+      // sw.js MUST NOT be cached. It is the only .js here without a content
+      // hash in its name, so the one-year immutable rule below would freeze the
+      // service worker permanently and there would be no way to ship a fix to
+      // anyone who had loaded it once.
+      if (path.endsWith('sw.js')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Service-Worker-Allowed', '/');
+      }
       // Cache assets (JS/CSS) for 1 year since they have content hashes
-      if (path.endsWith('.js') || path.endsWith('.css')) {
+      else if (path.endsWith('.js') || path.endsWith('.css')) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       } else if (path.endsWith('.html')) {
         // Never cache HTML files

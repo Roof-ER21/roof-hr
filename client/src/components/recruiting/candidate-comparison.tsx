@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DndContext, useDndMonitor, useDroppable } from '@dnd-kit/core';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,55 @@ interface CandidateComparisonProps {
 }
 
 export function CandidateComparison({ isOpen, onClose, initialCandidates = [] }: CandidateComparisonProps) {
+  // This is the app's one remaining hand-rolled modal: every other dialog is
+  // Radix and gets Escape, a focus trap and focus restore for free. This one
+  // had none of the three, so a keyboard user could open it and then tab
+  // straight out into the page behind it, with no way to close it.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusTo = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    restoreFocusTo.current = document.activeElement as HTMLElement | null;
+
+    const FOCUSABLE =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+
+      const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE))
+        .filter((el) => el.offsetParent !== null);
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey && (active === first || !dialogRef.current.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    // Move focus in, so the trap has something to hold.
+    dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      restoreFocusTo.current?.focus?.();
+    };
+  }, [isOpen, onClose]);
+
   const [comparedCandidates, setComparedCandidates] = useState<Candidate[]>(initialCandidates);
   const maxComparisonSlots = 3;
 
@@ -107,11 +156,17 @@ export function CandidateComparison({ isOpen, onClose, initialCandidates = [] }:
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="candidate-comparison-title"
+        className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-hidden"
+      >
         <div className="p-6 border-b bg-gray-50">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Candidate Comparison</h2>
+              <h2 id="candidate-comparison-title" className="text-2xl font-bold text-gray-900">Candidate Comparison</h2>
               <p className="text-gray-600 mt-1">
                 Drag candidates here to compare side-by-side ({comparedCandidates.length}/{maxComparisonSlots})
               </p>

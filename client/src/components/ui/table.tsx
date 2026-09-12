@@ -69,9 +69,14 @@ TableRow.displayName = "TableRow"
 const TableHead = React.forwardRef<
   HTMLTableCellElement,
   React.ThHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
+>(({ className, scope, ...props }, ref) => (
   <th
     ref={ref}
+    // Without scope, a screen reader reading a cell cannot say which column it
+    // belongs to - so a candidate table becomes 200 unlabelled values. There
+    // are 198 <TableHead>s across this app and none carried it; setting the
+    // default here fixes all of them. Still overridable for a row header.
+    scope={scope ?? "col"}
     className={cn(
       "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
       className

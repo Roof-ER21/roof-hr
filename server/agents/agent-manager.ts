@@ -12,6 +12,7 @@ import {
 } from './hr-agents';
 import { CoiAlertAgent } from './coi-alert-agent';
 import { PtoTriageAgent } from './pto-triage-agent';
+import { integrationsEnabled } from '../runtime-guards';
 
 const EASTERN_TIMEZONE = 'America/New_York';
 
@@ -198,6 +199,15 @@ export class AgentManager extends EventEmitter {
   }
 
   private scheduleAgent(agentName: string, schedule: string): void {
+    // This singleton is constructed at import time (server/routes/agents.ts
+    // imports it at module scope), so every boot in every environment used to
+    // register these cron jobs - including a local run, where they would fire
+    // PTO reminders and COI alerts as real email against real people.
+    if (!integrationsEnabled()) {
+      this.log('info', `[guard] Not scheduling ${agentName}; set ENABLE_INTEGRATIONS=1 to run agents locally`);
+      return;
+    }
+
     if (this.scheduledJobs.has(agentName)) {
       this.scheduledJobs.get(agentName)?.destroy();
     }
