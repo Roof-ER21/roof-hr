@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/components/ui/confirm';
 import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, MapPin, Users, Video, Edit2, Trash2, X } from 'lucide-react';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay, parseISO, setHours, setMinutes } from 'date-fns';
+import { clickable } from '@/lib/utils';
 
 interface Meeting {
   id: number;
@@ -283,6 +284,7 @@ export default function CalendarScheduler() {
     return (
       <div
         key={meeting.id}
+        {...clickable(() => openEditMeetingDialog(meeting), { label: `Edit ${meeting.title}` })}
         onClick={(e) => {
           e.stopPropagation();
           openEditMeetingDialog(meeting);
@@ -305,7 +307,9 @@ export default function CalendarScheduler() {
     const slotMeetings = getMeetingsForSlot(date, hour);
     return (
       <div
-        onClick={() => openNewMeetingDialog(date, hour)}
+        {...clickable(() => openNewMeetingDialog(date, hour), {
+          label: `New meeting at ${format(date, 'EEEE d MMMM')} ${String(hour).padStart(2, '0')}:00`,
+        })}
         className="border-b border-r p-1 min-h-[60px] hover:bg-gray-50 cursor-pointer transition-colors"
       >
         {slotMeetings.map((meeting) => renderMeeting(meeting))}

@@ -24,7 +24,7 @@ import {
   FileText, Loader2, CheckCircle, AlertCircle, Sparkles,
   Target, BarChart, ArrowRight, Copy, Trash2, Plus, Save
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, clickable } from '@/lib/utils';
 import { format } from 'date-fns';
 
 interface EmailTemplate {
@@ -299,7 +299,9 @@ export function CampaignBuilder({ onCampaignCreated }: CampaignBuilderProps) {
                 "flex items-center gap-2 cursor-pointer",
                 num <= step ? "text-blue-600" : "text-gray-400"
               )}
-              onClick={() => num < step && setStep(num)}
+              {...(num < step
+                ? clickable(() => setStep(num), { label: `Back to step ${num}: ${label}` })
+                : {})}
             >
               <div className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center font-medium",

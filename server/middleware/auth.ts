@@ -50,7 +50,11 @@ export async function requireAuth(req: any, res: Response, next: NextFunction) {
   }
 
   try {
-    console.log('[Auth] Looking up session for token:', token?.substring(0, 10) + '...');
+    // Deliberately quiet. This used to log a prefix of the live session token
+    // and, below, the user's email on EVERY authenticated request - a rolling,
+    // unredacted activity log of every employee sitting in Railway's log
+    // retention, outside the audit table that was purpose-built for it.
+    // Set DEBUG_AUTH=true to get it back while chasing a session bug.
     const session = await storage.getSessionByToken(token);
     if (!session) {
       console.log('[Auth] Session not found for token');
@@ -82,7 +86,9 @@ export async function requireAuth(req: any, res: Response, next: NextFunction) {
     // to req.user below.
     if (refuseReadOnlyAgentWrite(session, req, res)) return;
 
-    console.log('[Auth] User authenticated:', user.email);
+    if (process.env.DEBUG_AUTH === 'true') {
+      console.log('[Auth] User authenticated:', user.email);
+    }
     req.user = user;
     req.agentScope = session.agentScope ?? null;
 

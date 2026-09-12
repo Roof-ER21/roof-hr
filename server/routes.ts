@@ -3318,13 +3318,16 @@ router.get('/api/candidates', requireAuth, async (req: any, res) => {
     // - Everyone else (including extended sourcers) only see their assigned candidates
     const canSeeAllCandidates = managerRoles.includes(user.role) || isLeadSourcer(user);
 
-    // Log filtering decision for debugging
-    console.log(`[Candidates API] User ${user.email} (role: ${user.role}, id: ${user.id}) - canSeeAll: ${canSeeAllCandidates}`);
+    if (process.env.DEBUG_AUTH === 'true') {
+      console.log(`[Candidates API] role: ${user.role} - canSeeAll: ${canSeeAllCandidates}`);
+    }
 
     if (!canSeeAllCandidates) {
       // Non-managers only see their assigned candidates (assignment-based access)
       candidates = candidates.filter((c: any) => c.assignedTo === user.id);
-      console.log(`[Candidates API] Filtered from ${totalCandidates} to ${candidates.length} candidates for ${user.email}`);
+      if (process.env.DEBUG_AUTH === 'true') {
+        console.log(`[Candidates API] Filtered ${totalCandidates} -> ${candidates.length}`);
+      }
     }
 
     // Batch fetch sourcer info instead of N individual queries

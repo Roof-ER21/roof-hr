@@ -284,6 +284,9 @@ export function DatabaseAdmin() {
                       className={`px-4 py-2 cursor-pointer hover:bg-muted flex items-center justify-between ${
                         selectedTable === table.tableName ? 'bg-muted' : ''
                       }`}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
                       onClick={() => {
                         setSelectedTable(table.tableName);
                         setPage(0);

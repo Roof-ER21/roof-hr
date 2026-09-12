@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Mail, Plus, Send, Users, Clock, Eye, MousePointer, MessageSquare, Pause, Play, Trash2, Edit, ChevronRight, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
+import { clickable } from '@/lib/utils';
 
 interface EmailCampaign {
   id: string;
@@ -273,7 +274,7 @@ export function EmailCampaignManager() {
                 <div
                   key={campaign.id}
                   className="border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedCampaign(campaign)}
+                  {...clickable(() => setSelectedCampaign(campaign), { label: `Open campaign ${campaign.name}` })}
                 >
                   <div className="flex items-start justify-between">
                     <div className="space-y-2">

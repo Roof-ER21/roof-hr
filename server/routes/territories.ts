@@ -30,12 +30,21 @@ function requireTerritoryManager(req: any, res: any, next: any) {
     // Check if they're managing their own territory
     const territoryId = req.params.id || req.body.territoryId;
     if (territoryId) {
-      storage.getTerritoryBySalesManager(req.user.id).then(territory => {
-        if (territory && territory.id === territoryId) {
-          return next();
-        }
-        return res.status(403).json({ error: 'Can only manage your own territory' });
-      });
+      // This .then() had no .catch(). If the lookup rejected — a dropped
+      // connection, a pool timeout — neither next() nor res.* ever ran and the
+      // request hung until the client gave up, with nothing in the logs.
+      // Failing closed is the right default for an authorization check.
+      storage.getTerritoryBySalesManager(req.user.id)
+        .then(territory => {
+          if (territory && territory.id === territoryId) {
+            return next();
+          }
+          return res.status(403).json({ error: 'Can only manage your own territory' });
+        })
+        .catch(err => {
+          console.error('[Territories] Ownership check failed for', req.user.id, err);
+          return res.status(500).json({ error: 'Could not verify territory access' });
+        });
       return;
     }
   }

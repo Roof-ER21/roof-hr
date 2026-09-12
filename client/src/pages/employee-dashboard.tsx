@@ -759,6 +759,17 @@ function EmployeeDashboard() {
                         return (
                           <div
                             key={idx}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Add an event on ${format(day, 'EEEE d MMMM')}`}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter' && e.key !== ' ') return;
+                              if ((e.target as HTMLElement).closest('button')) return;
+                              e.preventDefault();
+                              setEventToEdit(null);
+                              setSelectedDateForNew(day);
+                              setShowEventModal(true);
+                            }}
                             onClick={(e) => {
                               // Only open create modal if clicking on the day cell itself, not on an event
                               if ((e.target as HTMLElement).closest('button')) return;

@@ -949,6 +949,8 @@ function ResumeUploaderContent() {
             <div className="space-y-2">
               <Label>Assign Sourcer (optional)</Label>
               <Popover open={sourcerComboboxOpen} onOpenChange={setSourcerComboboxOpen}>
+                {/* Radix PopoverTrigger supplies aria-controls at runtime; the linter sees
+                    only the static JSX. This is the standard shadcn combobox pattern. */}
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"

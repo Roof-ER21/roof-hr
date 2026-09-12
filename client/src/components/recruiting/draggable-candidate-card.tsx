@@ -161,6 +161,16 @@ export function DraggableCandidateCard({
         isDragging ? 'opacity-50 shadow-lg scale-105 z-50' : ''
       }`}
       onClick={handleCardClick}
+      // dnd-kit's `attributes` already supply role="button" and tabIndex, so the
+      // card can be focused - but nothing bound Enter to opening it, which made
+      // it reachable and inert. `listeners` (keyboard dragging) live on the drag
+      // handle below, so this does not collide with them.
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if ((e.target as HTMLElement).closest('button, input, [role="checkbox"]')) return;
+        e.preventDefault();
+        handleCardClick(e as unknown as React.MouseEvent);
+      }}
       {...attributes}
     >
       {/* Checkbox for bulk selection */}
@@ -168,6 +178,7 @@ export function DraggableCandidateCard({
         <div
           className="flex-shrink-0 mr-2"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         >
           <Checkbox
             checked={isSelected}
@@ -238,6 +249,7 @@ export function DraggableCandidateCard({
             className="p-1 hover:bg-gray-100 rounded cursor-grab active:cursor-grabbing"
             title="Drag to move"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
             {...listeners}
           >
             <Move className="w-3.5 h-3.5 text-gray-400" />

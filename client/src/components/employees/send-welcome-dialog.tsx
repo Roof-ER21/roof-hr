@@ -171,7 +171,7 @@ export function SendWelcomeDialog({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <label id="welcome-email-type-label" className="text-sm font-medium">Welcome Email Type</label>
+              <span id="welcome-email-type-label" className="block text-sm font-medium">Welcome Email Type</span>
               <Select value={welcomeEmailType} onValueChange={(value) => setWelcomeEmailType(value as 'insurance' | 'retail' | 'none')}>
                 <SelectTrigger className="w-full" aria-labelledby="welcome-email-type-label">
                   <SelectValue placeholder="Select email type" />
@@ -184,7 +184,7 @@ export function SendWelcomeDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <label id="office-location-label" className="text-sm font-medium">Office Location</label>
+              <span id="office-location-label" className="block text-sm font-medium">Office Location</span>
               <Select value={officeLocation} onValueChange={(value) => setOfficeLocation(value)}>
                 <SelectTrigger className="w-full" aria-labelledby="office-location-label">
                   <SelectValue placeholder="Select office" />

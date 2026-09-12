@@ -1,21 +1,29 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
+/**
+ * Wired as the catch-all in App.tsx. It previously existed but no route
+ * rendered it, so a mistyped URL fell through to a blank screen — and its copy
+ * read "Did you forget to add the page to the router?", which is a message for
+ * whoever wrote the code, not for the person who mistyped a link.
+ */
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">404 Page Not Found</h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+      <p className="font-mono text-sm text-muted-foreground">404</p>
+      <h1 className="mt-2 text-2xl font-semibold">That page isn't here</h1>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+        The link may be out of date, or you may not have access to it. Nothing has gone wrong with
+        your account.
+      </p>
+      <div className="mt-6 flex gap-3">
+        <Button asChild>
+          <Link to="/my-portal">Go to my portal</Link>
+        </Button>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Go back
+        </Button>
+      </div>
     </div>
   );
 }

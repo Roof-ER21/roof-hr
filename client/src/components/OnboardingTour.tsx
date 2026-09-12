@@ -194,6 +194,13 @@ export function OnboardingTour() {
     }
   };
 
+  useEffect(() => {
+    if (!isActive) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleSkip(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
   const handleSkip = () => {
     localStorage.setItem('onboarding-tour-dismissed', 'true');
     setIsActive(false);
@@ -216,7 +223,11 @@ export function OnboardingTour() {
   return (
     <>
       {/* Overlay */}
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={handleSkip} />
+      <div
+        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+        onClick={handleSkip}
+        aria-hidden="true"
+      />
       
       {/* Tour Card */}
       <Card className={cn(

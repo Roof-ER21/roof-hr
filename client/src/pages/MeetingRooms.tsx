@@ -373,6 +373,10 @@ export default function MeetingRooms() {
                         className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${
                           isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-muted'
                         }`}
+                        role="checkbox"
+                        aria-checked={isSelected}
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAmenity(option.value); } }}
                         onClick={() => toggleAmenity(option.value)}
                       >
                         <Icon className={`h-4 w-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -559,6 +563,10 @@ export default function MeetingRooms() {
                       className={`flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition-colors ${
                         isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-muted'
                       }`}
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAmenity(option.value); } }}
                       onClick={() => toggleAmenity(option.value)}
                     >
                       <Icon className={`h-4 w-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />

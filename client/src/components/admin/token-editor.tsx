@@ -204,6 +204,7 @@ export default function TokenEditor({ id, value, onChange, tokens, singleLine = 
         contentEditable
         suppressContentEditableWarning
         role="textbox"
+        tabIndex={0}
         aria-multiline={!singleLine}
         spellCheck
         onInput={emit}

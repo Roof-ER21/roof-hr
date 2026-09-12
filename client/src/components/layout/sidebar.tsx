@@ -178,6 +178,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
+  // The mobile drawer had no keyboard dismiss at all: the only way out was
+  // clicking the scrim, which is now correctly hidden from assistive tech.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   const location = useLocation();
   const { user } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(['Workspace', 'Marketing', 'Documents', 'Employees', 'Time Off', 'Susan AI', 'Recruiting', 'Facilities']);
@@ -239,9 +248,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
       

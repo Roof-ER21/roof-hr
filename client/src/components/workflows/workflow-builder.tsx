@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import type { Workflow, WorkflowStep } from '@/../../shared/schema';
+import { clickable } from '@/lib/utils';
 
 const stepTypeIcons = {
   ACTION: <Zap className="h-4 w-4" />,
@@ -304,7 +305,7 @@ export function WorkflowBuilder() {
                           ? 'bg-primary/10 border-primary'
                           : 'hover:bg-muted'
                       }`}
-                      onClick={() => setSelectedWorkflow(workflow)}
+                      {...clickable(() => setSelectedWorkflow(workflow), { label: `Select workflow ${workflow.name}` })}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium">{workflow.name}</h4>

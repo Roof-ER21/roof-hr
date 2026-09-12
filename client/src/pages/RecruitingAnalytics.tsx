@@ -55,6 +55,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { CandidateDetailsDialog } from '@/components/recruiting/candidate-details-dialog';
+import { clickable } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -627,6 +628,9 @@ export default function RecruitingAnalytics() {
                     <div
                       key={recruiter.id}
                       className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
                       onClick={() => {
                         setSelectedTeamMember({
                           name: recruiter.name,

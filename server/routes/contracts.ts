@@ -21,6 +21,7 @@ import {
   templatePath,
 } from '../services/esignCertificate';
 import { requireAuth, requireManager } from '../middleware/auth';
+import { SUPER_ADMIN_EMAIL } from '../../shared/constants/roles';
 import { lightpdfService } from '../services/lightpdf-service';
 
 const router = express.Router();
@@ -470,7 +471,7 @@ router.get('/api/contracts', requireAuth, async (req, res) => {
 
     // Admin roles - see all contracts
     const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
-    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL || adminRoles.includes(user.role);
 
     if (isAdmin) {
       res.json(allContracts || []);
@@ -516,7 +517,7 @@ router.get('/api/employee-contracts', requireAuth, requireManager, async (req, r
 
     // Admin roles - see all contracts
     const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
-    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL || adminRoles.includes(user.role);
 
     if (isAdmin) {
       res.json(allContracts);
@@ -561,7 +562,7 @@ router.get('/api/employee-contracts/employee/:employeeId', requireAuth, async (r
 
     // Admin roles can view any
     const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
-    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL || adminRoles.includes(user.role);
 
     // User viewing their own contracts
     const isOwnContracts = user.id === requestedEmployeeId;
@@ -598,7 +599,7 @@ router.get('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 
     // Admin roles can view any contract
     const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
-    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL || adminRoles.includes(user.role);
 
     // User viewing their own contract
     const isOwnContract = contract.employeeId === user.id;
@@ -740,11 +741,6 @@ router.post('/api/employee-contracts', requireAuth, requireManager, async (req, 
       contractData.fieldValues = fieldValues;
     }
 
-    // Type assertion for recipientType if present
-    if (contractData.recipientType) {
-      contractData.recipientType = contractData.recipientType as 'EMPLOYEE' | 'CANDIDATE';
-    }
-
     const contract = await storage.createEmployeeContract(contractData);
     res.json(contract);
   } catch (error: any) {
@@ -767,7 +763,7 @@ router.patch('/api/employee-contracts/:id', requireAuth, async (req, res) => {
 
     // Admin roles can update any contract
     const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
-    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL || adminRoles.includes(user.role);
 
     // Check permissions - employee can update some fields, authorized managers can update all
     const isEmployee = contract.employeeId === user.id;
@@ -946,7 +942,7 @@ router.delete('/api/employee-contracts/:id', requireAuth, requireManager, async 
 
     // Admin roles can delete any contract
     const adminRoles = ['SYSTEM_ADMIN', 'HR_ADMIN', 'TRUE_ADMIN', 'ADMIN', 'GENERAL_MANAGER'];
-    const isAdmin = user.email === 'ahmed.mahmoud@theroofdocs.com' || adminRoles.includes(user.role);
+    const isAdmin = user.email === SUPER_ADMIN_EMAIL || adminRoles.includes(user.role);
 
     if (!isAdmin) {
       // Manager can only delete if they created it or it's their direct report's contract

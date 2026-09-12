@@ -263,6 +263,12 @@ export function CandidateDetailsDialog({
 
   // Resume blob URL state for authenticated loading
   const [resumeBlobUrl, setResumeBlobUrl] = useState<string | null>(null);
+  // The cleanup below runs a closure captured when the effect FIRED, which is
+  // before fetchResume() ever calls setResumeBlobUrl. So it was revoking the
+  // previous URL (usually null on first open) and leaking the new one: every
+  // resume viewed leaked a blob for the life of the tab. A ref sees the current
+  // value at cleanup time.
+  const resumeBlobUrlRef = useRef<string | null>(null);
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
@@ -290,6 +296,7 @@ export function CandidateDetailsDialog({
   useEffect(() => {
     if (!candidate?.resumeUrl || !isOpen) {
       setResumeBlobUrl(null);
+      resumeBlobUrlRef.current = null;
       return;
     }
 
@@ -302,6 +309,7 @@ export function CandidateDetailsDialog({
       if (!driveMatch) {
         // Non-Google Drive URL - use directly
         setResumeBlobUrl(candidate.resumeUrl);
+        resumeBlobUrlRef.current = candidate.resumeUrl;
         setResumeLoading(false);
         return;
       }
@@ -321,6 +329,7 @@ export function CandidateDetailsDialog({
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         setResumeBlobUrl(url);
+        resumeBlobUrlRef.current = url;
       } catch (err) {
         console.error('Resume fetch error:', err);
         setResumeError('Unable to load resume');
@@ -333,8 +342,10 @@ export function CandidateDetailsDialog({
 
     // Cleanup blob URL on unmount or when candidate changes
     return () => {
-      if (resumeBlobUrl && resumeBlobUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(resumeBlobUrl);
+      const url = resumeBlobUrlRef.current;
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+        resumeBlobUrlRef.current = null;
       }
     };
   }, [candidate?.resumeUrl, candidate?.id, isOpen]);

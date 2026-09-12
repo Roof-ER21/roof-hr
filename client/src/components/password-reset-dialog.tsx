@@ -67,12 +67,24 @@ export function PasswordResetDialog({ isOpen, onClose, employee }: PasswordReset
   });
 
   const generateRandomPassword = () => {
+    // crypto.getRandomValues, not Math.random: this mints a credential for
+    // someone else's account, and V8's Math.random state is recoverable from a
+    // short run of its outputs.
+    //
+    // The modulo is rejection-sampled rather than taken directly, because
+    // 256 % 66 != 0 and a plain `% chars.length` would make the first 58
+    // characters measurably likelier than the last 8.
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-    let password = '';
-    for (let i = 0; i < 12; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    const limit = 256 - (256 % chars.length);
+    const out: string[] = [];
+    const buf = new Uint8Array(32);
+    while (out.length < 16) {
+      crypto.getRandomValues(buf);
+      for (const byte of buf) {
+        if (byte < limit && out.length < 16) out.push(chars[byte % chars.length]);
+      }
     }
-    setTemporaryPassword(password);
+    setTemporaryPassword(out.join(''));
   };
 
   const handleSubmit = () => {

@@ -10,6 +10,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isTod
 import { ALL_HOLIDAYS } from '@shared/constants/holidays';
 import { useAuth } from '@/lib/auth';
 import { PTO_APPROVER_EMAILS } from '@shared/constants/roles';
+import { clickable } from '@/lib/utils';
 
 // Parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one errors
 const parseLocalDate = (dateStr: string): Date => {
@@ -237,7 +238,9 @@ export function PtoCalendar() {
                               key={`${pto.id}-${ptoIndex}`}
                               className={`text-xs p-1 rounded border ${bgClass} ${isApprover ? 'cursor-pointer hover:opacity-80' : ''}`}
                               title={isApprover ? `Click for details - ${pto.employeeName}` : pto.employeeName}
-                              onClick={() => handlePtoClick(pto)}
+                              {...(isApprover
+                                ? clickable(() => handlePtoClick(pto), { label: `PTO details for ${pto.employeeName}` })
+                                : {})}
                             >
                               <div className="flex items-center gap-1">
                                 {pto.isExempt ? (
@@ -309,7 +312,9 @@ export function PtoCalendar() {
                 <div
                   key={pto.id}
                   className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 ${isApprover ? 'cursor-pointer' : ''}`}
-                  onClick={() => handlePtoClick(pto)}
+                  {...(isApprover
+                    ? clickable(() => handlePtoClick(pto), { label: `PTO details for ${pto.employeeName}` })
+                    : {})}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${

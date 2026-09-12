@@ -907,19 +907,23 @@ export default function CoiDocuments() {
     }
   };
 
+  // Urgency was previously five coloured-circle emoji, which meant the state was
+  // carried by colour alone (invisible to a colourblind reader and to a screen
+  // reader) and rendered as a different glyph on every platform. A dot plus a
+  // word carries it in two channels, and the dot is a token colour.
   const getAlertFrequency = (document: CoiDocument) => {
     const daysUntilExpiration = differenceInDays(new Date(document.expirationDate), new Date());
-    
+
     if (daysUntilExpiration < 0) {
-      return { text: 'Daily alerts', icon: '🔴' };
+      return { text: 'Expired, daily alerts', tone: 'bg-destructive' };
     } else if (daysUntilExpiration <= 7) {
-      return { text: 'Daily alerts', icon: '🟠' };
+      return { text: 'Daily alerts', tone: 'bg-destructive' };
     } else if (daysUntilExpiration <= 14) {
-      return { text: '1 week alert', icon: '🟡' };
+      return { text: '1 week alert', tone: 'bg-warning' };
     } else if (daysUntilExpiration <= 30) {
-      return { text: '2 week alert', icon: '🟢' };
+      return { text: '2 week alert', tone: 'bg-positive' };
     } else {
-      return { text: '1 month alert', icon: '🔵' };
+      return { text: '1 month alert', tone: 'bg-muted-foreground' };
     }
   };
 
@@ -1127,6 +1131,7 @@ export default function CoiDocuments() {
                         )}
 
                         <Popover open={smartEmployeeOpen} onOpenChange={setSmartEmployeeOpen}>
+                          {/* Radix supplies aria-controls at runtime; standard shadcn combobox. */}
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
@@ -1700,8 +1705,8 @@ export default function CoiDocuments() {
                     <TableCell>{format(new Date(document.expirationDate), 'MMM dd, yyyy')}</TableCell>
                     <TableCell>{getStatusBadge(document)}</TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-1">
-                        <span>{alertInfo.icon}</span>
+                      <span className="flex items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${alertInfo.tone}`} aria-hidden="true" />
                         <span className="text-sm">{alertInfo.text}</span>
                       </span>
                     </TableCell>

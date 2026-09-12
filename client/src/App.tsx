@@ -25,6 +25,7 @@ import '@/lib/api-interceptor';
 // the shell. Kept lazy so framer-motion stays out of the entry chunk.
 const SusanFloatingOrb = lazy(() => import('@/components/susan-ai/floating-orb').then(m => ({ default: m.SusanFloatingOrb })));
 const OnboardingTour = lazy(() => import('@/components/OnboardingTour').then(m => ({ default: m.OnboardingTour })));
+const NotFound = lazy(() => import('@/pages/not-found'));
 const Dashboard = lazy(() => import('@/pages/dashboard'));
 const EnhancedEmployees = lazy(() => import('@/pages/enhanced-employees'));
 const PTO = lazy(() => import('@/pages/pto'));
@@ -284,6 +285,10 @@ function AuthenticatedRoutes() {
 
         <Route path="/scheduled-reports" element={<Navigate to="/settings?tab=reports" replace />} />
         <Route path="/my-calendar" element={<Navigate to="/my-portal" replace />} />
+
+        {/* Anything unmatched. not-found.tsx already existed; no route rendered
+            it, so a mistyped URL fell through to a blank screen. */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Suspense fallback={null}>
         <SusanFloatingOrb />

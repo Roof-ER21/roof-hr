@@ -822,11 +822,12 @@ Use natural language or direct commands. I have unrestricted access to execute a
                     </div>
                     <Separator />
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>API Health</span>
-                        <span className="text-green-600">99.9%</span>
-                      </div>
-                      <Progress value={99.9} className="h-2" />
+                      {/* "API Health 99.9%" used to be hardcoded here, in green,
+                          with a matching Progress bar, sitting directly under a
+                          genuinely computed active-agent count. Nothing measured
+                          it. Removed rather than invented: the real per-endpoint
+                          metrics already exist behind the Super Admin API
+                          monitor, which is where a number like this belongs. */}
                     </div>
                   </CardContent>
                 </Card>
