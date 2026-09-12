@@ -215,7 +215,9 @@ function Login() {
         {/* Footer */}
         <div className="text-center mt-8">
           <div className="text-xs text-secondary-500 space-y-1">
-            <p>© 2024 Roof HR. All rights reserved.</p>
+            {/* Computed, not typed. It read "© 2024" on the sign-in page in
+                September 2026, which is the first thing anyone sees. */}
+            <p>© {new Date().getFullYear()} Roof HR. All rights reserved.</p>
             <div className="flex justify-center space-x-4 mt-2">
               <span className="text-primary font-medium">Integrity</span>
               <span className="text-secondary-500">•</span>
