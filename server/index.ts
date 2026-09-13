@@ -283,11 +283,48 @@ const cspDirectives = {
   baseUri: ["'self'"],
   formAction: ["'self'"],
   frameAncestors: ["'none'"],
+  // Without this, a report-only policy reports to each user's own devtools
+  // console and nowhere else - so "watch for violations, then enforce" is
+  // guesswork unless somebody happens to be sitting in the app with devtools
+  // open on the exact screen that violates. This collects them server-side so
+  // the decision to enforce can be made from evidence.
+  reportUri: ['/api/csp-report'],
 };
 app.use(helmet.contentSecurityPolicy({
   directives: cspDirectives,
   reportOnly: process.env.CSP_ENFORCE !== 'true',
 }));
+
+// Where the browser posts CSP violations. Unauthenticated by necessity - the
+// browser sends these without credentials - so it is deliberately cheap: a
+// small body limit, a de-duplicating cache so one broken asset on a busy screen
+// cannot flood the logs, and nothing is persisted.
+const cspSeen = new Map<string, number>();
+app.post(
+  '/api/csp-report',
+  express.json({ type: ['application/csp-report', 'application/reports+json', 'application/json'], limit: '16kb' }),
+  (req, res) => {
+    res.status(204).end(); // answer first; the browser does not care about the body
+
+    try {
+      const r: any = (req.body as any)?.['csp-report'] ?? req.body ?? {};
+      const directive = r['effective-directive'] || r['violated-directive'] || 'unknown';
+      const blocked = String(r['blocked-uri'] || 'unknown').slice(0, 200);
+      const doc = String(r['document-uri'] || '').slice(0, 200);
+      const key = `${directive}|${blocked}`;
+
+      const now = Date.now();
+      const last = cspSeen.get(key) ?? 0;
+      if (now - last < 10 * 60 * 1000) return; // already logged in the last 10 min
+      cspSeen.set(key, now);
+      if (cspSeen.size > 500) cspSeen.clear();
+
+      logger.warn(`[CSP] ${directive} blocked ${blocked} on ${doc}`);
+    } catch {
+      /* a malformed report is not worth an error */
+    }
+  },
+);
 
 // Request logging
 app.use(requestLogger);
