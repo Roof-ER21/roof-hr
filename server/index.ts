@@ -333,7 +333,16 @@ const credentialLimiter = expressRateLimit({
 // and it only clears the caller's own IP unless explicitly told otherwise.
 //
 // Set RATE_LIMIT_RESET_KEY to enable it. Unset, the route does not exist.
-//   curl -H "x-reset-key: $KEY" https://roofhr.up.railway.app/api/public/reset-rate-limits
+// IMPORTANT: there are TWO limiters with two independent stores. clearRateLimit()
+// only touches the hand-rolled one in middleware/security.ts; credentialLimiter
+// is express-rate-limit with its own MemoryStore. The first version of this
+// route cleared only the first store, so it reported success while leaving the
+// lockout that actually matters fully in place - verified against production.
+// Both are cleared now.
+//
+//   curl -H "x-reset-key: $KEY" ".../api/public/reset-rate-limits"
+//   curl -H "x-reset-key: $KEY" ".../api/public/reset-rate-limits?email=someone@theroofdocs.com"
+//   curl -H "x-reset-key: $KEY" ".../api/public/reset-rate-limits?scope=all"
 app.get('/api/public/reset-rate-limits', (req, res) => {
   const expected = process.env.RATE_LIMIT_RESET_KEY;
   if (!expected) {
@@ -349,9 +358,46 @@ app.get('/api/public/reset-rate-limits', (req, res) => {
   }
 
   const all = req.query.scope === 'all';
+  const email = typeof req.query.email === 'string' ? req.query.email.toLowerCase() : null;
+
+  // Store 1: the hand-rolled IP limiter.
   clearRateLimit(all ? undefined : req.ip);
-  console.log(`[Rate Limit] Reset by key holder from ${req.ip} (scope: ${all ? 'all IPs' : 'caller only'})`);
-  res.json({ success: true, scope: all ? 'all' : req.ip });
+
+  // Store 2: the credential limiter. Its keys are `<ip>:<email>`, so a caller
+  // scoped reset needs to know which email to clear - hence ?email=. Without
+  // one we can still clear the bare-IP key (a request that arrived with no
+  // email in the body).
+  const credentialKeysCleared: string[] = [];
+  try {
+    if (all) {
+      // MemoryStore implements resetAll; guard in case the store is swapped.
+      const store: any = (credentialLimiter as any)?.store;
+      if (typeof store?.resetAll === 'function') {
+        store.resetAll();
+        credentialKeysCleared.push('*');
+      }
+    } else {
+      const ipKey = ipKeyGenerator(req.ip ?? '');
+      const keys = [`${ipKey}:`, ...(email ? [`${ipKey}:${email}`] : [])];
+      for (const k of keys) {
+        (credentialLimiter as any)?.resetKey?.(k);
+        credentialKeysCleared.push(k);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Rate Limit] Credential limiter reset failed:', err?.message);
+  }
+
+  console.log(
+    `[Rate Limit] Reset by key holder from ${req.ip} ` +
+    `(scope: ${all ? 'all' : 'caller'}${email ? `, email: ${email}` : ''})`,
+  );
+  res.json({
+    success: true,
+    scope: all ? 'all' : req.ip,
+    credentialKeysCleared,
+    ...(all || email ? {} : { note: 'Add ?email=<address> to clear a specific login lockout.' }),
+  });
 });
 
 // ── /mcp — personal agent tokens act as the person (reads only) ─────────────
