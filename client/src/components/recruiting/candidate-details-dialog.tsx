@@ -542,20 +542,6 @@ export function CandidateDetailsDialog({
       return;
     }
 
-    // Validate 1 hour minimum — only when the time actually moves, so a type or
-    // room change close to the start isn't refused.
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-    const timeMoved = scheduledDate.getTime() !== new Date(rescheduleInterview.scheduledDate).getTime();
-    if (timeMoved && scheduledDate < oneHourFromNow) {
-      toast({
-        title: 'Insufficient Notice',
-        description: 'Interviews must be scheduled at least 1 hour in advance',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     rescheduleInterviewMutation.mutate({
       interviewId: rescheduleInterview.id,
       scheduledDate: scheduledDate.toISOString(),

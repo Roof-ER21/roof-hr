@@ -490,18 +490,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
 
-    // Check for same-day with 1-hour minimum
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-    if (scheduledDate < oneHourFromNow) {
-      toast({
-        title: 'Insufficient Notice',
-        description: 'Interviews must be scheduled at least 1 hour in advance',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     rescheduleMutation.mutate({
       interviewId: rescheduleInterviewId,
       scheduledDate: scheduledDate.toISOString(),
@@ -601,18 +589,6 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
 
     const [hours, minutes] = selectedTime.split(':').map(Number);
     const scheduledDate = setMinutes(setHours(selectedDate, hours), minutes);
-
-    // Validate same-day interviews must be at least 1 hour in advance
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-    if (scheduledDate < oneHourFromNow) {
-      toast({
-        title: 'Insufficient Notice',
-        description: 'Interviews must be scheduled at least 1 hour in advance',
-        variant: 'destructive',
-      });
-      return;
-    }
 
     // Check if there are hard conflicts and not forcing
     const hardConflicts = conflicts.filter(c => c.severity === 'hard');
@@ -972,7 +948,7 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           : [];
 
                         // If we have availability-based slots, use them; otherwise use defaults (7 AM - 6 PM ET, 15-min increments)
-                        let timeSlots = availableSlots.length > 0 ? availableSlots : [
+                        const timeSlots = availableSlots.length > 0 ? availableSlots : [
                           '07:00', '07:15', '07:30', '07:45',
                           '08:00', '08:15', '08:30', '08:45',
                           '09:00', '09:15', '09:30', '09:45',
@@ -987,31 +963,8 @@ export function InterviewScheduler({ candidate, onScheduled, open, onOpenChange 
                           '18:00'
                         ];
 
-                        // Filter out times less than 1 hour from now for same-day interviews
-                        if (selectedDate) {
-                          const now = new Date();
-                          const isToday = startOfDay(selectedDate).getTime() === startOfDay(now).getTime();
-
-                          if (isToday) {
-                            const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-                            const minHour = oneHourFromNow.getHours();
-                            const minMinutes = oneHourFromNow.getMinutes();
-
-                            timeSlots = timeSlots.filter(time => {
-                              const [hour, minutes] = time.split(':').map(Number);
-                              return hour > minHour || (hour === minHour && minutes >= minMinutes);
-                            });
-                          }
-                        }
-
-                        if (timeSlots.length === 0) {
-                          return (
-                            <SelectItem value="none" disabled>
-                              No available times (must be 1+ hour from now)
-                            </SelectItem>
-                          );
-                        }
-
+                        // No advance notice required: keep today's slots available,
+                        // including a start time that passes while completing the form.
                         return timeSlots.map(time => (
                           <SelectItem key={time} value={time}>{formatTime12Hour(time)} ET</SelectItem>
                         ));

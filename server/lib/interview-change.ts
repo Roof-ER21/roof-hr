@@ -43,12 +43,3 @@ export function resolveInterviewChange(existing: InterviewFields, body: Intervie
     dateChanged,
   };
 }
-
-/**
- * The one-hour notice rule applies to a new time only. Changing the type or the
- * room of an interview that starts in 30 minutes must not be refused.
- */
-export function violatesNoticeRule(change: { scheduledDate: Date; dateChanged: boolean }, now = new Date()) {
-  if (!change.dateChanged) return false;
-  return change.scheduledDate.getTime() < now.getTime() + 60 * 60 * 1000;
-}

@@ -8,7 +8,7 @@ import { getConflictDetector } from '../services/calendar-conflict-detector';
 import { timezoneService } from '../services/timezone-service';
 import { requireAuth, requireManager } from '../middleware/auth';
 import { isAdmin, isManager, isSourcer, isLeadSourcer, isExtendedSourcer } from '@shared/constants/roles';
-import { resolveInterviewChange, violatesNoticeRule } from '../lib/interview-change';
+import { resolveInterviewChange } from '../lib/interview-change';
 
 const router = Router();
 
@@ -99,18 +99,6 @@ router.post('/schedule', requireAuth, requireManager, async (req, res) => {
     if (!interviewer && !data.customInterviewerName) {
       return res.status(400).json({
         error: 'Either interviewer or custom interviewer name is required'
-      });
-    }
-
-    // Validate same-day scheduling has at least 1 hour notice
-    const scheduledDateTime = new Date(data.scheduledDate);
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-
-    if (scheduledDateTime < oneHourFromNow) {
-      return res.status(400).json({
-        error: 'Insufficient notice',
-        message: 'Interviews must be scheduled at least 1 hour in advance. Same-day interviews are allowed with at least 1 hour notice.'
       });
     }
 
@@ -1009,14 +997,6 @@ router.post('/:id/reschedule', requireAuth, async (req, res) => {
     const change = resolveInterviewChange(existingInterview, { type, location, meetingLink, scheduledDate });
     const newScheduledDate = change.scheduledDate;
 
-    // One hour notice applies to a new time only, not to a type or room change.
-    if (violatesNoticeRule(change)) {
-      return res.status(400).json({
-        error: 'Insufficient notice',
-        message: 'Interviews must be scheduled at least 1 hour in advance'
-      });
-    }
-
     // Store original date for notifications
     const originalDate = existingInterview.scheduledDate;
     const interviewDuration = duration || existingInterview.duration || DEFAULT_INTERVIEW_DURATION_MINUTES;
@@ -1447,18 +1427,6 @@ router.post('/sourcer-schedule', requireAuth, async (req: any, res) => {
     if (!interviewer && !data.customInterviewerName) {
       return res.status(400).json({
         error: 'Either interviewer or custom interviewer name is required'
-      });
-    }
-
-    // Validate same-day scheduling has at least 1 hour notice
-    const scheduledDateTime = new Date(data.scheduledDate);
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-
-    if (scheduledDateTime < oneHourFromNow) {
-      return res.status(400).json({
-        error: 'Insufficient notice',
-        message: 'Interviews must be scheduled at least 1 hour in advance. Same-day interviews are allowed with at least 1 hour notice.'
       });
     }
 
