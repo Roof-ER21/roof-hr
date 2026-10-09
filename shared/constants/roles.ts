@@ -1,3 +1,4 @@
+import { routePtoRequestRecipients } from './pto-routing';
 // Centralized role definitions for Roof HR
 // Use these constants throughout the app for consistent role checking
 
@@ -247,7 +248,7 @@ export function getPTOApproversForEmployee(employeeEmail: string, employeeDepart
   }
   const departmentApprovers = getDepartmentApproverForDepartment(employeeDepartment);
   const allApprovers = [...PTO_APPROVER_EMAILS, ...departmentApprovers];
-  return Array.from(new Set(allApprovers));
+  return routePtoRequestRecipients(employeeEmail, Array.from(new Set(allApprovers)));
 }
 
 // Check if user can approve PTO (email-based restriction)

@@ -1,3 +1,4 @@
+import { routePtoRequestRecipients } from '../../../shared/constants/pto-routing';
 import { db } from '../../db';
 import { ptoRequests, users, ptoPolicies } from '../../../shared/schema';
 import { PTO_POLICY, getPtoAllocation } from '../../../shared/constants/pto-policy';
@@ -724,7 +725,7 @@ export class SusanPTOManager {
           'ahmed.mahmoud@theroofdocs.com'
         ];
 
-        for (const managerEmail of PTO_MANAGER_EMAILS) {
+        for (const managerEmail of routePtoRequestRecipients(employeeRecord.email, PTO_MANAGER_EMAILS)) {
           try {
             await this.emailService.sendEmail({
               to: managerEmail,

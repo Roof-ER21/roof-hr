@@ -1,3 +1,4 @@
+import { routePtoRequestRecipients } from '../../shared/constants/pto-routing';
 /**
  * Authorization service — DB-backed capability grants with a warm cache.
  *
@@ -149,7 +150,7 @@ export function getPTOApproversForEmployee(employeeEmail: string, employeeDepart
     return getSeniorPtoApprovers();
   }
   const all = [...getCorePtoApprovers(), ...getDepartmentApproverForDepartment(employeeDepartment)];
-  return Array.from(new Set(all));
+  return routePtoRequestRecipients(employeeEmail, Array.from(new Set(all)));
 }
 
 // ---------------------------------------------------------------------------
