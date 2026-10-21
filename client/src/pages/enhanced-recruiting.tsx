@@ -374,6 +374,7 @@ function ResumeUploaderContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('insurance-sales');
+  const [uploadPage, setUploadPage] = useState(0);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [sourceFolderId, setSourceFolderId] = useState('');
 
@@ -388,10 +389,10 @@ function ResumeUploaderContent() {
 
   // Query for recent uploads
   const { data: recentData, isLoading: isLoadingRecent, refetch: refetchRecent } = useQuery({
-    queryKey: ['/api/resumes/recent', activeCategory],
+    queryKey: ['/api/resumes/recent', activeCategory, uploadPage],
     queryFn: async () => {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/resumes/recent?category=${activeCategory}&limit=20`, {
+      const res = await fetch(`/api/resumes/recent?category=${activeCategory}&limit=20&offset=${uploadPage * 20}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -431,14 +432,13 @@ function ResumeUploaderContent() {
     }
   });
 
-  useEffect(() => {
-    if (showAssignmentDialog && territories && territories.length > 0 && !selectedTerritory) {
-      const dmvTerritory = territories.find(t => t.name.includes('DMV'));
-      if (dmvTerritory) {
-        setSelectedTerritory(dmvTerritory.id);
-      }
-    }
-  }, [showAssignmentDialog, territories, selectedTerritory]);
+  const openAssignment = (candidate: any) => {
+    setPendingCandidate(candidate);
+    setSelectedTerritory(candidate.territoryId || 'none');
+    setSelectedSourcer('');
+    setReferralName(candidate.referralName || '');
+    setShowAssignmentDialog(true);
+  };
 
   // Upload mutation
   const uploadMutation = useMutation({
@@ -465,8 +465,7 @@ function ResumeUploaderContent() {
     },
     onSuccess: (data) => {
       // Show sourcer assignment dialog instead of just toast
-      setPendingCandidate(data.candidate);
-      setShowAssignmentDialog(true);
+      openAssignment(data.candidate);
     },
     onError: (error: Error) => {
       toast({
@@ -550,7 +549,8 @@ function ResumeUploaderContent() {
         updateData.referralName = referralName.trim();
       }
       if (selectedTerritory) {
-        updateData.territoryId = selectedTerritory;
+        const nextTerritory = selectedTerritory === 'none' ? null : selectedTerritory;
+        if (nextTerritory !== (pendingCandidate.territoryId || null)) updateData.territoryId = nextTerritory;
       }
 
       if (Object.keys(updateData).length > 0) {
@@ -565,7 +565,7 @@ function ResumeUploaderContent() {
         });
 
         if (!updateResponse.ok) {
-          console.error('[Update] Failed to save candidate details');
+          throw new Error('Could not save the selected region or referral details.');
         }
       }
 
@@ -589,31 +589,31 @@ function ResumeUploaderContent() {
         const sourcerName = sourcers?.find(s => s.id === selectedSourcer);
         const territoryName = territories?.find(t => t.id === selectedTerritory)?.name;
         toast({
-          title: 'Candidate Created & Assigned',
+          title: 'Candidate Assigned',
           description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} assigned to ${sourcerName?.firstName} ${sourcerName?.lastName}${territoryName ? ` • ${territoryName}` : ''}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
         });
       } else {
         const territoryName = territories?.find(t => t.id === selectedTerritory)?.name;
         toast({
-          title: 'Resume Uploaded',
-          description: `Created candidate: ${pendingCandidate.firstName} ${pendingCandidate.lastName}${territoryName ? ` • ${territoryName}` : ''}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
+          title: 'Candidate Updated',
+          description: `Saved candidate: ${pendingCandidate.firstName} ${pendingCandidate.lastName}${territoryName ? ` • ${territoryName}` : ''}${referralName.trim() ? ` (Referred by: ${referralName.trim()})` : ''}`,
         });
       }
-    } catch (error: any) {
-      console.error('[Assignment] Failed:', error);
-      toast({
-        title: 'Assignment Failed',
-        description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} created but assignment failed: ${error.message}`,
-        variant: 'destructive',
-      });
-    } finally {
-      // Always clean up and close dialog
-      setIsAssigning(false);
       setShowAssignmentDialog(false);
       setPendingCandidate(null);
       setSelectedSourcer('');
       setReferralName('');
       setSelectedTerritory('');
+    } catch (error: any) {
+      console.error('[Assignment] Failed:', error);
+      toast({
+        title: 'Assignment Failed',
+        description: `${pendingCandidate.firstName} ${pendingCandidate.lastName} could not be updated: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      // Keep inputs open on failure so the operator can correct and retry.
+      setIsAssigning(false);
       refetchRecent();
       queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
       queryClient.invalidateQueries({ queryKey: ['/api/sourcers/available'] });
@@ -666,7 +666,7 @@ function ResumeUploaderContent() {
                       variant={activeCategory === cat.id ? 'default' : 'outline'}
                       size="sm"
                       className={`gap-1 ${activeCategory === cat.id ? cat.color + ' text-white' : ''}`}
-                      onClick={() => setActiveCategory(cat.id)}
+                      onClick={() => { setActiveCategory(cat.id); setUploadPage(0); }}
                     >
                       <cat.icon className="h-3 w-3" />
                       {cat.name}
@@ -704,7 +704,7 @@ function ResumeUploaderContent() {
       </div>
 
       {/* Category Tabs */}
-      <Tabs value={activeCategory} onValueChange={(v) => setActiveCategory(v as CategoryId)}>
+      <Tabs value={activeCategory} onValueChange={(v) => { setActiveCategory(v as CategoryId); setUploadPage(0); }}>
         <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
           {RESUME_CATEGORIES.map((cat) => (
             <TabsTrigger key={cat.id} value={cat.id} className={`flex items-center gap-2 ${cat.color} text-white data-[state=active]:ring-2 data-[state=active]:ring-offset-2`}>
@@ -802,7 +802,7 @@ function ResumeUploaderContent() {
                       {recentData.candidates.map((candidate: any) => (
                         <div
                           key={candidate.id}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                          className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <div className={`h-10 w-10 rounded-full ${cat.color} flex items-center justify-center`}>
@@ -812,10 +812,12 @@ function ResumeUploaderContent() {
                               <p className="font-medium">
                                 {candidate.firstName} {candidate.lastName}
                               </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <span>{candidate.stage || candidate.status}</span>
                                 <span>•</span>
                                 <span>{format(new Date(candidate.appliedDate), 'MMM d, yyyy')}</span>
+                                <span>• {candidate.territory?.name || 'Region not selected'}</span>
+                                <span>• {candidate.sourcer ? `${candidate.sourcer.firstName} ${candidate.sourcer.lastName}` : 'Unassigned'}</span>
                               </div>
                             </div>
                           </div>
@@ -825,6 +827,7 @@ function ResumeUploaderContent() {
                             >
                               {candidate.source === 'Resume Upload' ? 'Uploaded' : 'Synced'}
                             </Badge>
+                            <Button variant="outline" size="sm" onClick={() => openAssignment(candidate)}>Region &amp; assignment</Button>
                             {candidate.resumeUrl && (
                               <Button
                                 variant="ghost"
@@ -852,6 +855,11 @@ function ResumeUploaderContent() {
                       <p className="text-sm mt-1">Upload a resume to get started</p>
                     </div>
                   )}
+                  {(recentData?.total || 0) > 20 && <div className="flex items-center justify-between gap-3 mt-4">
+                    <Button variant="outline" disabled={uploadPage === 0 || isLoadingRecent} onClick={() => setUploadPage(p => p - 1)}>Previous</Button>
+                    <span className="text-sm">Page {uploadPage + 1} of {Math.ceil((recentData?.total || 0) / 20)}</span>
+                    <Button variant="outline" disabled={(uploadPage + 1) * 20 >= (recentData?.total || 0) || isLoadingRecent} onClick={() => setUploadPage(p => p + 1)}>Next</Button>
+                  </div>}
                 </CardContent>
               </Card>
             </div>
@@ -925,8 +933,7 @@ function ResumeUploaderContent() {
           <DialogHeader>
             <DialogTitle>Candidate Details</DialogTitle>
             <DialogDescription>
-              Candidate <strong>{pendingCandidate?.firstName} {pendingCandidate?.lastName}</strong> created successfully.
-              Add optional details before continuing.
+              Choose the region and optional sourcer for <strong>{pendingCandidate?.firstName} {pendingCandidate?.lastName}</strong>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1013,13 +1020,13 @@ function ResumeUploaderContent() {
                 </PopoverContent>
               </Popover>
               <p className="text-xs text-muted-foreground">
-                Only Julian and Ryan can be set as sourcers. For referrals, add a name under “Referred By”.
+                Leave this blank to keep the current assignment. Only Julian and Ryan can be selected as sourcers here.
               </p>
             </div>
 
             {/* Territory Selection */}
             <div className="space-y-2">
-              <Label htmlFor="territory">Territory (optional)</Label>
+              <Label htmlFor="territory">Region / territory</Label>
               <Select
                 value={selectedTerritory}
                 onValueChange={setSelectedTerritory}
@@ -1029,6 +1036,7 @@ function ResumeUploaderContent() {
                   <SelectValue placeholder="Select territory..." />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Region later</SelectItem>
                   {territories?.map((territory) => {
                     const { short, hex: colorHex } = getTerritoryStyle(territory.name);
                     return (
@@ -1045,7 +1053,7 @@ function ResumeUploaderContent() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                DMV is selected by default. Change if candidate is for another territory.
+                The batch region is preserved. Choose a different region here when needed.
               </p>
             </div>
           </div>
@@ -1059,15 +1067,11 @@ function ResumeUploaderContent() {
                 setSelectedSourcer('');
                 setReferralName('');
                 setSelectedTerritory('');
-                toast({
-                  title: 'Resume Uploaded',
-                  description: `Created candidate: ${pendingCandidate?.firstName} ${pendingCandidate?.lastName}`,
-                });
                 refetchRecent();
                 queryClient.invalidateQueries({ queryKey: ['/api/candidates'] });
               }}
             >
-              Skip
+              Close
             </Button>
             <Button onClick={handleAssignmentComplete} disabled={isAssigning}>
               {isAssigning ? (
@@ -1075,7 +1079,7 @@ function ResumeUploaderContent() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
-              ) : selectedSourcer ? 'Assign & Continue' : 'Continue'}
+              ) : selectedSourcer ? 'Save & assign' : 'Save details'}
             </Button>
           </DialogFooter>
         </DialogContent>
