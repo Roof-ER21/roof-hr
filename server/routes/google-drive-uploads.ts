@@ -7,6 +7,8 @@ import { googleDriveService } from '../services/google-drive-service';
 import { googleSyncEnhanced } from '../services/google-sync-enhanced';
 import { SusanResumeParser } from '../services/susan-ai/resume-parser';
 import { extractResumeText } from '../services/resume-text-extractor';
+import { resumeSource, resumeMatch } from '../services/resume-routing';
+import { isLeadSourcer } from '../../shared/constants/roles';
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
@@ -57,6 +59,12 @@ const upload = multer({
 
 // Alias for backward compatibility
 const requireHROrManager = requireManager;
+// Resume import/assignment is already part of the named lead-sourcer workflow.
+// Do not broaden the other document/COI routes that use requireHROrManager.
+const requireResumeAccess = (req: any, res: Response, next: NextFunction) => {
+  if (isLeadSourcer(req.user)) return next();
+  return requireManager(req, res, next);
+};
 
 // Upload candidate with resume to Google Drive
 router.post('/api/candidates/upload-with-resume', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
@@ -278,19 +286,33 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth as any, requir
  * Creates a candidate automatically from resume content
  * Works with or without Google Drive configured
  */
-router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
+router.get('/api/resumes/transfer-options', requireAuth as any, requireResumeAccess, async (_req, res) => {
+  try {
+    const territories = (await storage.getAllTerritories()).filter(t => t.isActive);
+    res.json({ transferVersion: 2, categories: CATEGORY_POSITIONS, territories: territories.map(t => ({ id: t.id, name: t.name, region: t.region })) });
+  } catch {
+    res.status(500).json({ error: 'Could not load resume destinations' });
+  }
+});
+
+router.post('/api/resumes/upload', requireAuth as any, requireResumeAccess, upload.single('resume'), async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
-    const { category, assignedTo, referralName } = req.body;
+    const { category, assignedTo, referralName, territoryId } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ error: 'Resume file is required' });
     }
 
-    if (!category || !CATEGORY_POSITIONS[category]) {
+    if (typeof category !== 'string' || !Object.hasOwn(CATEGORY_POSITIONS, category)) {
       return res.status(400).json({
-        error: 'Invalid category. Must be one of: insurance-sales, retail-sales, office'
+        error: 'Choose a supported resume category'
       });
+    }
+
+    if (territoryId) {
+      const territory = typeof territoryId === 'string' && await storage.getTerritoryById(territoryId);
+      if (!territory || !territory.isActive) return res.status(400).json({ error: 'Choose an active Roof HR region' });
     }
 
     const position = CATEGORY_POSITIONS[category];
@@ -318,6 +340,13 @@ router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any
         parsedData.firstName = nameParts[0];
         parsedData.lastName = nameParts.slice(1).join(' ');
       }
+    }
+
+    // The extension opts into duplicate checks before storage or candidate creation.
+    // A contact/name match is a review hold, never an instruction to edit that candidate.
+    if (req.body.transferVersion === '2') {
+      const match = resumeMatch(await storage.getAllCandidates(), req.file.originalname, parsedData);
+      if (match) return res.status(409).json({ code: 'CANDIDATE_EXISTS', ...match, error: 'Candidate may already be in Roof HR. This upload was skipped; the existing record was not changed.' });
     }
 
     // 3. Try to upload to Google Drive (optional - works without it)
@@ -414,7 +443,8 @@ router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any
       appliedDate: new Date(),
       parsedResumeData: JSON.stringify(parsedData),
       notes: `Auto-created from resume upload (${req.file.originalname}). Skills: ${(parsedData.skills || []).join(', ')}${!parsedData.email ? ' [Email not extracted]' : ''}${!parsedData.phone ? ' [Phone not extracted]' : ''}`,
-      referralName: referralName || null
+      referralName: referralName || null,
+      territoryId: territoryId || null
     });
 
     console.log('[Resume Upload] Candidate created:', candidate.id, candidate.firstName, candidate.lastName);
@@ -466,6 +496,7 @@ router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any
         resumeUrl: candidate.resumeUrl,
         status: candidate.status,
         stage: candidate.stage,
+        territoryId: candidate.territoryId,
         assignedTo: assignedTo || null,
         sourcer: assignedSourcer
       },
@@ -617,17 +648,17 @@ router.post('/api/resumes/sync-from-drive', requireAuth as any, requireHROrManag
 /**
  * Get recent candidates by source and position for the Resume Uploader UI
  */
-router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any, async (req: Request, res: Response) => {
+router.get('/api/resumes/recent', requireAuth as any, requireResumeAccess, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
-    const { category, limit = 20 } = req.query;
+    const { category, limit = 20, offset = 0 } = req.query;
+    const pageSize = Math.min(100, Math.max(1, Number(limit) || 20));
+    const pageOffset = Math.max(0, Number(offset) || 0);
 
     const allCandidates = await storage.getAllCandidates();
 
     // Filter by source (Resume Upload or Google Drive Sync)
-    let filtered = allCandidates.filter((c: any) =>
-      c.source === 'Resume Upload' || c.source === 'Google Drive Sync'
-    );
+    let filtered = allCandidates.filter((c: any) => resumeSource(c));
 
     // Filter by category/position if specified
     if (category && CATEGORY_POSITIONS[category as string]) {
@@ -640,7 +671,8 @@ router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any,
       new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
     );
 
-    const limited = filtered.slice(0, Number(limit));
+    const limited = filtered.slice(pageOffset, pageOffset + pageSize);
+    const territories = await storage.getAllTerritories();
 
     // Enrich with sourcer info for display
     const enrichedCandidates = await Promise.all(limited.map(async (c: any) => {
@@ -664,7 +696,10 @@ router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any,
         resumeUrl: c.resumeUrl,
         status: c.status,
         stage: c.stage,
-        source: c.source,
+        source: resumeSource(c),
+        territoryId: c.territoryId,
+        territory: territories.find(t => t.id === c.territoryId) || null,
+        referralName: c.referralName,
         appliedDate: c.appliedDate,
         assignedTo: c.assignedTo,
         sourcer

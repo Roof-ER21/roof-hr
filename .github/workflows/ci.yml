@@ -21,6 +21,21 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The integration runner resets this disposable database, never production.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: roofhr-ci-only
+          POSTGRES_DB: roofhr_test_mcp21
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d roofhr_test_mcp21"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +57,15 @@ jobs:
 
       - name: Integration tests
         run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:roofhr-ci-only@127.0.0.1:5432/roofhr_test_mcp21
+
+      - name: Integration startup diagnostics
+        if: failure()
+        run: |
+          if test -f /tmp/roofhr-test-server.log; then
+            tail -n 100 /tmp/roofhr-test-server.log
+          fi
 
       # Ratchet: fails only if lint or type errors increased.
       - name: Quality gate

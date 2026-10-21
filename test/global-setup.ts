@@ -115,6 +115,10 @@ export async function setup(): Promise<void> {
       SESSION_SECRET: 'roofhr-test-session-secret',
       PUBLIC_URL: baseUrl,
       AGENTS_ENABLED: 'false',
+      ENABLE_INTEGRATIONS: '0',
+      // Some services construct clients at import time; tests must not need
+      // or inherit a real provider credential just to boot the local server.
+      OPENAI_API_KEY: 'roofhr-test-unused-openai-key',
       ADMIN_EMAIL: 'bootstrap-admin@roofhr.test',
       ADMIN_TEMP_PASSWORD: 'Bootstrap2026!',
       MCP_ACCESS_DISABLED: 'false',
