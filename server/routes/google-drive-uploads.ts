@@ -8,6 +8,7 @@ import { googleSyncEnhanced } from '../services/google-sync-enhanced';
 import { SusanResumeParser } from '../services/susan-ai/resume-parser';
 import { extractResumeText } from '../services/resume-text-extractor';
 import { resumeSource, resumeMatch } from '../services/resume-routing';
+import { isLeadSourcer } from '../../shared/constants/roles';
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
@@ -58,6 +59,12 @@ const upload = multer({
 
 // Alias for backward compatibility
 const requireHROrManager = requireManager;
+// Resume import/assignment is already part of the named lead-sourcer workflow.
+// Do not broaden the other document/COI routes that use requireHROrManager.
+const requireResumeAccess = (req: any, res: Response, next: NextFunction) => {
+  if (isLeadSourcer(req.user)) return next();
+  return requireManager(req, res, next);
+};
 
 // Upload candidate with resume to Google Drive
 router.post('/api/candidates/upload-with-resume', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
@@ -279,7 +286,7 @@ router.post('/api/coi-documents/upload-for-employee', requireAuth as any, requir
  * Creates a candidate automatically from resume content
  * Works with or without Google Drive configured
  */
-router.get('/api/resumes/transfer-options', requireAuth as any, requireHROrManager as any, async (_req, res) => {
+router.get('/api/resumes/transfer-options', requireAuth as any, requireResumeAccess, async (_req, res) => {
   try {
     const territories = (await storage.getAllTerritories()).filter(t => t.isActive);
     res.json({ transferVersion: 2, categories: CATEGORY_POSITIONS, territories: territories.map(t => ({ id: t.id, name: t.name, region: t.region })) });
@@ -288,7 +295,7 @@ router.get('/api/resumes/transfer-options', requireAuth as any, requireHROrManag
   }
 });
 
-router.post('/api/resumes/upload', requireAuth as any, requireHROrManager as any, upload.single('resume'), async (req: Request, res: Response) => {
+router.post('/api/resumes/upload', requireAuth as any, requireResumeAccess, upload.single('resume'), async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const { category, assignedTo, referralName, territoryId } = req.body;
@@ -641,7 +648,7 @@ router.post('/api/resumes/sync-from-drive', requireAuth as any, requireHROrManag
 /**
  * Get recent candidates by source and position for the Resume Uploader UI
  */
-router.get('/api/resumes/recent', requireAuth as any, requireHROrManager as any, async (req: Request, res: Response) => {
+router.get('/api/resumes/recent', requireAuth as any, requireResumeAccess, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user!; // User exists due to requireAuth middleware
     const { category, limit = 20, offset = 0 } = req.query;

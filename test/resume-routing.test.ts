@@ -23,3 +23,19 @@ it('keeps resume options and uploaded candidate details restricted to manager ac
     const employee=await fetch(`${base}${path}`,{headers:{Authorization:`Bearer ${process.env.TEST_EMPLOYEE_TOKEN}`}});expect(employee.status).toBe(403);
   }
 });
+
+it('lets the existing lead sourcer upload and choose a region without manager promotion',async()=>{
+  const db=new pg.Client({connectionString:process.env.TEST_DATABASE_URL});await db.connect();
+  const id=crypto.randomUUID(),token=crypto.randomUUID();
+  try {
+    await db.query(`INSERT INTO users (id,email,first_name,last_name,role,employment_type,department,position,hire_date,is_active,password_hash) VALUES ($1,'careers@theroofdocs.com','Lead','Fixture','SOURCER','W2','Recruiting','Lead Sourcer','2026-01-01',true,'test-not-a-login')`,[id]);
+    await db.query("INSERT INTO sessions (id,user_id,token,expires_at) VALUES ($1,$2,$3,NOW()+INTERVAL '1 day')",[crypto.randomUUID(),id,token]);
+    const leadHeaders={Authorization:`Bearer ${token}`};
+    for(const path of ['/api/resumes/transfer-options','/api/resumes/recent?category=field-tech'])expect((await fetch(`${base}${path}`,{headers:leadHeaders})).status).toBe(200);
+    const data=new FormData();data.append('category','field-tech');data.append('territoryId','invalid-fixture-region');data.append('resume',new Blob(['%PDF- synthetic'],{type:'application/pdf'}),'fixture.pdf');
+    expect((await fetch(`${base}/api/resumes/upload`,{method:'POST',headers:leadHeaders,body:data})).status).toBe(400);
+    // A different SOURCER does not gain this access.
+    await db.query("UPDATE users SET email='ordinary-sourcer@example.test' WHERE id=$1",[id]);
+    expect((await fetch(`${base}/api/resumes/transfer-options`,{headers:leadHeaders})).status).toBe(403);
+  } finally {await db.end();}
+});

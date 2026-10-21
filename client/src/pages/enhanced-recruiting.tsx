@@ -55,6 +55,7 @@ import { format, isSameDay, isWithinInterval, startOfDay, endOfDay, subDays } fr
 import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { DEPARTMENTS } from '@/../../shared/constants/departments';
 import { getTerritoryStyle } from '@/lib/territory-style';
+import { isLeadSourcer as hasLeadSourcerAccess } from '@shared/constants/roles';
 
 // Droppable Column Component
 function DroppableColumn({ status, children, disabled = false }: { status: string; children: React.ReactNode; disabled?: boolean }) {
@@ -371,6 +372,7 @@ interface Territory {
 
 // Resume Uploader Content Component
 function ResumeUploaderContent() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('insurance-sales');
@@ -554,7 +556,8 @@ function ResumeUploaderContent() {
       }
 
       if (Object.keys(updateData).length > 0) {
-        const updateResponse = await fetch(`/api/candidates/${pendingCandidate.id}`, {
+        const updatePath = `/api/candidates/${pendingCandidate.id}${hasLeadSourcerAccess(user) ? '/sourcer-update' : ''}`;
+        const updateResponse = await fetch(updatePath, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
